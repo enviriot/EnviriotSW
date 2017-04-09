@@ -1,0 +1,156 @@
+﻿<!--This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.-->
+<UserControl x:Class="X13.UI.InspectorForm"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:at="clr-namespace:Xceed.Wpf.AvalonDock.Themes;assembly=Xceed.Wpf.AvalonDock.Themes.Aero"
+             xmlns:x13ui="clr-namespace:X13.UI"
+             mc:Ignorable="d" 
+             d:DesignHeight="100" d:DesignWidth="900"
+
+             TextOptions.TextRenderingMode="ClearType" TextOptions.TextFormattingMode="Display" FontFamily="Arial" FontSize="14" >
+  <UserControl.Resources>
+    <x13ui:GridColumnSpringConverter x:Key="ColumnSpringConverter"/>
+    <BitmapImage x:Key="NullImage" UriSource="/ES;component/Images/ty_topic.png" />
+    <SolidColorBrush x:Key="SplitBrush" Color="#91B8C6" />
+    <DataTemplate x:Key="EditTemplate">
+      <TextBox Text="{Binding name, Mode=OneTime}" MaxLines="1" UndoLimit="10" Margin="0,4,3,3" Background="Azure" VerticalAlignment="Top" BorderThickness="0" Loaded="tbItemName_Loaded" PreviewKeyDown="tbItemName_PreviewKeyDown" LostFocus="tbItemName_LostFocus" />
+    </DataTemplate>
+    <AlternationConverter x:Key="altconvBackground">
+      <SolidColorBrush Color="#D6F0FF"/>
+      <SolidColorBrush Color="#F5FBFF"/>
+    </AlternationConverter>
+  </UserControl.Resources>
+
+  <ListView x:Name="lvValue" BorderThickness="0" KeyboardNavigation.TabNavigation="Continue" Focusable="False" SelectionMode="Single" AlternationCount="2" >
+    <ListView.ItemContainerStyle>
+      <Style TargetType="ListViewItem">
+        <EventSetter Event="KeyUp" Handler="ListViewItem_KeyUp" />
+        <EventSetter Event="ContextMenuOpening" Handler="ListViewItem_ContextMenuOpening" />
+        <EventSetter Event="ContextMenuClosing" Handler="ListViewItem_ContextMenuClosing" />
+        <!--EventSetter Event="MouseDoubleClick" Handler="ListViewItem_DoubleClick" /-->
+        <Setter Property="ContextMenu">
+          <Setter.Value>
+            <ContextMenu />
+          </Setter.Value>
+        </Setter>
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Focusable" Value="True" />
+        <Setter Property="Background" Value="{Binding RelativeSource={RelativeSource Self}, Path=(ItemsControl.AlternationIndex), Converter={StaticResource altconvBackground}}"/>
+        <Setter Property="BorderThickness" Value="2, 0, 0, 0" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ListViewItem">
+              <Grid>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="{Binding levelPadding}"/>
+                    <ColumnDefinition />
+                  </Grid.ColumnDefinitions>
+                  <Border Grid.Column="1" Margin="24,0,0,0" BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{DynamicResource SplitBrush}" Background="{TemplateBinding Background}" />
+                </Grid>
+                <GridViewRowPresenter x:Name="gridrowPresenter" Content="{TemplateBinding Property=ContentControl.Content}"/>
+              </Grid>
+              <ControlTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsGroupHeader}" Value="True">
+                  <Setter Property="BorderThickness" Value="2, 5, 0, 0" />
+                  <Setter Property="BorderBrush" Value="{DynamicResource SplitBrush}" />
+                  <Setter TargetName="gridrowPresenter" Property="Margin" Value="0,5,0,0" />
+                </DataTrigger>
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter Property="Background" Value="#FFE6C4" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+    </ListView.ItemContainerStyle>
+    <ListView.View>
+      <GridView AllowsColumnReorder="False">
+        <GridViewColumn x:Name="gcItemName" Header="name" Width="220">
+          <GridViewColumn.CellTemplate>
+            <DataTemplate>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="{Binding levelPadding}"/>
+                  <ColumnDefinition Width="20"/>
+                  <ColumnDefinition Width="20"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <ToggleButton Grid.Column="1" x:Name="Expander" ClickMode="Press" IsChecked="{Binding IsExpanded}" IsEnabled="{Binding HasChildren}" Height="16" Width="16" Focusable="False">
+                  <ToggleButton.Template>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                      <Border Width="16" Height="16" Background="Transparent" Padding="3">
+                        <Path x:Name="ExpandPath" Fill="Transparent" Stroke="#FF989898">
+                          <Path.Data>
+                            <PathGeometry Figures="M0,0 L0,8 L8,0 z"/>
+                          </Path.Data>
+                          <Path.RenderTransform>
+                            <RotateTransform Angle="135" CenterX="4" CenterY="4"/>
+                          </Path.RenderTransform>
+                        </Path>
+                      </Border>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                          <Setter Property="Stroke" TargetName="ExpandPath" Value="#FF1BBBFA"/>
+                          <Setter Property="Fill" TargetName="ExpandPath" Value="Transparent"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                          <Setter Property="Stroke" TargetName="ExpandPath" Value="Transparent"/>
+                          <Setter Property="Fill" TargetName="ExpandPath" Value="Transparent"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                          <Setter Property="RenderTransform" TargetName="ExpandPath">
+                            <Setter.Value>
+                              <RotateTransform Angle="180" CenterX="4" CenterY="4"/>
+                            </Setter.Value>
+                          </Setter>
+                          <Setter Property="Fill" TargetName="ExpandPath" Value="#FF595959"/>
+                          <Setter Property="Stroke" TargetName="ExpandPath" Value="#FF262626"/>
+                        </Trigger>
+                      </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                  </ToggleButton.Template>
+                </ToggleButton>
+                <Image Grid.Column="2" Source="{Binding icon, TargetNullValue={StaticResource NullImage}}" Focusable="False" Width="16" Height="16" Margin="0,1" VerticalAlignment="Center" />
+                <ContentPresenter Grid.Column="3" Content="{Binding}">
+                  <ContentPresenter.Style>
+                    <Style TargetType="{x:Type ContentPresenter}">
+                      <Setter Property="ContentTemplate">
+                        <Setter.Value>
+                          <DataTemplate>
+                            <TextBlock Text="{Binding name}" Margin="3,5,5,3" VerticalAlignment="Top" Foreground="Black" />
+                          </DataTemplate>
+                        </Setter.Value>
+                      </Setter>
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsEdited}" Value="True">
+                          <Setter Property="ContentTemplate" Value="{StaticResource EditTemplate}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </ContentPresenter.Style>
+                </ContentPresenter>
+              </Grid>
+            </DataTemplate>
+          </GridViewColumn.CellTemplate>
+        </GridViewColumn>
+        <GridViewColumn Header="value">
+          <GridViewColumn.Width>
+              <MultiBinding Converter="{StaticResource ColumnSpringConverter}">
+                <Binding ElementName="lvValue" Path="ActualWidth" Mode="OneWay"/>
+                <Binding ElementName="gcItemName" Path="ActualWidth" Mode="OneWay"/>
+              </MultiBinding>
+            </GridViewColumn.Width>
+          <GridViewColumn.CellTemplate>
+            <DataTemplate>
+              <ContentPresenter Margin="0,4" Content="{Binding editor}" />
+            </DataTemplate>
+          </GridViewColumn.CellTemplate>
+        </GridViewColumn>
+      </GridView>
+    </ListView.View>
+  </ListView>
+</UserControl>

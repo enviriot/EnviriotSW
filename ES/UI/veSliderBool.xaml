@@ -1,0 +1,43 @@
+﻿<UserControl x:Class="X13.UI.veSliderBool"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             TextOptions.TextRenderingMode="ClearType" TextOptions.TextFormattingMode="Display" FontFamily="Arial" FontSize="14" 
+             mc:Ignorable="d" GotFocus="UserControl_GotFocus" 
+             >
+  <ToggleButton x:Name="tbBoolean" Width="90" >
+    <ToggleButton.Template>
+      <ControlTemplate TargetType="ToggleButton">
+        <Border x:Name="Border">
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Background" Value="White" />
+              <Setter Property="BorderThickness" Value="1,0" />
+              <Setter Property="BorderBrush" Value="Black" />
+            </Style>
+          </Border.Style>
+          <TextBlock x:Name="Caption" VerticalAlignment="Center" HorizontalAlignment="Center" FontStretch="Expanded">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock">
+                <Setter Property="Text" Value="Off" />
+                <Setter Property="Foreground" Value="DarkGray" />
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsChecked" Value="True">
+            <Setter TargetName="Caption" Property="Text" Value="On" />
+            <Setter TargetName="Caption" Property="Foreground" Value="#006608" />
+          </Trigger>
+          <Trigger Property="IsEnabled" Value="False">
+            <Setter TargetName="Border" Property="CornerRadius" Value="9" />
+            <Setter TargetName="Border" Property="BorderThickness" Value="0" />
+            <Setter TargetName="Border" Property="Background" Value="#00000000" />
+          </Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate>
+    </ToggleButton.Template>
+  </ToggleButton>
+</UserControl>
