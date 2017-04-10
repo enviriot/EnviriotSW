@@ -38,9 +38,9 @@ namespace X13 {
       });
 
       // Configure service recovery property.
-      ServiceRecoveryProperty.ChangeRecoveryProperty("X13_HAServer", FailureActions, 60 * 60 * 24, "", false, "");
+      ServiceRecoveryProperty.ChangeRecoveryProperty("enviriot", FailureActions, 60 * 60 * 24, "", false, "");
       Log.Info("The service recovery property is modified successfully");
-      ServiceController svc =  new ServiceController("X13_HAServer");
+      ServiceController svc =  new ServiceController("enviriot");
       svc.Start();
       svc.WaitForStatus(ServiceControllerStatus.Running, new TimeSpan(0, 0, 3));
     }

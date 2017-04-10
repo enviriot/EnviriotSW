@@ -14,7 +14,7 @@ namespace X13 {
     private static void Main(string[] args) {
       string name = Assembly.GetExecutingAssembly().Location;
       string path = Path.GetDirectoryName(name);
-      string cfgPath = Path.Combine(path, "../data/Server.xst");
+      string cfgPath = Path.Combine(path, "../data/enviriot.xst");
       int flag = Environment.UserInteractive ? 0 : 1;
       for(int i = 0; i < args.Length; i++) {
         if(string.IsNullOrWhiteSpace(args[i])) {
@@ -41,19 +41,18 @@ namespace X13 {
         if(!CSWindowsServiceRecoveryProperty.Win32.AttachConsole(-1))  // Attach to a parent process console
           CSWindowsServiceRecoveryProperty.Win32.AllocConsole(); // Alloc a new console if none available
       }
-      Log.Debug("{0} {1} f={2}, i={3}", name, string.Join(" ,", args), flag, Environment.UserInteractive);
       if(flag == 0) {
         var srv = new Programm(cfgPath);
         if(srv.Start()) {
           Console.ForegroundColor = ConsoleColor.Green;
-          Console.WriteLine("X13 Home automation server v.{0}", Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
-          Console.WriteLine("Press Enter to exit");
+          Console.WriteLine("Enviriot v.{0}", Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
+          Console.WriteLine("Press Enter to Exit");
           Console.ResetColor();
           Console.Read();
           srv.Stop();
         } else {
           Console.ForegroundColor = ConsoleColor.Magenta;
-          Console.WriteLine("X13 Home automation server start FAILED; press Enter to Exit");
+          Console.WriteLine("Enviriot start FAILED; press Enter to Exit");
           Console.ResetColor();
           Console.Read();
         }
@@ -100,7 +99,7 @@ namespace X13 {
       _cfgPath = cfgPath;
     }
     internal bool Start() {
-      _singleInstance = new Mutex(true, "Global\\X13.HAServer");
+      _singleInstance = new Mutex(true, "Global\\X13.enviriot");
 
       AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(CurrentDomain_UnhandledException);
       AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;

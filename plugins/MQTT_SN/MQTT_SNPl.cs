@@ -159,9 +159,9 @@ namespace X13.Periphery {
       if(_scanAllPorts || cnt == 0) {
         _scanAllPorts = false;
         pns.Clear();
-        pns.AddRange(SerialPort.GetPortNames());
+        pns.AddRange(SerialPort.GetPortNames().Where(z=>!z.Contains("tty")));
       } else {
-        pns = pns.Intersect(SerialPort.GetPortNames()).ToList();
+        pns = pns.Intersect(SerialPort.GetPortNames().Where(z => !z.Contains("tty"))).ToList();
       }
       /*
       Topic tmp;

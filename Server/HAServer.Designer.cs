@@ -27,7 +27,7 @@ namespace X13 {
       // 
       // HAServer
       // 
-      this.ServiceName = "X13_HAServer";
+      this.ServiceName = "enviriot";
 
     }
 
