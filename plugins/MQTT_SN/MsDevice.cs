@@ -61,9 +61,11 @@ namespace X13.Periphery {
       }
       return _baEmty;
     }
+    private static JSC.Context _jsContext;
 
     static MsDevice() {
       _rand = new Random((int)DateTime.Now.Ticks);
+      _jsContext = new JSC.Context(true);
     }
 
     private string _oldName;
@@ -279,7 +281,7 @@ namespace X13.Periphery {
           TopicInfo ti = null;
           MsReturnCode retCode = MsReturnCode.Accepted;
           Topic t = null;
-          SubRec.SubMask mask = SubRec.SubMask.Value;
+          SubRec.SubMask mask = SubRec.SubMask.Value | SubRec.SubMask.Field;
 
           if(tmp.topicIdType != TopicIdType.Normal) {
             ti = GetTopicInfo(tmp.topicId, tmp.topicIdType);
@@ -316,7 +318,7 @@ namespace X13.Periphery {
             state = State.Connected;
           }
           if(t != null) {
-            SubRec s = t.Subscribe(mask, PublishTopic);
+            SubRec s = t.Subscribe(mask, "MQTT-SN.", PublishTopic);
             _subsscriptions.Add(s);
           }
         }
@@ -670,6 +672,7 @@ namespace X13.Periphery {
         rez.topic = tp;
         rez.tag = tag;
         var pt = PredefinedTopics.FirstOrDefault(z => z.Item2 == tag);
+        UpdateConverters(rez);
         if(pt != null) {
           rez.TopicId = pt.Item1;
           rez.dType = pt.Item3;
@@ -697,6 +700,27 @@ namespace X13.Periphery {
         }
       }
       return rez;
+    }
+
+    private static void UpdateConverters(TopicInfo ti) {
+      JSC.JSValue msTmp;
+      string sTmp;
+      if((msTmp = ti.topic.GetField("MQTT-SN.convIn")).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(sTmp = msTmp.Value as string)) {
+        try {
+          var f = _jsContext.Eval("Function('value', '" + sTmp + "')") as JSL.Function;
+          if(f != null) {
+            ti.convIn = f.MakeDelegate(typeof(Func<JSC.JSValue, JSC.JSValue>)) as Func<JSC.JSValue, JSC.JSValue>;
+          } else {
+            ti.convIn = null;
+          }
+        }
+        catch(Exception ex) {
+          ti.convIn = null;
+          Log.Warning("{0}.MQTT-SN.convIn - {1}", ti.topic.path, ex.Message);
+        }
+      } else {
+        ti.convIn = null;
+      }
     }
     private TopicInfo GetTopicInfo(string tag, bool sendRegister = true) {
       if(string.IsNullOrEmpty(tag)) {
@@ -760,6 +784,9 @@ namespace X13.Periphery {
           ti = _topics[i];
           break;
         }
+      }
+      if(p.art == Perform.Art.changedField && ti != null) {
+        UpdateConverters(ti);
       }
       if(ti == null && (p.art == Perform.Art.changedState || p.art==Perform.Art.subscribe)) {
         ti = GetTopicInfo(p.src, true);
@@ -879,6 +906,16 @@ namespace X13.Periphery {
             }
           }
           //TODO: convert
+          if(ti.convIn != null) {
+            try {
+              val = ti.convIn(val);
+            }
+            catch(Exception ex) {
+              if(_pl.verbose) {
+                Log.Warning("{0}.MQTT-SN.convIn - {1}", ti.topic, ex.Message);
+              }
+            }
+          }
           ti.topic.SetState(val, owner);
         }
       }
@@ -1065,6 +1102,7 @@ namespace X13.Periphery {
       public bool registred;
       public string tag;
       public DType dType;
+      public Func<JSC.JSValue, JSC.JSValue> convIn;
     }
     internal enum DType {
       Boolean,

@@ -3,13 +3,18 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server", "Server\Server.csproj", "{B405DEF9-326F-4B01-B5FA-584CE7B5A513}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EStudio", "ES\ES.csproj", "{2D6DB1D8-4AB1-4768-9A88-3C3BDC1062C9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ES", "ES\ES.csproj", "{2D6DB1D8-4AB1-4768-9A88-3C3BDC1062C9}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "plugins", "plugins", "{1DD8FCEB-A0FE-4455-AAE2-3980DEBC12E2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MQTT_SN", "plugins\MQTT_SN\MQTT_SN.csproj", "{B8C22288-5608-46DA-939D-000D9D52492C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MQTT", "plugins\MQTT\MQTT.csproj", "{3A15F115-682E-474F-B682-F4A9E8B7DB9D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7E70AF12-718E-4EFB-AD77-A0CD94A2EC6C}"
+	ProjectSection(SolutionItems) = preProject
+		data\base.xst = data\base.xst
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
