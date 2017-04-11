@@ -190,7 +190,7 @@ namespace X13.UI {
         while(pr._parent != null) {
           pr = pr._parent;
         }
-        Log.Debug("$ " + pr._owner.path + "(" + art.ToString() + ", " + (child != null ? child.path : "null") + ")");
+        //Log.Debug("$ " + pr._owner.path + "(" + art.ToString() + ", " + (child != null ? child.path : "null") + ")");
       }
       if(IsGroupHeader) {
         if(art == DTopic.Art.type) {

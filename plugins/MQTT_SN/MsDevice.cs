@@ -23,10 +23,19 @@ namespace X13.Periphery {
     private static byte[] _baTrue = new byte[] { 1 };
 
 
-    public static byte[] Serialize(TopicInfo _ti) {
-      var val = _ti.topic.GetState();
-      var dType = _ti.dType;
-      //TODO: convert
+    public static byte[] Serialize(TopicInfo ti) {
+      var val = ti.topic.GetState();
+      var dType = ti.dType;
+      if(ti.convOut != null) {
+        try {
+          val = ti.convOut(val);
+        }
+        catch(Exception ex) {
+          if(ti.owner._pl.verbose) {
+            Log.Warning("{0}.MQTT-SN.convIn - {1}", ti.topic, ex.Message);
+          }
+        }
+      }
       return Serialize(val, dType);
     }
     private static byte[] Serialize(JSC.JSValue val, DType dType) {
@@ -669,6 +678,7 @@ namespace X13.Periphery {
           }
         }
         rez = new TopicInfo();
+        rez.owner = this;
         rez.topic = tp;
         rez.tag = tag;
         var pt = PredefinedTopics.FirstOrDefault(z => z.Item2 == tag);
@@ -720,6 +730,22 @@ namespace X13.Periphery {
         }
       } else {
         ti.convIn = null;
+      }
+      if((msTmp = ti.topic.GetField("MQTT-SN.convOut")).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(sTmp = msTmp.Value as string)) {
+        try {
+          var f = _jsContext.Eval("Function('value', '" + sTmp + "')") as JSL.Function;
+          if(f != null) {
+            ti.convOut = f.MakeDelegate(typeof(Func<JSC.JSValue, JSC.JSValue>)) as Func<JSC.JSValue, JSC.JSValue>;
+          } else {
+            ti.convOut = null;
+          }
+        }
+        catch(Exception ex) {
+          ti.convOut = null;
+          Log.Warning("{0}.MQTT-SN.convOut - {1}", ti.topic.path, ex.Message);
+        }
+      } else {
+        ti.convOut = null;
       }
     }
     private TopicInfo GetTopicInfo(string tag, bool sendRegister = true) {
@@ -905,7 +931,6 @@ namespace X13.Periphery {
               ti.topic.ClearAttribute(Topic.Attribute.DB);
             }
           }
-          //TODO: convert
           if(ti.convIn != null) {
             try {
               val = ti.convIn(val);
@@ -1096,6 +1121,7 @@ namespace X13.Periphery {
     }
 
     internal class TopicInfo {
+      public MsDevice owner;
       public Topic topic;
       public ushort TopicId;
       public TopicIdType it;
@@ -1103,6 +1129,7 @@ namespace X13.Periphery {
       public string tag;
       public DType dType;
       public Func<JSC.JSValue, JSC.JSValue> convIn;
+      public Func<JSC.JSValue, JSC.JSValue> convOut;
     }
     internal enum DType {
       Boolean,

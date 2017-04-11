@@ -216,8 +216,11 @@ namespace X13.UI {
             }
             mi = new MenuItem();
             mi.Header = kv.Key;
-            if(kv.Value["icon"].ValueType == JSC.JSValueType.String) {
-              mi.Icon = App.GetIcon(kv.Value["icon"].Value as string);
+            if((v2 = kv.Value["icon"]).ValueType == JSC.JSValueType.String) {
+              mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
+            }
+            if((v2 = kv.Value["info"]).ValueType == JSC.JSValueType.String) {
+              mi.ToolTip = v2.Value;
             }
             mi.Tag = kv.Value;
             mi.Click += miAdd_Click;
@@ -231,9 +234,12 @@ namespace X13.UI {
               }
               mi = new MenuItem() { Header = t.name, Tag = v1 };
               if((v2 = v1["icon"]).ValueType == JSC.JSValueType.String) {
-                mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string) };
+                mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
               } else {
-                mi.Icon = new Image() { Source = App.GetIcon(t.name) };
+                mi.Icon = new Image() { Source = App.GetIcon(t.name), Height = 16, Width = 16 };
+              }
+              if((v2 = v1["info"]).ValueType == JSC.JSValueType.String) {
+                mi.ToolTip = v2.Value;
               }
               mi.Click += miAdd_Click;
               ma.Items.Add(mi);
