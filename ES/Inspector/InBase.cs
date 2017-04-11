@@ -90,12 +90,13 @@ namespace X13.UI {
 
       if(_manifest != null && _manifest.ValueType == JSC.JSValueType.Object && _manifest.Value!=null) {
         var vv = _manifest["editor"];
-        if(vv.ValueType == JSC.JSValueType.String) {
-          nv = vv.Value as string;
+        string tmp_s;
+        if(vv.ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(tmp_s = vv.Value as string)) {
+          nv = tmp_s;
         }
         var iv = _manifest["icon"];
-        if(iv.ValueType == JSC.JSValueType.String && iv.Value!=null) {
-          ni = App.GetIcon(iv.Value as string);
+        if(iv.ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(tmp_s= iv.Value as string)) {
+          ni = App.GetIcon(tmp_s);
         }
         JSC.JSValue js_attr;
         if((js_attr = _manifest["attr"]).IsNumber) {
@@ -109,7 +110,6 @@ namespace X13.UI {
       }
       if(ni == null) {
         if(value.ValueType == JSC.JSValueType.Object && value.Value == null) {
-
           ni = App.GetIcon((this is InTopic) ? string.Empty : "Null");  // Folder or Null
         }
       }

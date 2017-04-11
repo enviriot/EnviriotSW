@@ -30,9 +30,7 @@ namespace X13.UI {
     }
 
     private void ve_SelectionChanged(object sender, SelectionChangedEventArgs e) {
-      if(!base.IsDropDownOpen) {
-        Publish();
-      }
+      Publish();
     }
     private void ve_GotFocus(object sender, System.Windows.RoutedEventArgs e) {
       _owner.GotFocus(sender, e);

@@ -84,16 +84,16 @@ namespace X13 {
       LoadIcon("ByteArray", "ty_byteArray.png");
       LoadIcon("children", "children.png");
       LoadIcon("Date", "ty_dt.png");
-      LoadIcon("EsConnection", "ty_es.png");
       LoadIcon("Double", "ty_double.png");
       LoadIcon("Editor", "ic_editor.png");
+      LoadIcon("EsConnection", "ty_es.png");
       LoadIcon("Hexadecimal", "ed_hex.png");
       LoadIcon("Integer", "ty_int.png");
+      LoadIcon("JS", "ty_js.png");
+      LoadIcon("Null", "ty_null.png");
       LoadIcon("Object", "ty_obj.png");
       LoadIcon("String", "ty_str.png");
-      LoadIcon("Null", "ty_null.png");
       LoadIcon("Version", "ty_version.png");
-
 
       mainWindow = new MainWindow(cfgPath);
       _msgProcessBusy = 1;

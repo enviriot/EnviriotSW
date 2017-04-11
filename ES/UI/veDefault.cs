@@ -27,11 +27,11 @@ namespace X13.UI {
     public void ValueChanged(JSC.JSValue value) {
       string rez=null;
       if(value == null) {
-        rez = "null";
+        rez = "";
       } else {
         if(value.ValueType == JSC.JSValueType.Object) {
           if(value.Value == null) {
-            rez = "null";
+            rez = "";
           } else {
             var sc = value["$type"];
             if((rez = sc.Value as string) == null) {

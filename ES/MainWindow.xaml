@@ -68,6 +68,11 @@
               </DataTrigger>
             </Style.Triggers>
           </Style>
+          <Style TargetType="Button" BasedOn="{StaticResource AeroStyleTitleBarButton}"> 
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+          </Style>
         </Grid.Resources>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="48"/>
@@ -78,8 +83,7 @@
           <ColumnDefinition Width="32"/>
           <ColumnDefinition Width="32"/>
         </Grid.ColumnDefinitions>
-        <Button Name="buConfig" Grid.Column="0" VerticalAlignment="Top" Width="48" Height="32" Style="{StaticResource AeroStyleTitleBarButton}"
-                     WindowChrome.IsHitTestVisibleInChrome="True" HorizontalAlignment="Left" Click="buConfig_Click">
+        <Button Name="buConfig" Grid.Column="0" Click="buConfig_Click">
           <Button.ContextMenu>
             <ContextMenu>
               <MenuItem Name="miConnections" Header="Connections" >
@@ -116,29 +120,24 @@
           </Button.ContextMenu>
           <Image x:Name="AppIcon" Width="32" Height="32" Source="logo32.ico" />
         </Button>
-        <Button Name="buEditUndo" Grid.Column="1" VerticalAlignment="Top" Width="40" Height="32" Style="{StaticResource AeroStyleTitleBarButton}"
-                     WindowChrome.IsHitTestVisibleInChrome="True" IsEnabled="False">
+        <Button Name="buEditUndo" Grid.Column="1" Command="Undo">
           <Image Source="Images/Edit_Undo.png" Width="24" Height="24" />
         </Button>
-        <Button Name="buEditRedo" Grid.Column="2" VerticalAlignment="Top" Width="40" Height="32" Style="{StaticResource AeroStyleTitleBarButton}"
-                     WindowChrome.IsHitTestVisibleInChrome="True" IsEnabled="False">
+        <Button Name="buEditRedo" Grid.Column="2" Command="Redo">
           <Image Source="Images/Edit_Redo.png" Width="24" Height="24" />
         </Button>
         <TextBlock x:Name="Caption" Grid.Column="3" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5,0,0,0" Opacity="0.66" Text="Enviriot Studio" FontWeight="Bold" FontSize="16" />
-        <Button x:Name="MinButton" Grid.Column="4" VerticalAlignment="Top" Width="32" Height="32" Style="{StaticResource AeroStyleTitleBarButton}"
-                    Click="MinButtonClick" WindowChrome.IsHitTestVisibleInChrome="True">
+        <Button x:Name="MinButton" Grid.Column="4" Click="MinButtonClick" >
           <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
                           StrokeThickness="1" Stretch="None" RenderOptions.EdgeMode="Aliased" Data="M0,8 H8 M0,7 H8 M0,6 H8" 
 						  VerticalAlignment="Center" Width="9" HorizontalAlignment="Center" Height="9" />
         </Button>
-        <Button x:Name="MaxButton" Grid.Column="5" VerticalAlignment="Top" Width="32" Height="32" Style="{StaticResource AeroStyleTitleBarButton}"
-                    Click="MaxButtonClick" WindowChrome.IsHitTestVisibleInChrome="True">
+        <Button x:Name="MaxButton" Grid.Column="5" Click="MaxButtonClick" >
           <Path x:Name="PART_MaxButton_Path" Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
                           StrokeThickness="1" Stretch="None" RenderOptions.EdgeMode="Aliased" Data="M0,0 H8 V8 H0 V0 M0,1 H8 M0,2 H8" 
 						  VerticalAlignment="Center" Width="9" HorizontalAlignment="Center" Height="8" />
         </Button>
-        <Button x:Name="CloseButton" Grid.Column="6" VerticalAlignment="Center" Width="32" Height="26" Style="{StaticResource AeroStyleTitleBarButton}"
-                    Click="CloseButtonClick" WindowChrome.IsHitTestVisibleInChrome="True" HorizontalAlignment="Left" >
+        <Button x:Name="CloseButton" Grid.Column="6" Click="CloseButtonClick" >
           <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" StrokeThickness="1.5" Stretch="None" Data="M0,0 L8,8 M0,8 L8,0" 
 						   VerticalAlignment="Center" Width="9" HorizontalAlignment="Center" Height="9" />
         </Button>

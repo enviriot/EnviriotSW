@@ -55,6 +55,10 @@
     <NoWin32Manifest>true</NoWin32Manifest>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="ICSharpCode.AvalonEdit, Version=5.0.3.0, Culture=neutral, PublicKeyToken=9cc39be672370310, processorArchitecture=MSIL">
+      <HintPath>..\packages\AvalonEdit.5.0.3\lib\Net40\ICSharpCode.AvalonEdit.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="NiL.JS, Version=2.4.1027.0, Culture=neutral, PublicKeyToken=f1426dd7ad77fce3, processorArchitecture=MSIL">
       <HintPath>..\packages\NiL.JS.2.4.1027.0\lib\net45\NiL.JS.dll</HintPath>
       <Private>True</Private>
@@ -127,6 +131,9 @@
     <Compile Include="UI\veEnum.cs" />
     <Compile Include="UI\veHexadecimal.cs" />
     <Compile Include="UI\veEditor.cs" />
+    <Compile Include="UI\veJS.xaml.cs">
+      <DependentUpon>veJS.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\veVersion.cs" />
     <Compile Include="UI\IValueEditor.cs" />
     <Compile Include="UI\veAttribute.xaml.cs">
@@ -172,6 +179,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\veAttribute.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\veJS.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -275,6 +286,9 @@
     <Resource Include="..\Server\logo32.ico">
       <Link>logo32.ico</Link>
     </Resource>
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\ty_js.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

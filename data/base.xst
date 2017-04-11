@@ -8,7 +8,7 @@
         <i n='Date' s='{"default":"1001-01-01T12:00:00.000Z","willful":true}' m='{"attr":5}' />
         <i n='Double' s='{"default":0,"willful":true}' m='{"attr":5}' />
         <i n='Integer' s='{"default":0,"manifest":{"editor":"Integer"},"willful":true}' m='{"attr":5}' />
-        <i n='Manifest' s='{"mi":{"attr":{"editor":"Attribute","attr":1},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"uri":""},"mi":{"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","info":"value converter for input"},"convOut":{"default":"","info":"value converter for output"}}},"type":{"default":""}}}' m='{"attr":5}' />
+        <i n='Manifest' s='{"mi":{"attr":{"editor":"Attribute","attr":1},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"uri":""},"mi":{"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","editor":"JS","info":"value converter for input"},"convOut":{"default":"","editor":"JS","info":"value converter for output"}}},"type":{"default":""}}}' m='{"attr":5}' />
         <i n='Object' s='{"default":{},"willful":true}' m='{"attr":5}' />
         <i n='String' s='{"default":"","willful":true}' m='{"attr":5}' />
       </i>
