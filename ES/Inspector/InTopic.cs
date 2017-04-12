@@ -304,7 +304,7 @@ namespace X13.UI {
           } else {
             mi.Icon = new Image() { Source = App.GetIcon(kv.Key), Height = 16, Width = 16 };
           }
-          if((v2 = kv.Value["info"]).ValueType == JSC.JSValueType.String) {
+          if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
             mi.ToolTip = v2.Value;
           }
           mi.Click += miAdd_Click;

@@ -239,7 +239,7 @@ namespace X13.UI {
             if((v2 = kv.Value["icon"]).ValueType == JSC.JSValueType.String) {
               mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
             }
-            if((v2 = kv.Value["info"]).ValueType == JSC.JSValueType.String) {
+            if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
               mi.ToolTip = v2.Value;
             }
             mi.Tag = kv.Value;
@@ -258,7 +258,7 @@ namespace X13.UI {
               } else {
                 mi.Icon = new Image() { Source = App.GetIcon(t.name), Height = 16, Width = 16 };
               }
-              if((v2 = v1["info"]).ValueType == JSC.JSValueType.String) {
+              if((v2 = v1["hint"]).ValueType == JSC.JSValueType.String) {
                 mi.ToolTip = v2.Value;
               }
               mi.Click += miAdd_Click;
