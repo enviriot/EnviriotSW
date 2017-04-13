@@ -302,10 +302,12 @@ namespace X13.Repository {
         if(!t._manifest["attr"].IsNumber) {
           t._manifest["attr"] = new JST.Number(0);
         }
-        t._ps_manifest = new BsonDocument();
-        var id = ObjectId.NewObjectId();
-        t._ps_manifest["_id"] = id;
-        t._ps_manifest["p"] = new BsonValue(t._path);
+        if(t._ps_manifest == null) {
+          t._ps_manifest = new BsonDocument();
+          var id = ObjectId.NewObjectId();
+          t._ps_manifest["_id"] = id;
+          t._ps_manifest["p"] = new BsonValue(t._path);
+        }
         t._ps_manifest["v"] = Js2Bs(t._manifest) as BsonDocument;
 
         var c = Perform.Create(t, Perform.Art.create, prim);

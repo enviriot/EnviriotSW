@@ -170,5 +170,33 @@ namespace X13 {
         App.Workspace.Open(cl.ToString()+"/");
       }
     }
+
+    private void miImport_Click(object sender, RoutedEventArgs e) {
+      Client cl;
+      if(App.Workspace.ActiveDocument == null || App.Workspace.ActiveDocument.data == null || (cl = App.Workspace.ActiveDocument.data.Connection) == null) {
+        return;
+      }
+
+      Microsoft.Win32.OpenFileDialog dlg = new Microsoft.Win32.OpenFileDialog();
+      dlg.Title = "Import";
+      dlg.DefaultExt = ".xst"; // Default file extension
+      dlg.Filter = "Exported storage (.xst)|*.xst"; // Filter files by extension
+      dlg.CheckFileExists = true;
+
+      if(dlg.ShowDialog() != true || string.IsNullOrEmpty(dlg.FileName) || !System.IO.File.Exists(dlg.FileName)) {
+        return;
+      }
+      try {
+        var txt = System.IO.File.ReadAllText(dlg.FileName, Encoding.UTF8);
+        var body = Encoding.UTF8.GetBytes(txt);
+        var payload = Convert.ToBase64String(body);
+        cl.SendCmd(16, dlg.FileName, payload);
+      }
+      catch(Exception ex) {
+        Log.Warning("Import({0}) - {1}", dlg.FileName, ex.Message);
+      }
+
+
+    }
   }
 }

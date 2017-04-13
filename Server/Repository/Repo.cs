@@ -200,7 +200,7 @@ namespace X13.Repository {
       }
       return true;
     }
-    public static void Import(StreamReader reader, string path) {
+    public static void Import(TextReader reader, string path) {
       XDocument doc;
       using(var r = new System.Xml.XmlTextReader(reader)) {
         doc = XDocument.Load(r);

@@ -78,6 +78,9 @@ namespace X13.EsBroker {
           case 14:
             this.SetField(msg);
             break;
+          case 16:
+            this.Import(msg);
+            break;
           case 99: {
               var o = Interlocked.Exchange(ref _owner, null);
               if(o != null) {
@@ -102,6 +105,7 @@ namespace X13.EsBroker {
         }
       }
     }
+
     public override bool verbose {
       get {
         return _basePl.verbose;
@@ -231,6 +235,27 @@ namespace X13.EsBroker {
       Topic t = Topic.root.Get(msg[2].Value as string, false, _owner);
       if(t != null) {
         t.Remove(_owner);
+      }
+    }
+    /// <summary>Import</summary>
+    /// <param name="msg">
+    /// Command: [16, FileName, payload(Base64)]
+    /// </param>
+    private void Import(EsMessage msg) {
+      if(msg.Count != 3 || msg[1].ValueType != JSC.JSValueType.String || msg[2].ValueType != JSC.JSValueType.String) {
+        if(_basePl.verbose) {
+          Log.Warning("Syntax error: {0}", msg);
+        }
+        return;
+      }
+      try {
+        var str = Encoding.UTF8.GetString(Convert.FromBase64String(msg[2].Value as string));
+        using(var sr = new StringReader(str)) {
+          Repo.Import(sr, null);
+        }
+      }
+      catch(Exception ex) {
+        Log.Warning("Import({0}) - {1}", msg[1].Value as string, ex.Message);
       }
     }
 

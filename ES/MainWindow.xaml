@@ -116,6 +116,7 @@
                   </DataTemplate>
                 </MenuItem.ItemTemplate>
               </MenuItem>
+              <MenuItem Name="miImport" Header="Import" Click="miImport_Click" />
             </ContextMenu>
           </Button.ContextMenu>
           <Image x:Name="AppIcon" Width="32" Height="32" Source="logo32.ico" />
