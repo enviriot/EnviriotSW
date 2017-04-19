@@ -49,7 +49,7 @@ namespace X13 {
       }
       InitializeComponent();
       dmMain.DataContext = App.Workspace;
-      miConnections.ItemsSource = App.Workspace.Clients;
+      miConnections.DataContext = App.Workspace;
     }
     private void Window_Loaded(object sender, RoutedEventArgs e) {
       try {
@@ -163,14 +163,6 @@ namespace X13 {
       }
     }
 
-    private void Connection_MouseUp(object sender, MouseButtonEventArgs e) {
-      var s = sender as FrameworkElement;
-      Client cl;
-      if(s != null && (cl = s.DataContext as Client) != null) {
-        App.Workspace.Open(cl.ToString()+"/");
-      }
-    }
-
     private void miImport_Click(object sender, RoutedEventArgs e) {
       Client cl;
       if(App.Workspace.ActiveDocument == null || App.Workspace.ActiveDocument.data == null || (cl = App.Workspace.ActiveDocument.data.Connection) == null) {
@@ -198,5 +190,14 @@ namespace X13 {
 
 
     }
+
+    private void miConfigOpen_Click(object sender, RoutedEventArgs e) {
+      var s = sender as FrameworkElement;
+      Client cl;
+      if(s != null && (cl = s.DataContext as Client) != null) {
+        App.Workspace.Open(cl.ToString() + "/");
+      }
+    }
+
   }
 }

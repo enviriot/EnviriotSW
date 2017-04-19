@@ -11,18 +11,28 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace X13.Data {
-  internal class Client {
+  internal class Client : NPC_UI {
     private EsBroker.EsSocket _socket;
-    private State _st;
     private List<WaitConnect> _connEvnt;
     private int _msgId;
     private System.Collections.Generic.LinkedList<ClRequest> _reqs;
-
+    private ClientState _st;
 
     public readonly string server;
     public readonly int port;
     public readonly string userName;
     public readonly string password;
+    public ClientState Status {
+      get {
+        return _st;
+      }
+      private set {
+        if(value != _st) {
+          _st = value;
+          PropertyChangedReise();
+        }
+      }
+    }
     public string alias { get; set; }
     public DTopic root { get; private set; }
     public DTopic TypeManifest { get; private set; }
@@ -37,7 +47,7 @@ namespace X13.Data {
       root = new DTopic(this);
     }
     public bool Connect() {
-      _st = State.Connecting;
+      Status = ClientState.Connecting;
       try {
         var tcp = new TcpClient();
         tcp.Connect(server, port);
@@ -50,7 +60,7 @@ namespace X13.Data {
       }
       catch(Exception ex) {
         Log.Warning("{0}.Connect - {1}", this.ToString(), ex.Message);
-        _st = State.Idle;
+        Status = ClientState.Idle;
         return false;
       }
       return true;
@@ -72,7 +82,7 @@ namespace X13.Data {
       for(int i = 0; i < arg.Length; i++) {
         arr[i + 1] = arg[i] ?? JSC.JSValue.Undefined;
       }
-      if(_st == State.Ready) {
+      if(Status == ClientState.Ready) {
         _socket.SendArr(arr);
       }
     }
@@ -89,7 +99,7 @@ namespace X13.Data {
     }
 
     private void Send(INotMsg msg) {
-      if(_st == State.Ready) {
+      if(Status == ClientState.Ready) {
         ClRequest req;
         if((req = msg as ClRequest) != null) {
           if(req.msgId >= 0) {
@@ -101,7 +111,7 @@ namespace X13.Data {
         } else {
           throw new ArgumentException("msg");
         }
-      } else if(_st == State.BadAuth) {
+      } else if(Status == ClientState.BadAuth) {
         var arr = new JSL.Array(2);
         arr[0] = this.ToString();
         arr[1] = "Bad username or password";
@@ -111,7 +121,7 @@ namespace X13.Data {
         lock(_connEvnt) {
           _connEvnt.Add(new WaitConnect(msg, this));
         }
-        if(_st == State.Idle) {
+        if(Status == ClientState.Idle) {
           this.Connect();
         }
       }
@@ -130,7 +140,7 @@ namespace X13.Data {
             alias = msg[1].Value as string;
           }
           Log.Info("{0} connected as {1}", this.ToString(), alias);
-          _st = State.Ready;
+          Status = ClientState.Ready;
           lock(_connEvnt) {
             foreach(var ce in _connEvnt) {
               ce.Response(true, null);
@@ -207,14 +217,6 @@ namespace X13.Data {
       }
     }
 
-    private enum State {
-      Idle,
-      Connecting,
-      Ready,
-      BadAuth,
-      Disposed
-    }
-
     private class ClRequest : INotMsg {
       public int msgId;
       public JSL.Array data;
@@ -267,5 +269,12 @@ namespace X13.Data {
         return "WaitConnect: " + _success.ToString();
       }
     }
+  }
+  public enum ClientState {
+    Idle,
+    Connecting,
+    Ready,
+    BadAuth,
+    Disposed
   }
 }

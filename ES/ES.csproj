@@ -237,9 +237,6 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Images\trash.png" />
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\ty_topic.png" />
   </ItemGroup>
   <ItemGroup>
@@ -289,6 +286,13 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\ty_js.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Images\log_deb.png" />
+    <Resource Include="Images\log_err.png" />
+    <Resource Include="Images\log_info.png" />
+    <Resource Include="Images\log_ok.png" />
+    <Resource Include="Images\log_warn.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

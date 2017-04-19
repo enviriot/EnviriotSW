@@ -120,7 +120,7 @@ namespace X13.Data {
         JSC.JSObject p_c;
         JSC.JSValue pv_c;
         foreach(var kv in o) {
-          if(p != null && (pv_c = p[kv.Key]).ValueType == JSC.JSValueType.Object) {
+          if(p != null && p.Value!=null && (pv_c = p[kv.Key]).ValueType == JSC.JSValueType.Object) {
             p_c = pv_c.ToObject();
           } else {
             p_c = null;
