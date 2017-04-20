@@ -16,6 +16,7 @@ using System.Windows.Shapes;
 using System.Xml;
 using X13.Data;
 using X13.UI;
+using Xceed.Wpf.AvalonDock.Layout;
 
 namespace X13 {
   /// <summary>
@@ -136,13 +137,12 @@ namespace X13 {
         }
       }
     }
-    private void dmMain_DocumentClosed(object sender, Xceed.Wpf.AvalonDock.DocumentClosedEventArgs e) {
-      var form = e.Document.Content as UIDocument;
-      if(form != null) {
-        App.Workspace.Close(form);
+
+    private void buConfig_Click(object sender, RoutedEventArgs e) {
+      if(buConfig.ContextMenu != null) {
+        buConfig.ContextMenu.IsOpen = !buConfig.ContextMenu.IsOpen;
       }
     }
-
     private void CloseButtonClick(object sender, RoutedEventArgs e) {
       SystemCommands.CloseWindow(this);
     }
@@ -157,12 +157,20 @@ namespace X13 {
       }
     }
 
-    private void buConfig_Click(object sender, RoutedEventArgs e) {
-      if(buConfig.ContextMenu != null) {
-        buConfig.ContextMenu.IsOpen = true;
+    private void miConfigOpen_Click(object sender, RoutedEventArgs e) {
+      var s = sender as FrameworkElement;
+      Client cl;
+      if(s != null && (cl = s.DataContext as Client) != null) {
+        App.Workspace.Open(cl.ToString() + "/");
       }
     }
-
+    private void miConnectionOpenLog(object sender, RoutedEventArgs e) {
+      var s = sender as FrameworkElement;
+      Client cl;
+      if(s != null && (cl = s.DataContext as Client) != null) {
+        App.Workspace.Open(cl.ToString()+"/", "log");
+      }
+    }
     private void miImport_Click(object sender, RoutedEventArgs e) {
       Client cl;
       if(App.Workspace.ActiveDocument == null || App.Workspace.ActiveDocument.data == null || (cl = App.Workspace.ActiveDocument.data.Connection) == null) {
@@ -191,11 +199,10 @@ namespace X13 {
 
     }
 
-    private void miConfigOpen_Click(object sender, RoutedEventArgs e) {
-      var s = sender as FrameworkElement;
-      Client cl;
-      if(s != null && (cl = s.DataContext as Client) != null) {
-        App.Workspace.Open(cl.ToString() + "/");
+    private void dmMain_DocumentClosed(object sender, Xceed.Wpf.AvalonDock.DocumentClosedEventArgs e) {
+      var doc = e.Document.Content as BaseWindow;
+      if(doc != null) {
+        App.Workspace.Close(doc);
       }
     }
 

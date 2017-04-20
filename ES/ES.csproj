@@ -127,33 +127,37 @@
     <Compile Include="LogView.xaml.cs">
       <DependentUpon>LogView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UI\veByteArray.cs" />
-    <Compile Include="UI\veEnum.cs" />
-    <Compile Include="UI\veHexadecimal.cs" />
-    <Compile Include="UI\veEditor.cs" />
-    <Compile Include="UI\veJS.xaml.cs">
+    <Compile Include="UI\BaseWindow.cs" />
+    <Compile Include="UI\uiLog.xaml.cs">
+      <DependentUpon>uiLog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="ValueEditors\veByteArray.cs" />
+    <Compile Include="ValueEditors\veEnum.cs" />
+    <Compile Include="ValueEditors\veHexadecimal.cs" />
+    <Compile Include="ValueEditors\veEditor.cs" />
+    <Compile Include="ValueEditors\veJS.xaml.cs">
       <DependentUpon>veJS.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UI\veVersion.cs" />
-    <Compile Include="UI\IValueEditor.cs" />
-    <Compile Include="UI\veAttribute.xaml.cs">
+    <Compile Include="ValueEditors\veVersion.cs" />
+    <Compile Include="ValueEditors\IValueEditor.cs" />
+    <Compile Include="ValueEditors\veAttribute.xaml.cs">
       <DependentUpon>veAttribute.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UI\veDefault.cs" />
+    <Compile Include="ValueEditors\veDefault.cs" />
     <Compile Include="UI\ActiveDocumentConverter.cs" />
     <Compile Include="UI\IBaseForm.cs" />
     <Compile Include="UI\UIDocument.xaml.cs">
       <DependentUpon>UIDocument.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="UI\veDateTimePicker.cs" />
-    <Compile Include="UI\veTopicReference.cs" />
-    <Compile Include="UI\veDouble.cs" />
-    <Compile Include="UI\veInteger.cs" />
-    <Compile Include="UI\veSliderBool.xaml.cs">
+    <Compile Include="ValueEditors\veDateTimePicker.cs" />
+    <Compile Include="ValueEditors\veTopicReference.cs" />
+    <Compile Include="ValueEditors\veDouble.cs" />
+    <Compile Include="ValueEditors\veInteger.cs" />
+    <Compile Include="ValueEditors\veSliderBool.xaml.cs">
       <DependentUpon>veSliderBool.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UI\veString.cs" />
+    <Compile Include="ValueEditors\veString.cs" />
     <Page Include="Inspector\InspectorForm.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -178,15 +182,19 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="UI\veAttribute.xaml">
+    <Page Include="UI\uiLog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="UI\veJS.xaml">
+    <Page Include="ValueEditors\veAttribute.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="UI\veSliderBool.xaml">
+    <Page Include="ValueEditors\veJS.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="ValueEditors\veSliderBool.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

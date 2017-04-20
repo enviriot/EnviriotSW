@@ -9,13 +9,12 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Xml;
 using X13.UI;
+using System.Windows.Controls;
 
 namespace X13.Data {
   internal class DWorkspace : NPC_UI {
     private string _cfgPath;
     private UIDocument _activeDocument;
-    private ObservableCollection<UIDocument> _files;
-    private ReadOnlyObservableCollection<UIDocument> _readonyFiles;
 
     public XmlDocument config;
     public ObservableCollection<Client> Clients { get; private set; }
@@ -23,7 +22,8 @@ namespace X13.Data {
     public DWorkspace(string cfgPath) {
       this._cfgPath = cfgPath;
       Clients = new ObservableCollection<Client>();
-      _files = new ObservableCollection<UIDocument>();
+      Files = new ObservableCollection<UIDocument>();
+      Tools = new ObservableCollection<BaseWindow>();
       _activeDocument = null;
 
       try {
@@ -43,8 +43,8 @@ namespace X13.Data {
               XmlNode xc;
               string server, userName, password;
               int port;
-              var xcl=cList.SelectNodes("Server");
-              for(i=0; i<xcl.Count; i++) {
+              var xcl = cList.SelectNodes("Server");
+              for(i = 0; i < xcl.Count; i++) {
                 xc = xcl[i];
                 var tmp = xc.Attributes["URL"];
                 if(tmp == null || string.IsNullOrEmpty(server = tmp.Value)) {
@@ -74,7 +74,7 @@ namespace X13.Data {
         config = null;
       }
     }
-    public UIDocument Open(string path, string view = null) {
+    public BaseWindow Open(string path, string view = null) {
       string id;
       if(string.IsNullOrEmpty(path)) {
         id = null;
@@ -87,22 +87,34 @@ namespace X13.Data {
           id = path;
         }
       }
-      UIDocument ui;
-      ui = _files.FirstOrDefault(z => z != null && ((z.data!=null && z.data.fullPath==path) || z.ContentId == id));
-      if(ui == null) {
-        ui = new UI.UIDocument(path, view);
-        _files.Add(ui);
+      if(view == "log") {
+        var ui = Tools.FirstOrDefault(z => z != null && z.ContentId == id);
+        if(ui == null) {
+          var cl = Clients.FirstOrDefault(z => (z.ToString() + "/") == path);
+          if(cl == null) {
+            return null;
+          }
+          ui = new uiLog(cl);
+          Tools.Add(ui);
+        }
+        return ui;
+      } else {
+        var doc = Files.FirstOrDefault(z => z != null && (z.data != null && z.data.fullPath == path) || z.ContentId == id);
+        if(doc==null){
+          doc = new UI.UIDocument(path, view);
+          Files.Add(doc);
+        }
+        ActiveDocument = doc;
+        return doc;
       }
-      ActiveDocument = ui;
-      return ui;
     }
     public Task<DTopic> GetAsync(Uri url) {
       var up = Uri.UnescapeDataString(url.UserInfo).Split(':');
       string uName = (up.Length > 0 && !string.IsNullOrWhiteSpace(up[0])) ? up[0] : null;
-      Client cl = Clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == ( url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port ));
+      Client cl = Clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port));
       if(cl == null) {
         lock(Clients) {
-          cl = Clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == ( url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port ));
+          cl = Clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port));
           if(cl == null) {
             cl = new Client(url.DnsSafeHost, url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port, uName, up.Length == 2 ? up[1] : null);
             Clients.Add(cl);
@@ -111,23 +123,13 @@ namespace X13.Data {
       }
       return cl.root.GetAsync(url.LocalPath);
     }
-    public void Close(string path, string view) {
-      UIDocument d;
-      if(string.IsNullOrEmpty(view)) {
-        view = "IN";
-      } else if(view.StartsWith("?view=")) {
-        view = view.Substring(6);
-      }
-      string id = path + "?view=" + view;
-      d = _files.FirstOrDefault(z => z != null && z.ContentId == id);
-      if(d != null) {
-        _files.Remove(d);
-      }
-    }
-    public void Close(UIDocument doc) {
-      var d = _files.FirstOrDefault(z => z == doc);
-      if(d != null) {
-        _files.Remove(d);
+
+    public void Close(BaseWindow w) {
+      UIDocument doc= w as UIDocument;
+      if(doc != null) {
+        Files.Remove(doc);
+      } else {
+        Tools.Remove(w);
       }
     }
 
@@ -176,14 +178,7 @@ namespace X13.Data {
         }
       }
     }
-    public ReadOnlyObservableCollection<UIDocument> Files {
-      get {
-        if(_readonyFiles == null)
-          _readonyFiles = new ReadOnlyObservableCollection<UIDocument>(_files);
-
-        return _readonyFiles;
-      }
-    }
-
+    public ObservableCollection<UIDocument> Files { get; private set; }
+    public ObservableCollection<BaseWindow> Tools { get; private set; }
   }
 }

@@ -43,16 +43,16 @@
         </Setter.Value>
       </Setter>
     </Style>
-    <Image x:Key="ImgLogDeb" x:Shared="False" Source="Images/log_deb.png" Height="16" Width="16" />
-    <Image x:Key="ImgLogOk" x:Shared="False" Source="Images/log_ok.png" Height="16" Width="16" />
-    <Image x:Key="ImgLogWarn" x:Shared="False" Source="Images/log_warn.png" Height="16" Width="16" />
-    <Image x:Key="ImgLogErr" x:Shared="False" Source="Images/log_err.png" Height="16" Width="16" />
-    <Image x:Key="ImgTyChildren" x:Shared="False" Source="Images/children.png" Height="16" Width="16" />
-    <Image x:Key="ImgTyEditor" x:Shared="False" Source="Images/ic_editor.png" Height="16" Width="16" />
-    <Image x:Key="ImgEdDelete" x:Shared="False" Source="Images/Edit_Delete.png" Height="16" Width="16" />
+    <Image x:Key="ImgLogDeb"     x:Shared="False" Source="Images/log_deb.png"     Height="16" Width="16" />
+    <Image x:Key="ImgLogOk"      x:Shared="False" Source="Images/log_ok.png"      Height="16" Width="16" />
+    <Image x:Key="ImgLogWarn"    x:Shared="False" Source="Images/log_warn.png"    Height="16" Width="16" />
+    <Image x:Key="ImgLogErr"     x:Shared="False" Source="Images/log_err.png"     Height="16" Width="16" />
+    <Image x:Key="ImgTyChildren" x:Shared="False" Source="Images/children.png"    Height="16" Width="16" />
+    <Image x:Key="ImgTyEditor"   x:Shared="False" Source="Images/ic_editor.png"   Height="16" Width="16" />
+    <Image x:Key="ImgEdDelete"   x:Shared="False" Source="Images/Edit_Delete.png" Height="16" Width="16" />
     <Collections:ArrayList x:Key="ConnectionSubMenu" x:Shared="False">
       <MenuItem Header="Open" Style="{x:Null}" Icon="{StaticResource ImgTyChildren}" Click="miConfigOpen_Click" />
-      <MenuItem Header="Open Log" Style="{x:Null}" Icon="{StaticResource ImgTyEditor}" />
+      <MenuItem Header="Open Log" Style="{x:Null}" Icon="{StaticResource ImgTyEditor}" Click="miConnectionOpenLog" />
       <Separator />
       <MenuItem Header="Delete" Style="{x:Null}" Icon="{StaticResource ImgEdDelete}" />
     </Collections:ArrayList>
@@ -176,24 +176,25 @@
 						   VerticalAlignment="Center" Width="9" HorizontalAlignment="Center" Height="9" />
         </Button>
       </Grid>
-      <xcad:DockingManager x:Name="dmMain" Grid.Row="1" AllowMixedOrientation="True" DocumentClosed="dmMain_DocumentClosed" 
-			ActiveContent="{Binding ActiveDocument, Converter={StaticResource ActiveDocumentConverter}, Mode=TwoWay}" 
-            DocumentsSource="{Binding Files}">
+      <xcad:DockingManager x:Name="dmMain" Grid.Row="1" AllowMixedOrientation="True"
+            DocumentsSource="{Binding Files}" AnchorablesSource="{Binding Tools}"                            
+			ActiveContent="{Binding ActiveDocument, Converter={StaticResource ActiveDocumentConverter}, Mode=TwoWay}" DocumentClosed="dmMain_DocumentClosed">
         <xcad:DockingManager.Theme>
           <xcad:AeroTheme />
         </xcad:DockingManager.Theme>
         <xcad:DockingManager.DocumentHeaderTemplate>
           <DataTemplate>
-            <Grid MaxWidth="180">
-              <TextBlock Text="{Binding Title}" FontFamily="Consolas" FontSize="12" />
+            <Grid MaxWidth="180" ToolTip="{Binding ToolTip}">
+              <TextBlock Text="{Binding Title}" FontFamily="Arial" FontSize="12" />
             </Grid>
           </DataTemplate>
         </xcad:DockingManager.DocumentHeaderTemplate>
         <xcad:DockingManager.LayoutItemContainerStyle>
           <Style TargetType="{x:Type xcad:LayoutItem}">
-            <Setter Property="Title" Value="{Binding Model.data.name}"/>
+            <Setter Property="Title" Value="{Binding Model.Title}"/>
             <Setter Property="ContentId" Value="{Binding Model.ContentId}"/>
-            <Setter Property="ToolTip" Value="{Binding Model.data.fullPath}" />
+            <Setter Property="ToolTip" Value="{Binding Model.ToolTipL}"/>
+            <Setter Property="Visibility" Value="{Binding Model.IsVisibleL, Mode=TwoWay}" />
           </Style>
         </xcad:DockingManager.LayoutItemContainerStyle>
       </xcad:DockingManager>

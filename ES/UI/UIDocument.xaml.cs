@@ -19,7 +19,7 @@ using X13.Data;
 
 namespace X13.UI {
   /// <summary></summary>
-  public partial class UIDocument : UserControl, INotifyPropertyChanged {
+  public partial class UIDocument : BaseWindow {
     private ObservableCollection<DTopic> _pathItems;
     private string _path;
     private string _view;
@@ -30,6 +30,8 @@ namespace X13.UI {
       _view = view;
       _pathItems = new ObservableCollection<DTopic>();
       this.DataContext = this;
+      ContentId = _path + (_view == null ? string.Empty : ("?view=" + _view));
+
       InitializeComponent();
       this.icPanel.ItemsSource = _pathItems;
       Uri url;
@@ -40,7 +42,7 @@ namespace X13.UI {
 
     private DTopic _data;
 
-    public bool connected { get { return _data != null; } }
+    public bool connected { get { return _data != null && _data.Connection.Status==ClientState.Ready; } }
     public DTopic data { get { return _data; } }
     public IBaseForm contentForm {
       get {
@@ -49,11 +51,10 @@ namespace X13.UI {
       set {
         if(_contentForm != value) {
           _contentForm = value;
-          OnPropertyChanged("contentForm");
+          PropertyChangedReise("contentForm");
         }
       }
     }
-    public string ContentId { get { return (_data == null ? _path : _data.fullPath) + (_view == null ? string.Empty : ("?view=" + _view)); } }
 
     private void RequestData(Uri url) {
       this.Cursor = Cursors.AppStarting;
@@ -69,8 +70,7 @@ namespace X13.UI {
           return;
         }
         _path = _data.fullPath;
-        OnPropertyChanged("data");
-
+        PropertyChangedReise("data");
         DTopic c = _data;
         _pathItems.Clear();
         while(c != null) {
@@ -84,8 +84,10 @@ namespace X13.UI {
             _view = "IN";
           //}
         }
-        OnPropertyChanged("ContentId");
-        OnPropertyChanged("connected");
+        ContentId = _path + (_view == null ? string.Empty : ("?view=" + _view));
+        Title = _data.name;
+
+        PropertyChangedReise("connected");
         if(_view == "IN") {
           if((ccMain.Content as InspectorForm) == null) {
             contentForm = new InspectorForm(_data);
@@ -145,24 +147,13 @@ namespace X13.UI {
       //  if(_data.typeStr == "Logram") {
       //    _view = "LO";
       //    contentForm = new LogramForm(_data);
-      //    OnPropertyChanged("ContentId");
+      //    PropertyChangedReise("ContentId");
       //  }
       //} else {
         //_view = "IN";
         //contentForm = new InspectorForm(_data);
-        //OnPropertyChanged("ContentId");
+        //PropertyChangedReise("ContentId");
       //}
     }
-
-    #region INotifyPropertyChanged Members
-    public event PropertyChangedEventHandler PropertyChanged;
-
-    internal void OnPropertyChanged(string propertyName) {
-      if(PropertyChanged != null) {
-        PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
-      }
-    }
-    #endregion INotifyPropertyChanged Members
-
   }
 }
