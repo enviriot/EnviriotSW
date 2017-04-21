@@ -85,7 +85,11 @@ namespace X13.UI {
           //}
         }
         ContentId = _path + (_view == null ? string.Empty : ("?view=" + _view));
-        Title = _data.name;
+        if(_data == _data.Connection.root) {
+          Title = _data.Connection.alias;
+        } else {
+          Title = _data.name;
+        }
 
         PropertyChangedReise("connected");
         if(_view == "IN") {

@@ -26,10 +26,7 @@ namespace X13.EsBroker {
       this._subCBc = new Action<Perform, SubRec>(ChildChanged);
       this._subscriptions = new List<Tuple<SubRec, EsMessage>>();
       // Hello
-      var arr = new JSL.Array(2);
-      arr[0] = 1;
-      arr[1] = Environment.MachineName;
-      this.SendArr(arr);
+      this.SendArr(new JSL.Array {1,  Environment.MachineName});
       _owner = Topic.root.Get("/$YS/ES").Get(base.ToString());
       _owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
       _owner.SetField("type", "ES/Connection", _owner);
@@ -52,6 +49,11 @@ namespace X13.EsBroker {
         _owner.SetState(v, _owner);
         Log.Info("{0} connected from {1}:{2}", _owner.path, EndPoint.Address.ToString(), EndPoint.Port);
       }
+      Log.Write += Log_Write;
+    }
+
+    private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
+      base.SendArr(new JSL.Array { 90, JSC.JSValue.Marshal(dt), (int)ll, msg}, false);
     }
     private void RcvMsg(EsMessage msg) {
       if(msg.Count == 0) {
@@ -260,15 +262,10 @@ namespace X13.EsBroker {
     }
 
     private void ChildChanged(Perform p, SubRec sb) {
-      JSL.Array arr;
       switch(p.art) {
       case Perform.Art.create:
-      case Perform.Art.subscribe: {
-          arr = new JSL.Array(2);
-          arr[0] = new JSL.Number(4);
-          arr[1] = new JSL.String(p.src.path);
-          base.SendArr(arr);
-        }
+      case Perform.Art.subscribe:
+        base.SendArr(new JSL.Array{ 4, p.src.path});
         break;
       case Perform.Art.subAck: {
           var sr = p.o as SubRec;
@@ -282,18 +279,10 @@ namespace X13.EsBroker {
         }
         break;
       case Perform.Art.move:
-        arr = new JSL.Array(4);
-        arr[0] = new JSL.Number(10);
-        arr[1] = new JSL.String(p.o as string);
-        arr[2] = new JSL.String(p.src.parent.path);
-        arr[3] = new JSL.String(p.src.name);
-        base.SendArr(arr);
+        base.SendArr(new JSL.Array{ 10, p.o as string, p.src.parent.path, p.src.name});
         break;
       case Perform.Art.remove:
-        arr = new JSL.Array(2);
-        arr[0] = new JSL.Number(12);
-        arr[1] = new JSL.String(p.src.path);
-        base.SendArr(arr);
+        base.SendArr(new JSL.Array{ 12, p.src.path});
         lock(_subscriptions) {
           _subscriptions.RemoveAll(z => z.Item1.setTopic == p.src);
         }
@@ -301,33 +290,18 @@ namespace X13.EsBroker {
       }
     }
     private void TopicChanged(Perform p, SubRec sb) {
-      JSL.Array arr;
       switch(p.art) {
-      case Perform.Art.subscribe: {
-          arr = new JSL.Array(4);
-          arr[0] = new JSL.Number(4);
-          arr[1] = new JSL.String(p.src.path);
-          arr[2] = p.src.GetState();
-          arr[3] = p.src.GetField(null);
-          base.SendArr(arr);
-        }
+      case Perform.Art.subscribe:
+        base.SendArr(new JSL.Array{ 4, p.src.path, p.src.GetState(), p.src.GetField(null)});
         break;
       case Perform.Art.changedState:
         if(p.prim != _owner && sb.setTopic == p.src) {
-          arr = new JSL.Array(3);
-          arr[0] = new JSL.Number(6);
-          arr[1] = new JSL.String(p.src.path);
-          arr[2] = p.src.GetState();
-          base.SendArr(arr);
+          base.SendArr(new JSL.Array{ 6, p.src.path, p.src.GetState()});
         }
         break;
       case Perform.Art.changedField:
         if(sb.setTopic == p.src) {
-          arr = new JSL.Array(3);
-          arr[0] = new JSL.Number(14);
-          arr[1] = new JSL.String(p.src.path);
-          arr[2] = p.src.GetField(null);
-          base.SendArr(arr);
+          base.SendArr(new JSL.Array{ 14, p.src.path, p.src.GetField(null)});
         }
         break;
       case Perform.Art.create:

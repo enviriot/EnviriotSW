@@ -52,11 +52,11 @@ namespace X13.Data {
         var tcp = new TcpClient();
         tcp.Connect(server, port);
         _socket = new EsBroker.EsSocket(tcp, onRecv);
-#if DEBUG
-        _socket.verbose = true;
-#else
+//#if DEBUG
+//        _socket.verbose = true;
+//#else
         _socket.verbose = false;
-#endif
+//#endif
       }
       catch(Exception ex) {
         Log.Warning("{0}.Connect - {1}", this.ToString(), ex.Message);
@@ -112,10 +112,7 @@ namespace X13.Data {
           throw new ArgumentException("msg");
         }
       } else if(Status == ClientState.BadAuth) {
-        var arr = new JSL.Array(2);
-        arr[0] = this.ToString();
-        arr[1] = "Bad username or password";
-        msg.Response(false, arr);
+        msg.Response(false, new JSL.Array{ this.ToString(), "Bad username or password"});
         App.PostMsg(msg);
       } else {
         lock(_connEvnt) {
@@ -204,7 +201,13 @@ namespace X13.Data {
         }
         App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, null, msg[2]));
         break;
-
+      case 90:  // [Log, DateTime, level, message]
+        if(msg.Count != 4 || msg[1].ValueType != JSC.JSValueType.Date || !msg[2].IsNumber || msg[3].ValueType != JSC.JSValueType.String) {
+          Log.Warning("Synax error {0}", msg);
+          break;
+        }
+        Log.AddEntry((LogLevel)(int)msg[2], (msg[1].Value as JSL.Date).ToDateTime(), msg[3].Value as string);
+        break;
       }
     }
 

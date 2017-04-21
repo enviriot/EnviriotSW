@@ -37,7 +37,7 @@ namespace X13.EsBroker {
       this._stream.BeginRead(_rcvBuf, 0, 1, _rcvCB, _stream);
 
     }
-    public void SendArr(JST.Array arr) {
+    public void SendArr(JST.Array arr, bool rep = true) {
       var ms = JST.JSON.stringify(arr, null, null);
       int len = Encoding.UTF8.GetByteCount(ms);
       int st = 1;
@@ -55,9 +55,11 @@ namespace X13.EsBroker {
         tmp = tmp >> 7;
       }
       buf[buf.Length - 1] = 0xFF;
-      this._stream.Write(buf, 0, buf.Length);
-      if(verbose) {
-        Log.Debug("{0}.Send({1})", this.ToString(), ms);
+      if(this._socket.Connected) {
+        this._stream.Write(buf, 0, buf.Length);
+        if(verbose && rep) {
+          Log.Debug("{0}.Send({1})", this.ToString(), ms);
+        }
       }
     }
     private void Dispose(bool info) {
@@ -65,9 +67,7 @@ namespace X13.EsBroker {
         _stream.Close();
         _socket.Close();
         if(info) {
-          var arr = new JST.Array(1);
-          arr[0] = 99;                            // Lost
-          _callback(new EsMessage(this, arr));
+          _callback(new EsMessage(this, new JST.Array { 99 }));
         }
       }
     }
@@ -149,7 +149,9 @@ namespace X13.EsBroker {
                   }
                 }
               } else {
-                Log.Warning("{0}.Rcv - Paranoic", this.ToString());
+                if(verbose) {
+                  Log.Warning("{0}.Rcv - Paranoic", this.ToString());
+                }
               }
               _rcvState = -2;
             }

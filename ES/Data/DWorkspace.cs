@@ -90,11 +90,7 @@ namespace X13.Data {
       if(view == "log") {
         var ui = Tools.FirstOrDefault(z => z != null && z.ContentId == id);
         if(ui == null) {
-          var cl = Clients.FirstOrDefault(z => (z.ToString() + "/") == path);
-          if(cl == null) {
-            return null;
-          }
-          ui = new uiLog(cl);
+          ui = new uiLog();
           Tools.Add(ui);
         }
         return ui;

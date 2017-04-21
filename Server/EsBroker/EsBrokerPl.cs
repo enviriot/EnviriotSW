@@ -61,11 +61,11 @@ namespace X13.EsBroker {
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-#if DEBUG
-        _verbose.SetState(true);
-#else
+//#if DEBUG
+//        _verbose.SetState(true);
+//#else
         _verbose.SetState(false);
-#endif
+//#endif
       }
 
       _tcp.BeginAcceptTcpClient(new AsyncCallback(Connect), null);

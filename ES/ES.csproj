@@ -124,9 +124,6 @@
     </Compile>
     <Compile Include="Inspector\InTopic.cs" />
     <Compile Include="Inspector\InValue.cs" />
-    <Compile Include="LogView.xaml.cs">
-      <DependentUpon>LogView.xaml</DependentUpon>
-    </Compile>
     <Compile Include="UI\BaseWindow.cs" />
     <Compile Include="UI\uiLog.xaml.cs">
       <DependentUpon>uiLog.xaml</DependentUpon>
@@ -161,10 +158,6 @@
     <Page Include="Inspector\InspectorForm.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
-    </Page>
-    <Page Include="LogView.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
     </Page>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -216,6 +209,7 @@
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
     </EmbeddedResource>
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">

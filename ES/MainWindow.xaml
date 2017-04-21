@@ -48,11 +48,9 @@
     <Image x:Key="ImgLogWarn"    x:Shared="False" Source="Images/log_warn.png"    Height="16" Width="16" />
     <Image x:Key="ImgLogErr"     x:Shared="False" Source="Images/log_err.png"     Height="16" Width="16" />
     <Image x:Key="ImgTyChildren" x:Shared="False" Source="Images/children.png"    Height="16" Width="16" />
-    <Image x:Key="ImgTyEditor"   x:Shared="False" Source="Images/ic_editor.png"   Height="16" Width="16" />
     <Image x:Key="ImgEdDelete"   x:Shared="False" Source="Images/Edit_Delete.png" Height="16" Width="16" />
     <Collections:ArrayList x:Key="ConnectionSubMenu" x:Shared="False">
       <MenuItem Header="Open" Style="{x:Null}" Icon="{StaticResource ImgTyChildren}" Click="miConfigOpen_Click" />
-      <MenuItem Header="Open Log" Style="{x:Null}" Icon="{StaticResource ImgTyEditor}" Click="miConnectionOpenLog" />
       <Separator />
       <MenuItem Header="Delete" Style="{x:Null}" Icon="{StaticResource ImgEdDelete}" />
     </Collections:ArrayList>
@@ -150,6 +148,7 @@
                 </MenuItem.ItemContainerStyle>
               </MenuItem>
               <MenuItem Name="miImport" Header="Import" Click="miImport_Click" />
+              <MenuItem Header="Open Log" Style="{x:Null}" Click="miOpenLog" />
             </ContextMenu>
           </Button.ContextMenu>
           <Image x:Name="AppIcon" Width="32" Height="32" Source="logo32.ico" />
@@ -197,6 +196,13 @@
             <Setter Property="Visibility" Value="{Binding Model.IsVisibleL, Mode=TwoWay}" />
           </Style>
         </xcad:DockingManager.LayoutItemContainerStyle>
+        <xcad:LayoutRoot>
+          <xcad:LayoutPanel Orientation="Vertical">
+            <xcad:LayoutDocumentPane />
+            <xcad:LayoutAnchorablePane  DockHeight="200">
+            </xcad:LayoutAnchorablePane>
+          </xcad:LayoutPanel>
+        </xcad:LayoutRoot>
       </xcad:DockingManager>
     </Grid>
   </Border>

@@ -49,7 +49,12 @@ namespace X13 {
       _records.Enqueue(new LogRecord() { ll = ll, dt = DateTime.Now, format = format, args = arg });
       _kickEv.Set();
     }
-    public static event Action<LogLevel, DateTime, string> Write;
+    public static void AddEntry(LogLevel ll, DateTime dt, string msg){
+      if(Write != null) {
+        Write(ll, dt, msg, false);
+      }
+    }
+    public static event Action<LogLevel, DateTime, string, bool> Write;
     public static void Finish() {
       _kickEv.Set();
       AutoResetEvent fin = new AutoResetEvent(false);
@@ -72,7 +77,7 @@ namespace X13 {
           msg = "Bad format: " + r.format;
         }
         if(Write != null) {
-          Write(r.ll, r.dt, msg);
+          Write(r.ll, r.dt, msg, true);
         }
         string msgA;
         ConsoleColor cc;

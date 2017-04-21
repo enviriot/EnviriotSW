@@ -31,9 +31,7 @@ namespace X13 {
             }
           }
           if(s.Length == 24 && s[4] == '-' && s[7] == '-' && s[10] == 'T' && s[13] == ':' && s[16] == ':' && s[19] == '.') {
-            var a = new JSC.Arguments();
-            a.Add(args[1]);
-            return JSC.JSValue.Marshal(new JSL.Date(a));
+            return JSC.JSValue.Marshal(new JSL.Date(new JSC.Arguments() { args[1] }));
           }
         }
       }

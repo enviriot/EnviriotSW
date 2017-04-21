@@ -60,6 +60,8 @@ namespace X13 {
           var layoutSerializer = new Xceed.Wpf.AvalonDock.Layout.Serialization.XmlLayoutSerializer(this.dmMain);
           layoutSerializer.LayoutSerializationCallback += LSF;
           layoutSerializer.Deserialize(new System.IO.StringReader(xlay.OuterXml));
+        } else {
+          App.Workspace.Open("file://local/", "log");
         }
       }
       catch(Exception ex) {
@@ -68,7 +70,6 @@ namespace X13 {
       if(App.Workspace.Clients.Count == 0) {
         var cl = new Client("localhost", EsBroker.EsSocket.portDefault, null, null);
         App.Workspace.Clients.Add(cl);
-        //cl.Connect();
       }
     }
     private void Window_Closed(object sender, EventArgs e) {
@@ -164,12 +165,8 @@ namespace X13 {
         App.Workspace.Open(cl.ToString() + "/");
       }
     }
-    private void miConnectionOpenLog(object sender, RoutedEventArgs e) {
-      var s = sender as FrameworkElement;
-      Client cl;
-      if(s != null && (cl = s.DataContext as Client) != null) {
-        App.Workspace.Open(cl.ToString()+"/", "log");
-      }
+    private void miOpenLog(object sender, RoutedEventArgs e) {
+      App.Workspace.Open("file://local/", "log");
     }
     private void miImport_Click(object sender, RoutedEventArgs e) {
       Client cl;
