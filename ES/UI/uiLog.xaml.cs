@@ -16,9 +16,6 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 
 namespace X13.UI {
-  /// <summary>
-  /// Interaction logic for uiLog.xaml
-  /// </summary>
   public partial class uiLog : BaseWindow {
     private ObservableCollection<LogEntry> LogCollection;
 
@@ -50,7 +47,7 @@ namespace X13.UI {
       Dispatcher.BeginInvoke(new Action<LogEntry>((le) => {
         int i, len = LogCollection.Count - 1;
         for(i = len; i >= 0; i--) {
-          if(LogCollection[i].dt < le.dt) {
+          if(LogCollection[i].dt <= le.dt) {
             break;
           }
         }
@@ -84,6 +81,10 @@ namespace X13.UI {
       } else {
         (lbLog.ItemsSource as System.ComponentModel.ICollectionView).Filter = (o) => (o as LogEntry).ll != LogLevel.Debug;
       }
+    }
+
+    private void buClearLog_Click(object sender, RoutedEventArgs e) {
+      LogCollection.Clear();
     }
   }
 }
