@@ -39,7 +39,7 @@ namespace X13.Periphery {
       return Serialize(val, dType);
     }
     private static byte[] Serialize(JSC.JSValue val, DType dType) {
-      switch(dType) {
+      switch(dType & DType.TypeMask) {
       case DType.Boolean:
         return ((bool)val) ? _baTrue : _baFalse;
       case DType.Integer: {
@@ -391,7 +391,7 @@ namespace X13.Periphery {
             ResetTimer();
           } else if(tmp.qualityOfService == QoS.AtLeastOnce) {
             SyncMsgId(tmp.MessageId);
-            Send(new MsPubAck(tmp.TopicId, tmp.MessageId, (ti != null || tmp.TopicId == RTC_EXCH) ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
+            Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
           } else if(tmp.qualityOfService == QoS.ExactlyOnce) {
             SyncMsgId(tmp.MessageId);
             // QoS2 not supported, use QoS1
@@ -399,10 +399,15 @@ namespace X13.Periphery {
           } else {
             throw new NotSupportedException("QoS -1 not supported " + owner.path);
           }
-          if(tmp.topicIdType == TopicIdType.PreDefined && ((tmp.TopicId >= LOG_D_ID && tmp.TopicId <= LOG_E_ID) || tmp.TopicId == RTC_EXCH)) {
-            string str = string.Format("{0} msgId={2:X4}  msg={1}", owner.name, tmp.Data == null ? "null" : (BitConverter.ToString(tmp.Data) + "[" + Encoding.ASCII.GetString(tmp.Data.Select(z => (z < 0x20 || z > 0x7E) ? (byte)'.' : z).ToArray()) + "]"), tmp.MessageId);
-            switch(tmp.TopicId) {
-            case RTC_EXCH:
+          if(ti != null) {
+            switch(ti.dType & ~DType.TypeMask) {
+            case DType.None:
+              if(!tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId) {  // else arready recieved
+                SetValue(ti, tmp.Data, tmp.Retained);
+              }
+              _lastInPub = tmp;
+              break;
+            case DType.RTC:
               if(tmp.Data != null && tmp.Data.Length == 6) {
                 try {
                   _last_RTC = new DateTime((DateTime.Now.Year / 100) * 100 + BCD2int(tmp.Data[5]), BCD2int(tmp.Data[4] & 0x1F), BCD2int(tmp.Data[3] & 0x3F)
@@ -417,25 +422,31 @@ namespace X13.Periphery {
                 _has_RTC = true;
               }
               break;
-            case LOG_D_ID:
-              Log.Debug("{0}", str);
+            case DType.LOG: {
+                string str = string.Format("{0} msgId={2:X4}  msg={1}", owner.name, tmp.Data == null ? "null" : (BitConverter.ToString(tmp.Data) + "[" + Encoding.ASCII.GetString(tmp.Data.Select(z => (z < 0x20 || z > 0x7E) ? (byte)'.' : z).ToArray()) + "]"), tmp.MessageId);
+                switch(tmp.TopicId) {
+                case LOG_D_ID:
+                  Log.Debug("{0}", str);
+                  break;
+                case LOG_I_ID:
+                  Log.Info("{0}", str);
+                  break;
+                case LOG_W_ID:
+                  Log.Warning("{0}", str);
+                  break;
+                case LOG_E_ID:
+                  Log.Error("{0}", str);
+                  break;
+                }
+              }
               break;
-            case LOG_I_ID:
-              Log.Info("{0}", str);
-              break;
-            case LOG_W_ID:
-              Log.Warning("{0}", str);
-              break;
-            case LOG_E_ID:
-              Log.Error("{0}", str);
+            case DType.TWI: {
+              if(ti.twi != null) {
+                ti.twi.Recv(tmp.Data);
+              }
+              }
               break;
             }
-          } else if(ti != null) {
-            if(tmp.Dup && _lastInPub != null && tmp.MessageId == _lastInPub.MessageId) {  // arready recieved
-            } else {
-              SetValue(ti, tmp.Data, tmp.Retained);
-            }
-            _lastInPub = tmp;
           }
         }
         break;
@@ -700,6 +711,9 @@ namespace X13.Periphery {
           }
           _topics.Add(rez);
         }
+        if((rez.dType & ~DType.TypeMask) == DType.TWI && rez.tag.StartsWith("Ta")) {
+          rez.twi = new TWI(rez.topic, rez.PublishWithPayload);
+        }
         //UpdateInMute();
       }
       if(!rez.registred) {
@@ -773,6 +787,9 @@ namespace X13.Periphery {
             cur = owner.Get(tag, true, owner);
           }
           cur.SetField("MQTT-SN.tag", tag, owner);
+          if(tag.StartsWith("Ta")) {
+            cur.SetField("type", "TWI", owner);
+          }
         }
       }
       ti = GetTopicInfo(cur, sendRegister, tag);
@@ -797,7 +814,7 @@ namespace X13.Periphery {
     }
 
     private void PublishTopic(Perform p, SubRec sb) {
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.prim == owner && p.art!=Perform.Art.subscribe) || p.src == owner) {
+      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.prim == owner && p.art != Perform.Art.subscribe) || p.src == owner) {
         return;
       }
       if(p.art == Perform.Art.create) {
@@ -814,14 +831,16 @@ namespace X13.Periphery {
       if(p.art == Perform.Art.changedField && ti != null) {
         UpdateConverters(ti);
       }
-      if(ti == null && (p.art == Perform.Art.changedState || p.art==Perform.Art.subscribe)) {
+      if(ti == null && (p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe)) {
         ti = GetTopicInfo(p.src, true);
       }
       if(ti == null || ti.TopicId >= 0xFFC0 || !ti.registred) {
         return;
       }
       if((p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe)) {
-        Send(new MsPublish(ti));
+        if((ti.dType & ~DType.TypeMask) == DType.None) {
+          Send(new MsPublish(ti));
+        }
       } else if(p.art == Perform.Art.remove) {          // Remove by device
         if(ti.it == TopicIdType.Normal) {
           Send(new MsRegister(0xFFFF, ti.tag));
@@ -1130,12 +1149,27 @@ namespace X13.Periphery {
       public DType dType;
       public Func<JSC.JSValue, JSC.JSValue> convIn;
       public Func<JSC.JSValue, JSC.JSValue> convOut;
+      public TWI twi;
+      public void PublishWithPayload(byte[] payload) {
+        if(owner.state == State.Disconnected || owner.state == State.Lost) {
+          return;
+        }
+        if(owner._pl.verbose) {
+          Log.Debug("{0}.Snd {1}", this.topic.path, BitConverter.ToString(payload));
+        }
+        owner.Send(new MsPublish(this) { Data = payload });
+      }
     }
     internal enum DType {
-      Boolean,
-      Integer,
-      String,
-      ByteArray,
+      None = 0,
+      Boolean = 1,
+      Integer = 2,
+      String = 3,
+      ByteArray = 4,
+      TypeMask = 0xFF,
+      RTC = 0x100,
+      LOG = 0x200,
+      TWI = 0x300,
     }
     private static Tuple<string, DType>[] _NTTable = new Tuple<string, DType>[]{ 
       new Tuple<string, DType>("In", DType.Boolean),
@@ -1167,13 +1201,13 @@ namespace X13.Periphery {
       new Tuple<string, DType>("Ma", DType.ByteArray),  // Merkers
 
       //new Tuple<string, DType>("pa", typeof(DevicePLC)),    // Program
-      //new Tuple<string, DType>("sa", typeof(SmartTwi)),    // Smart TWI
       new Tuple<string, DType>("pa", DType.ByteArray),    // Program
-      new Tuple<string, DType>("Ta", DType.ByteArray),    // Twi
+      new Tuple<string, DType>("Ta", DType.ByteArray | DType.TWI),
 
     };
     private static Tuple<ushort, string, DType>[] PredefinedTopics = new Tuple<ushort, string, DType>[]{
       new Tuple<ushort, string, DType>(0xFF01, ".MQTT-SN.SleepTime",      DType.Integer),
+      new Tuple<ushort, string, DType>(RTC_EXCH, ".RTC_EXCH",             DType.ByteArray | DType.RTC),  //0xFF07
       new Tuple<ushort, string, DType>(0xFF08, ".MQTT-SN.ADCintegrate",   DType.Integer),
       new Tuple<ushort, string, DType>(0xFF09, ".MQTT-SN.SupressInputs",  DType.ByteArray),
 
@@ -1195,12 +1229,12 @@ namespace X13.Periphery {
       new Tuple<ushort, string, DType>(0xFFC2, ".MQTT-SN.phy2_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC3, ".MQTT-SN.phy3_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC4, ".MQTT-SN.phy4_addr",      DType.ByteArray),
+      new Tuple<ushort, string, DType>(0xFFC8, "_RSSI",                   DType.Integer),
 
-      //  {".cfg/_a_RTC",        RTC_EXCH},  // 0xFF07
-      //  {"_logD",              LOG_D_ID},
-      //  {"_logI",              LOG_I_ID},
-      //  {"_logW",              LOG_W_ID},
-      //  {"_logE",              LOG_E_ID},
+      new Tuple<ushort, string, DType>(LOG_D_ID, ".Log.Debug",            DType.ByteArray | DType.LOG),   // 0xFFE0
+      new Tuple<ushort, string, DType>(LOG_I_ID, ".Log.Info",             DType.ByteArray | DType.LOG),   // 0xFFE1
+      new Tuple<ushort, string, DType>(LOG_W_ID, ".Log.Warning",          DType.ByteArray | DType.LOG),   // 0xFFE2
+      new Tuple<ushort, string, DType>(LOG_E_ID, ".Log.Error",            DType.ByteArray | DType.LOG),   // 0xFFE3
     };
   }
 }

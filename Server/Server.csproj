@@ -73,6 +73,7 @@
     <Compile Include="EsBroker\EsBrokerPl.cs" />
     <Compile Include="EsBroker\EsSocket.cs" />
     <Compile Include="IPlugModul.cs" />
+    <Compile Include="JsExtLib.cs" />
     <Compile Include="JsLib.cs" />
     <Compile Include="Repository\Perform.cs" />
     <Compile Include="Repository\Repo.cs" />
@@ -86,6 +87,7 @@
     </Compile>
     <Compile Include="Log.cs" />
     <Compile Include="Programm.cs" />
+    <Compile Include="Repository\TopicJS.cs" />
     <Compile Include="Svc\ProjectInstaller.cs">
       <SubType>Component</SubType>
     </Compile>

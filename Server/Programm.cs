@@ -146,6 +146,7 @@ namespace X13 {
       int i;
       do {
         _tick.WaitOne();
+        JsExtLib.Tick();
         for(i = 0; i < _modules.Length; i++) {
           try {
             _modules[i].Tick();
