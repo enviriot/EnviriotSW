@@ -18,6 +18,7 @@ namespace X13.Periphery {
     private const ushort LOG_W_ID = 0xFFE2;
     private const ushort LOG_E_ID = 0xFFE3;
     private static Random _rand;
+    private static Func<string, JSC.JSValue> _createConv;
     private static byte[] _baEmty = new byte[0];
     private static byte[] _baFalse = new byte[] { 0 };
     private static byte[] _baTrue = new byte[] { 1 };
@@ -28,7 +29,7 @@ namespace X13.Periphery {
       var dType = ti.dType;
       if(ti.convOut != null) {
         try {
-          val = ti.convOut(val);
+          val = ti.convOut.Call(ti.owner._self, new JSC.Arguments{ ti.topic.name, val } );
         }
         catch(Exception ex) {
           if(ti.owner._pl.verbose) {
@@ -70,12 +71,14 @@ namespace X13.Periphery {
       }
       return _baEmty;
     }
-    private static JSC.Context _jsContext;
-
+    private static JSL.Function CreateConv(string body) {
+      return _createConv(body) as JSL.Function;
+    }
     static MsDevice() {
       _rand = new Random((int)DateTime.Now.Ticks);
-      _jsContext = new JSC.Context(true);
+      _createConv = (JsExtLib.Context.Eval("Function('src', 'return Function(\"name\", \"value\", src);')") as JSL.Function).MakeDelegate(typeof(Func<string, JSC.JSValue>)) as Func<string, JSC.JSValue>;
     }
+
 
     private string _oldName;
     private List<SubRec> _subsscriptions;
@@ -95,6 +98,7 @@ namespace X13.Periphery {
     private MsPublish _lastInPub;
     private bool _has_RTC;
     private DateTime _last_RTC;
+    private JSC.JSObject _self;
 
     public readonly Topic owner;
     public IMsGate _gate;
@@ -103,14 +107,34 @@ namespace X13.Periphery {
     public MsDevice(MQTT_SNPl pl, Topic owner) {
       this.owner = owner;
       this._oldName = owner.name;
-
       this._pl = pl;
+
       _subsscriptions = new List<SubRec>(4);
       _sendQueue = new Queue<MsMessage>();
       _topics = new List<TopicInfo>(16);
       _duration = 3000;
       _messageIdGen = 0;
       _srOwner = this.owner.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Field, "MQTT-SN", OwnerChanged);
+
+      _self = JSC.JSObject.CreateObject();
+      _self["GetState"] = JSC.JSValue.Marshal(new Func<string, JSC.JSValue>(GetState));
+      _self["GetProperty"] = JSC.JSValue.Marshal(new Func<string, string, JSC.JSValue>(GetProperty));
+    }
+
+    private JSC.JSValue GetState(string path) {
+      Topic t;
+      if(owner.Exist(path, out t)) {
+        return t.GetState();
+      }
+      return JSC.JSValue.NotExists;
+    }
+    private JSC.JSValue GetProperty(string path, string field) {
+      Topic t;
+      if(owner.Exist(path, out t)) {
+        return t.GetField(field);
+      }
+      return JSC.JSValue.NotExists;
+
     }
 
     private void OwnerChanged(Perform p, SubRec sr) {
@@ -731,12 +755,7 @@ namespace X13.Periphery {
       string sTmp;
       if((msTmp = ti.topic.GetField("MQTT-SN.convIn")).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(sTmp = msTmp.Value as string)) {
         try {
-          var f = _jsContext.Eval("Function('value', '" + sTmp + "')") as JSL.Function;
-          if(f != null) {
-            ti.convIn = f.MakeDelegate(typeof(Func<JSC.JSValue, JSC.JSValue>)) as Func<JSC.JSValue, JSC.JSValue>;
-          } else {
-            ti.convIn = null;
-          }
+          ti.convIn = CreateConv(sTmp);
         }
         catch(Exception ex) {
           ti.convIn = null;
@@ -747,12 +766,7 @@ namespace X13.Periphery {
       }
       if((msTmp = ti.topic.GetField("MQTT-SN.convOut")).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(sTmp = msTmp.Value as string)) {
         try {
-          var f = _jsContext.Eval("Function('value', '" + sTmp + "')") as JSL.Function;
-          if(f != null) {
-            ti.convOut = f.MakeDelegate(typeof(Func<JSC.JSValue, JSC.JSValue>)) as Func<JSC.JSValue, JSC.JSValue>;
-          } else {
-            ti.convOut = null;
-          }
+          ti.convOut = CreateConv(sTmp);
         }
         catch(Exception ex) {
           ti.convOut = null;
@@ -952,7 +966,7 @@ namespace X13.Periphery {
           }
           if(ti.convIn != null) {
             try {
-              val = ti.convIn(val);
+              val = ti.convIn.Call(this._self, new JSC.Arguments { ti.topic.name, val} );
             }
             catch(Exception ex) {
               if(_pl.verbose) {
@@ -1147,8 +1161,8 @@ namespace X13.Periphery {
       public bool registred;
       public string tag;
       public DType dType;
-      public Func<JSC.JSValue, JSC.JSValue> convIn;
-      public Func<JSC.JSValue, JSC.JSValue> convOut;
+      public JSL.Function convIn;
+      public JSL.Function convOut;
       public TWI twi;
       public void PublishWithPayload(byte[] payload) {
         if(owner.state == State.Disconnected || owner.state == State.Lost) {

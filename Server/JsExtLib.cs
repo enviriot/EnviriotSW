@@ -11,11 +11,9 @@ using System.Text;
 namespace X13 {
   public static class JsExtLib {
     public static readonly JSC.Context Context;
-    public static readonly Func<string, JSC.JSValue> CreateFunc;
 
     static JsExtLib() {
       Context = new JSC.Context(true);
-      CreateFunc = (Context.Eval("Function('src', 'return Function(\"value\", src);')") as JSL.Function).MakeDelegate(typeof(Func<string, JSC.JSValue>)) as Func<string, JSC.JSValue>;
       Context.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue, int>(SetTimeout)));
     }
 

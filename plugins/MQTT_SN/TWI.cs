@@ -11,27 +11,6 @@ using System.Threading;
 
 namespace X13.Periphery {
   internal class TWI {
-    private static JSC.Context _context;
-
-    static TWI() {
-      _context = new JSC.Context();
-      _context.DefineVariable("Delay").Assign(JSC.JSValue.Wrap(new Func<int, Task>(Delay)));
-    }
-
-    private static Task Delay(int delayTime) {
-      TaskCompletionSource<object> tcs = new TaskCompletionSource<object>();
-
-      if(delayTime < 0)
-        throw new ArgumentOutOfRangeException("Delay time cannot be under 0");
-
-      System.Threading.Timer timer = null;
-      timer = new System.Threading.Timer(p => {
-        timer.Dispose(); //stop the timer
-        tcs.TrySetResult(null); //timer expired, attempt to move task to the completed state.
-      }, null, delayTime, System.Threading.Timeout.Infinite);
-      return tcs.Task;
-    }
-
     private Topic _owner;
     private Action<byte[]> _pub;
 

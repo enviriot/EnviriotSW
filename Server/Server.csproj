@@ -87,7 +87,6 @@
     </Compile>
     <Compile Include="Log.cs" />
     <Compile Include="Programm.cs" />
-    <Compile Include="Repository\TopicJS.cs" />
     <Compile Include="Svc\ProjectInstaller.cs">
       <SubType>Component</SubType>
     </Compile>
