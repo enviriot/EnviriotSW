@@ -53,7 +53,9 @@ namespace X13.UI {
         }
         if(i == len) {
           LogCollection.Add(le);
-          lbLog.ScrollIntoView(le);
+          if(lbLog.SelectedIndex < 0) {
+            lbLog.ScrollIntoView(le);
+          }
         } else {
           LogCollection.Insert(i + 1, le);
         }

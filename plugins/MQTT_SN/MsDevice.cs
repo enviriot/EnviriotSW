@@ -393,6 +393,9 @@ namespace X13.Periphery {
             ti.registred = true;
             if(ti.it != TopicIdType.PreDefined) {
               Send(new MsPublish(ti));
+              if(ti.topic.GetField("MQTT-SN.tag").ValueType != NiL.JS.Core.JSValueType.String) {
+                ti.topic.SetField("MQTT-SN.tag", ti.tag, owner);
+              }
             }
           } else {
             Log.Warning("{0} registred failed: {1}", ti.topic.path, tmp.RetCode.ToString());
@@ -710,6 +713,8 @@ namespace X13.Periphery {
             } else {
               return null;
             }
+          } else if((tag = siv.Value as string) == "---") {
+            return null;
           }
         }
         rez = new TopicInfo();

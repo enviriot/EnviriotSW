@@ -230,9 +230,9 @@ namespace X13.UI {
     }
 
     #region ContextMenu
-    public override List<Control> MenuItems(System.Windows.FrameworkElement src) {
-      var l = new List<Control>();
-      JSC.JSValue v1, v2;
+    public override ObservableCollection<Control> MenuItems(System.Windows.FrameworkElement src) {
+      var l = new ObservableCollection<Control>();
+      JSC.JSValue v1;
       MenuItem mi;
       if(!IsGroupHeader) {
         mi = new MenuItem() { Header = "Open in new tab" };
@@ -240,16 +240,34 @@ namespace X13.UI {
         l.Add(mi);
         l.Add(new Separator());
       }
-      MenuItem ma = new MenuItem() { Header = "Add" };
       KeyValuePair<string, JSC.JSValue>[] _acts;
       if(_manifest != null && (v1 = _manifest["Children"]).ValueType == JSC.JSValueType.Object) {
         _acts = v1.Where(z => z.Value != null && z.Value.ValueType == JSC.JSValueType.Object && z.Value["default"].Defined).ToArray();
-      } else if(_owner.Connection.TypeManifest != null) {
-        _acts = _owner.Connection.TypeManifest.parent.children.Where(z => z.value.ValueType == JSC.JSValueType.Object && z.value.Value != null && z.value["default"].Defined)
-          .Select(z => new KeyValuePair<string, JSC.JSValue>(z.name, z.value)).ToArray();
+        FillContextMenu(l, _acts);
+      } else if(_manifest != null && (v1 = _manifest["Children"]).ValueType == JSC.JSValueType.String) {
+        _owner.GetAsync(v1.Value as string).ContinueWith(tt=>FillContextMenuFromChildren(l, tt), TaskScheduler.FromCurrentSynchronizationContext());
       } else {
-        _acts = null;
+        _owner.GetAsync("/$YS/TYPES/Core").ContinueWith(tt => FillContextMenuFromChildren(l, tt), TaskScheduler.FromCurrentSynchronizationContext());
       }
+      return l;
+    }
+    private async void FillContextMenuFromChildren(ObservableCollection<Control> l, Task<DTopic> tt) {
+      List<KeyValuePair<string, JSC.JSValue>> acts=new List<KeyValuePair<string,JSC.JSValue>>();
+      if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
+        foreach(var t in tt.Result.children) {
+          var z = await t.GetAsync(null);
+          if(z.value.ValueType == JSC.JSValueType.Object && z.value.Value != null && z.value["default"].Defined) {
+            acts.Add(new KeyValuePair<string, JSC.JSValue>(z.name, z.value));
+          }
+        }
+      }
+      FillContextMenu(l, acts.ToArray());
+    }
+    private void FillContextMenu(ObservableCollection<Control> l, KeyValuePair<string, JSC.JSValue>[] _acts) {
+      JSC.JSValue v2;
+      MenuItem mi;
+      MenuItem ma = new MenuItem() { Header = "Add" };
+
       if(_acts != null && _acts.Length > 0) {
         List<RcUse> resource = new List<RcUse>();
         string rName;
@@ -317,7 +335,9 @@ namespace X13.UI {
       }
       if(ma.HasItems) {
         if(ma.Items.Count < 5) {
-          l.AddRange(ma.Items.SourceCollection.OfType<System.Windows.Controls.Control>());
+          foreach(var sm in ma.Items.OfType<System.Windows.Controls.Control>()) {
+            l.Add(sm);
+          }
         } else {
           l.Add(ma);
         }
@@ -345,7 +365,6 @@ namespace X13.UI {
         mi.Click += miRename_Click;
         l.Add(mi);
       }
-      return l;
     }
 
     private void AddSubMenu(MenuItem ma, string prefix, MenuItem mi) {
@@ -368,7 +387,7 @@ namespace X13.UI {
       if(mi == null) {
         return;
       }
-      if(!IsExpanded) {
+      if(!IsExpanded && HasChildren) {
         IsExpanded = true;
         base.PropertyChangedReise("IsExpanded");
       }

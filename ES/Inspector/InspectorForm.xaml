@@ -48,14 +48,14 @@
                     <ColumnDefinition Width="{Binding levelPadding}"/>
                     <ColumnDefinition />
                   </Grid.ColumnDefinitions>
-                  <Border Grid.Column="1" Margin="24,0,0,0" BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{DynamicResource SplitBrush}" Background="{TemplateBinding Background}" />
+                  <Border Grid.Column="1" Margin="24,0,0,0" BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{StaticResource SplitBrush}" Background="{TemplateBinding Background}" />
                 </Grid>
                 <GridViewRowPresenter x:Name="gridrowPresenter" Content="{TemplateBinding Property=ContentControl.Content}"/>
               </Grid>
               <ControlTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsGroupHeader}" Value="True">
                   <Setter Property="BorderThickness" Value="2, 5, 0, 0" />
-                  <Setter Property="BorderBrush" Value="{DynamicResource SplitBrush}" />
+                  <Setter Property="BorderBrush" Value="{StaticResource SplitBrush}" />
                   <Setter TargetName="gridrowPresenter" Property="Margin" Value="0,5,0,0" />
                 </DataTrigger>
                 <Trigger Property="IsSelected" Value="True">

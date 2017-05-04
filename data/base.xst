@@ -17,11 +17,12 @@
       </i>
       <i n='Enum' m='{"attr":1}'>
         <i n='MsStatus' s='["Offline","Online","Sleep"]'  m='{"attr":7}' />
+        <i n='TwiStatus' s='["Offline","Online"]'  m='{"attr":7}' />
       </i>
       <i n='MQTT-SN'>
       </i>
-      <i n='TWI' s='{"Children":{}}' m='{"attr":5}' ver="0.4.1704.25001">
-        
+      <i n='TWI' s='{"Children":"/$YS/TYPES/TWI"}' m='{"attr":5}' ver='0.4.1705.4002'>
+        <i n='LM75' s='{"Children":{"T":{"type":"Double"}},"default":0,"editor":"Enum","enum":"TwiStatus","manifest":{"MQTT-SN":{"tag":"---"},"type":"TWI/LM75","TWI":{"addr":1}}}' m='{"attr":5}' ver='0.4.1705.4001' />
       </i>
     </i>
   </i>

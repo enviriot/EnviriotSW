@@ -1,6 +1,7 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -216,8 +217,8 @@ namespace X13.UI {
     #endregion InBase Members
 
     #region ContextMenu
-    public override List<Control> MenuItems(FrameworkElement src) {
-      var l = new List<Control>();
+    public override ObservableCollection<Control> MenuItems(FrameworkElement src) {
+      var l = new ObservableCollection<Control>();
       JSC.JSValue v1, v2;
       MenuItem mi;
       if(!base.IsReadonly && _value.ValueType == JSC.JSValueType.Object) {

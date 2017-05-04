@@ -65,7 +65,7 @@ namespace X13.UI {
     public bool IsRequired { get; private set; }
 
     public abstract JSC.JSValue value { get; set; }
-    public abstract List<Control> MenuItems(FrameworkElement src);
+    public abstract ObservableCollection<Control> MenuItems(FrameworkElement src);
     public abstract void FinishNameEdit(string name);
     public void GotFocus(object sender, RoutedEventArgs e) {
       DependencyObject cur;

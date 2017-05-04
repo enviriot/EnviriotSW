@@ -203,8 +203,8 @@ namespace X13.UI {
     #endregion InBase Members
 
     #region ContextMenu
-    public override List<Control> MenuItems(System.Windows.FrameworkElement src) {
-      var l = new List<Control>();
+    public override ObservableCollection<Control> MenuItems(System.Windows.FrameworkElement src) {
+      var l = new ObservableCollection<Control>();
       JSC.JSValue v1, v2;
       MenuItem mi;
       if(!base.IsReadonly && _value.ValueType == JSC.JSValueType.Object) {
