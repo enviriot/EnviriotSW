@@ -47,7 +47,7 @@ namespace X13 {
 
     internal static void Tick() {
       var now = DateTime.Now;
-      while(_timer != null && _timer.to > now) {
+      while(_timer != null && _timer.to <= now) {
         TimerContainer cur = _timer;
         try {
           cur.func.Call(cur.func.Context.ThisBind, new JSC.Arguments());

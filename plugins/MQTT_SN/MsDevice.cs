@@ -118,7 +118,7 @@ namespace X13.Periphery {
 
       _self = JSC.JSObject.CreateObject();
       _self["GetState"] = JSC.JSValue.Marshal(new Func<string, JSC.JSValue>(GetState));
-      _self["GetProperty"] = JSC.JSValue.Marshal(new Func<string, string, JSC.JSValue>(GetProperty));
+      _self["GetField"] = JSC.JSValue.Marshal(new Func<string, string, JSC.JSValue>(GetField));
     }
 
     private JSC.JSValue GetState(string path) {
@@ -128,7 +128,7 @@ namespace X13.Periphery {
       }
       return JSC.JSValue.NotExists;
     }
-    private JSC.JSValue GetProperty(string path, string field) {
+    private JSC.JSValue GetField(string path, string field) {
       Topic t;
       if(owner.Exist(path, out t)) {
         return t.GetField(field);

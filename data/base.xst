@@ -21,8 +21,9 @@
       </i>
       <i n='MQTT-SN'>
       </i>
-      <i n='TWI' s='{"Children":"/$YS/TYPES/TWI"}' m='{"attr":5}' ver='0.4.1705.4002'>
-        <i n='LM75' s='{"Children":{"T":{"type":"Double"}},"default":0,"editor":"Enum","enum":"TwiStatus","manifest":{"MQTT-SN":{"tag":"---"},"type":"TWI/LM75","TWI":{"addr":1}},"mi":{"TWI":{"attr":1,"mi":{"addr":{"attr":1,"default":1,"type":"Integer"}}}},"TWI":{"src":"this.Tick=function(){var addr=this.GetField(null,\"TWI.addr\");this.TWI.Req([0x48|addr,0x03,0x01,0x02,0]).then(function(r){this.SetState(null,1);this.SetState(\"T\",(r[4] + r[5]/256);setTimeout(this.Tick,60000);},function(error){this.SetState(null,0);setTimeout(this.Tick, 90000);});}setTimeout(this.Tick,1000);"}}' m='{"attr":5}' ver='0.4.1705.4003' />
+      <i n='TWI' s='{"Children":"/$YS/TYPES/TWI"}' m='{"attr":5}'>
+        <i n='BH1750' s='{"Children":{"I":{"type":"Double"}},"default":0,"editor":"Enum","enum":"TwiStatus","manifest":{"MQTT-SN":{"tag":"---"},"type":"TWI/BH1750","TWI":{"addr":0}},"mi":{"TWI":{"attr":1,"mi":{"addr":{"attr":1,"default":1,"type":"Integer"}}}},"TWI":{"src":"this.Tick=function(){var addr=this.GetField(null,\"TWI.addr\")==0?0x23:0x5C;this.TwiReq([addr,0x01,0x01,0x00,0x23]);setTimeout(this.Read,50);};this.Read=function(){var addr=this.GetField(null,\"TWI.addr\")==0?0x23:0x5C;this.TwiReq([addr,0x02,0x00,0x02]).then(r=>{this.SetState(null,1);this.SetState(\"I\",Math.round((r[4]*256+r[5])/1.2));setTimeout(this.Tick,60000);},e=>{this.SetState(null,0);setTimeout(this.Tick, 60000*(1+Math.random()));});};setTimeout(this.Tick,500*(1+Math.random()));"}}' m='{"attr":5}' ver='0.4.1705.5002' />
+        <i n='LM75' s='{"Children":{"T":{"type":"Double"}},"default":0,"editor":"Enum","enum":"TwiStatus","manifest":{"MQTT-SN":{"tag":"---"},"type":"TWI/LM75","TWI":{"addr":2}},"mi":{"TWI":{"attr":1,"mi":{"addr":{"attr":1,"type":"Integer"}}}},"TWI":{"src":"this.Tick=function(){var addr=this.GetField(null,\"TWI.addr\");this.TwiReq([0x48|addr,0x03,0x01,0x02,0]).then(function(r){this.SetState(null,1);this.SetState(\"T\",(r[4]+r[5]/256));setTimeout(this.Tick,60000);},function(error){this.SetState(null,0);setTimeout(this.Tick, 60000*(1+Math.random()));});};setTimeout(this.Tick,500*(1+Math.random()));"}}' m='{"attr":5}' ver='0.4.1705.5004' />
       </i>
     </i>
   </i>
