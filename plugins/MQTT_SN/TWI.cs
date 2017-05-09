@@ -45,14 +45,14 @@ namespace X13.Periphery {
             if(buf[3] == req.Item1[3]) {
               req.Item2.SetResult(new JSL.Array(buf));
             } else {
-              req.Item2.SetException(new Exception("5"));  // wrong response length
+              req.Item2.SetException(new JSC.JSException(new JSL.Number(5)));  // wrong response length
             }
           } else if((buf[1] & 0x20) != 0) {
-            req.Item2.SetException(new Exception("2"));  // Timeout
+            req.Item2.SetException(new JSC.JSException(new JSL.Number(2)));  // Timeout
           } else if((buf[1] & 0x40) != 0) {
-            req.Item2.SetException(new Exception("3"));  // Slave Addr NACK received - Device not present
+            req.Item2.SetException(new JSC.JSException(new JSL.Number(3)));  // Slave Addr NACK received - Device not present
           } else {
-            req.Item2.SetException(new Exception("4"));  // Internal Error
+            req.Item2.SetException(new JSC.JSException(new JSL.Number(4)));  // Internal Error
           }
           _flag = 1;
           SendReq();
@@ -84,9 +84,9 @@ namespace X13.Periphery {
         d.Dispose();
       }
       JSC.JSValue jType;
-      if((p.art == Perform.Art.create || p.art == Perform.Art.changedField || p.art==Perform.Art.subscribe) && (jType = p.src.GetField("type")).ValueType == JSC.JSValueType.String 
+      if((p.art == Perform.Art.create || p.art == Perform.Art.changedField || p.art == Perform.Art.subscribe) && (jType = p.src.GetField("type")).ValueType == JSC.JSValueType.String
         && jType.Value != null && (jType.Value as string).StartsWith("TWI")) {
-          _devs.Add(new TwiDevice(p.src, this));
+        _devs.Add(new TwiDevice(p.src, this));
       }
     }
     private Task<JSC.JSValue> TwiReq(int[] arr) {
@@ -99,7 +99,7 @@ namespace X13.Periphery {
       arr[2] = arr.Length - 4;
       var ba = arr.Select(z => (byte)z).ToArray();
       var tsc = new TaskCompletionSource<JSC.JSValue>();
-      _reqs.Enqueue(new Tuple<byte[],TaskCompletionSource<JSC.JSValue>>(ba, tsc));
+      _reqs.Enqueue(new Tuple<byte[], TaskCompletionSource<JSC.JSValue>>(ba, tsc));
       SendReq();
       return tsc.Task;
     }
@@ -119,15 +119,12 @@ namespace X13.Periphery {
         this.owner = owner;
         this._twi = twi;
         JSC.JSValue jSrc;
-        jSrc = owner.GetField("TWI.src");
-        if(jSrc.ValueType != JSC.JSValueType.String) {
-          var jType = owner.GetField("type");
-          Topic tt;
-          if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out tt)
-            && (jSrc = JsLib.GetField(tt.GetState(), "TWI.src")).ValueType == JSC.JSValueType.String) {
-          } else {
-            jSrc = null;
-          }
+        var jType = owner.GetField("type");
+        Topic tt;
+        if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out tt)
+          && (jSrc = JsLib.GetField(tt.GetState(), "src")).ValueType == JSC.JSValueType.String) {
+        } else {
+          jSrc = null;
         }
         if(jSrc != null) {
           try {
