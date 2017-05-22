@@ -195,6 +195,22 @@ namespace X13 {
 
 
     }
+    private void miExport_Click(object sender, RoutedEventArgs e) {
+      DTopic t;
+      if(App.Workspace.ActiveDocument == null ||  (t = App.Workspace.ActiveDocument.data) == null) {
+        return;
+      }
+      var dlg = new Microsoft.Win32.SaveFileDialog();
+      dlg.Title = "Export "+t.fullPath+" to";
+      dlg.FileName = t.parent == null ? "root" : t.name;
+      dlg.DefaultExt = ".xst"; // Default file extension
+      dlg.Filter = "Exported storage (.xst)|*.xst"; // Filter files by extension
+
+      if(dlg.ShowDialog() != true || string.IsNullOrEmpty(dlg.FileName)) {
+        return;
+      }
+      t.Export(dlg.FileName);
+    }
 
     private void dmMain_DocumentClosed(object sender, Xceed.Wpf.AvalonDock.DocumentClosedEventArgs e) {
       var doc = e.Document.Content as BaseWindow;
@@ -202,6 +218,5 @@ namespace X13 {
         App.Workspace.Close(doc);
       }
     }
-
   }
 }

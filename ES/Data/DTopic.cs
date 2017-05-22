@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Collections.ObjectModel;
+using System.Xml.Linq;
 
 namespace X13.Data {
   public class DTopic {
@@ -78,6 +79,10 @@ namespace X13.Data {
     }
     public void Delete() {
       Connection.SendReq(12, null, this.path);
+    }
+
+    public void Export(string path) {
+      Task.Run(() => ExportI0(path));
     }
 
     public event Action<Art, DTopic> changed;
@@ -210,6 +215,56 @@ namespace X13.Data {
       }
       if(!_children.Any()) {
         _children = null;
+      }
+    }
+
+    private void ExportI0(string filename) {
+      XDocument doc = new XDocument(new XElement("xst", new XAttribute("path", this.path)));
+      doc.Declaration = new XDeclaration("1.0", "utf-8", "yes");
+      this.ExportI1(doc.Root, true);
+      using(System.Xml.XmlTextWriter writer = new System.Xml.XmlTextWriter(filename, Encoding.UTF8)) {
+        writer.Formatting = System.Xml.Formatting.Indented;
+        writer.QuoteChar = '\'';
+        doc.WriteTo(writer);
+        writer.Flush();
+      }
+
+    }
+    private void ExportI1(XElement x, bool isRoot = false) {
+      XElement xCur = isRoot?x:new XElement("i", new XAttribute("n", this.name));
+
+      var tmp = JsLib.GetField(this._manifest, "attr");
+      if(tmp.IsNumber && (((int)tmp) & 0x0C) != 0 && this._value.Exists) {
+          xCur.Add(new XAttribute("s", JSL.JSON.stringify(this._value, null, null)));
+      }
+      tmp = JsLib.GetField(this._manifest, "version");
+      string vs;
+      Version v;
+      if(tmp.ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(vs = tmp.Value as string) && vs.StartsWith("¤VR") && Version.TryParse(vs.Substring(3), out v)) {
+        tmp = JsLib.Clone(this._manifest);
+        tmp.DeleteProperty("version");
+        xCur.Add(new XAttribute("m", JSL.JSON.stringify(tmp, null, null)));
+        if(!isRoot) {
+          xCur.Add(new XAttribute("ver", v.ToString()));
+        }
+      } else {
+        xCur.Add(new XAttribute("m", JSL.JSON.stringify(this._manifest, null, null)));
+      }
+      if(isRoot) {
+        var now = DateTime.Now;
+        xCur.Add(new XAttribute("ver", (new Version(0, 4, (now.Year%100)*100 + now.Month, now.Day*1000 + (int)(now.TimeOfDay.TotalDays*1000)).ToString())));
+      } else {
+        x.Add(xCur);
+      }
+      if(this._children != null) {
+        var ch = this._children.ToArray();
+        for(int i = 0; i < ch.Length; i++) {
+          var tt = ch[i].GetAsync(null);
+          tt.Wait();
+          if(tt.IsCompleted && !tt.IsFaulted && tt.Result!=null) {
+            tt.Result.ExportI1(xCur);
+          }
+        }
       }
     }
 

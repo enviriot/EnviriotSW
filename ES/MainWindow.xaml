@@ -148,6 +148,8 @@
                 </MenuItem.ItemContainerStyle>
               </MenuItem>
               <MenuItem Name="miImport" Header="Import" Click="miImport_Click" />
+              <MenuItem Name="miExport" Header="Export" Click="miExport_Click" />
+              <Separator />
               <MenuItem Header="Open Log" Style="{x:Null}" Click="miOpenLog" />
             </ContextMenu>
           </Button.ContextMenu>

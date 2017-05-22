@@ -72,7 +72,7 @@ namespace X13 {
       var ps = path.Split(SPLITTER_OBJ, StringSplitOptions.RemoveEmptyEntries);
       JSC.JSValue p = obj, c=null;
       for(int i = 0; i < ps.Length; i++) {
-        if(obj.ValueType != JSC.JSValueType.Object || obj.Value == null) {
+        if(p.ValueType != JSC.JSValueType.Object || p.Value == null) {
           return JSC.JSValue.NotExists;
         }
         c = p.GetProperty(ps[i]);
