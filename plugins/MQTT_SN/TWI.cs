@@ -11,12 +11,6 @@ using System.Threading;
 
 namespace X13.Periphery {
   internal class TWI : IDisposable {
-    private static Func<string, JSC.JSValue> _createFunc;
-
-    static TWI() {
-      _createFunc = (JsExtLib.Context.Eval("Function('src', 'return Function(src);')") as JSL.Function).MakeDelegate(typeof(Func<string, JSC.JSValue>)) as Func<string, JSC.JSValue>;
-    }
-
     private Topic _owner;
     private Action<byte[]> _pub;
     private SubRec _deviceChangedsSR;
@@ -113,7 +107,8 @@ namespace X13.Periphery {
     private class TwiDevice : IDisposable {
       public readonly Topic owner;
       private TWI _twi;
-      private JSC.JSObject _self;
+      private JSC.Context _ctx;
+      private JSC.JSValue _self;
 
       public TwiDevice(Topic owner, TWI twi) {
         this.owner = owner;
@@ -128,14 +123,24 @@ namespace X13.Periphery {
         }
         if(jSrc != null) {
           try {
-            var f = _createFunc(jSrc.Value as string) as JSL.Function;
+            _ctx = new JSC.Context(JsExtLib.Context);
+            var f = _ctx.Eval(jSrc.Value as string) as JSL.Function;
             if(f != null) {
-              this._self = JSC.JSObject.CreateObject();
+              if(f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
+                this._self = JSC.JSObject.create(new JSC.Arguments { f.prototype });
+              } else {
+                this._self = JSC.JSObject.CreateObject();
+              }
               _self["GetState"] = JSC.JSValue.Marshal(new Func<string, JSC.JSValue>(GetState));
               _self["SetState"] = JSC.JSValue.Marshal(new Action<string, JSC.JSValue>(SetState));
               _self["GetField"] = JSC.JSValue.Marshal(new Func<string, string, JSC.JSValue>(GetField));
               _self["TwiReq"] = JSC.JSValue.Marshal(new Func<int[], Task<JSC.JSValue>>(_twi.TwiReq));
-              f.Call(_self, new JSC.Arguments());  // Call constructor
+
+              if(f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
+                _self = f.Construct(_self, new JSC.Arguments());
+              } else {
+                f.Call(_self, new JSC.Arguments());  // Call constructor
+              }
             }
           }
           catch(Exception ex) {
