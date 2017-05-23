@@ -16,17 +16,16 @@ namespace X13.EsBroker {
     private EsBrokerPl _basePl;
     private Topic _owner;
     private List<Tuple<SubRec, EsMessage>> _subscriptions;
-    private Action<Perform, SubRec> _subCBt, _subCBc;
+    private Action<Perform, SubRec> _subCB;
 
     public EsConnection(EsBrokerPl pl, TcpClient tcp)
       : base(tcp, null) { //
       base._callback = new Action<EsMessage>(RcvMsg);
       this._basePl = pl;
-      this._subCBt = new Action<Perform, SubRec>(TopicChanged);
-      this._subCBc = new Action<Perform, SubRec>(ChildChanged);
+      this._subCB = new Action<Perform, SubRec>(TopicChanged);
       this._subscriptions = new List<Tuple<SubRec, EsMessage>>();
       // Hello
-      this.SendArr(new JSL.Array {1,  Environment.MachineName});
+      this.SendArr(new JSL.Array { 1, Environment.MachineName });
       _owner = Topic.root.Get("/$YS/ES").Get(base.ToString());
       _owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
       _owner.SetField("type", "ES/Connection", _owner);
@@ -53,7 +52,7 @@ namespace X13.EsBroker {
     }
 
     private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
-      base.SendArr(new JSL.Array { 90, JSC.JSValue.Marshal(dt), (int)ll, msg}, false);
+      base.SendArr(new JSL.Array { 90, JSC.JSValue.Marshal(dt), (int)ll, msg }, false);
     }
     private void RcvMsg(EsMessage msg) {
       if(msg.Count == 0) {
@@ -130,11 +129,9 @@ namespace X13.EsBroker {
       }
       Topic parent = Topic.root.Get(msg[2].Value as string, false, _owner);
       if(parent != null) {
-        var sr1 = parent.Subscribe(SubRec.SubMask.Value | SubRec.SubMask.Field | SubRec.SubMask.Once, string.Empty, _subCBt);
-        var sr2 = parent.Subscribe(SubRec.SubMask.Chldren, string.Empty, _subCBc);
+        var sr1 = parent.Subscribe(SubRec.SubMask.Value | SubRec.SubMask.Field | SubRec.SubMask.Once | SubRec.SubMask.Chldren, string.Empty, _subCB);
         lock(_subscriptions) {
-          _subscriptions.Add(new Tuple<SubRec, EsMessage>(sr1, null));
-          _subscriptions.Add(new Tuple<SubRec, EsMessage>(sr2, msg));
+          _subscriptions.Add(new Tuple<SubRec, EsMessage>(sr1, msg));
         }
       } else {
         msg.Response(3, msg[1], true, false);
@@ -211,9 +208,9 @@ namespace X13.EsBroker {
     private void Move(EsMessage msg) {
       if(msg.Count < 5 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String
         || (msg.Count > 5 && msg[4].ValueType != JSC.JSValueType.String)) {
-          if(_basePl.verbose) {
-            Log.Warning("Syntax error: {0}", msg);
-          }
+        if(_basePl.verbose) {
+          Log.Warning("Syntax error: {0}", msg);
+        }
         return;
       }
       Topic t = Topic.root.Get(msg[2].Value as string, false, _owner);
@@ -261,54 +258,54 @@ namespace X13.EsBroker {
       }
     }
 
-    private void ChildChanged(Perform p, SubRec sb) {
+    private void TopicChanged(Perform p, SubRec sb) {
       switch(p.art) {
       case Perform.Art.create:
-      case Perform.Art.subscribe:
-        base.SendArr(new JSL.Array{ 4, p.src.path});
+        if(sb.setTopic != p.src) {
+          base.SendArr(new JSL.Array { 4, p.src.path });
+        }
         break;
-      case Perform.Art.subAck: {
-          var sr = p.o as SubRec;
-          if(sr != null) {
-            lock(_subscriptions) {
-              foreach(var msg in _subscriptions.Where(z => z.Item1 == sr && z.Item2 != null).Select(z => z.Item2)) {
-                msg.Response(3, msg[1], true, true);
-              }
+      case Perform.Art.subscribe:
+        if(sb.setTopic == p.src) {
+          base.SendArr(new JSL.Array { 4, p.src.path, p.src.GetState(), p.src.GetField(null) });
+        } else {
+          base.SendArr(new JSL.Array { 4, p.src.path });
+        }
+        break;
+      case Perform.Art.subAck:
+        var sr = p.o as SubRec;
+        if(sr != null) {
+          lock(_subscriptions) {
+            foreach(var msg in _subscriptions.Where(z => z.Item1 == sr && z.Item2 != null).Select(z => z.Item2)) {
+              msg.Response(3, msg[1], true, true);
             }
           }
         }
         break;
-      case Perform.Art.move:
-        base.SendArr(new JSL.Array{ 10, p.o as string, p.src.parent.path, p.src.name});
-        break;
-      case Perform.Art.remove:
-        base.SendArr(new JSL.Array{ 12, p.src.path});
-        lock(_subscriptions) {
-          _subscriptions.RemoveAll(z => z.Item1.setTopic == p.src);
-        }
-        break;
-      }
-    }
-    private void TopicChanged(Perform p, SubRec sb) {
-      switch(p.art) {
-      case Perform.Art.subscribe:
-        base.SendArr(new JSL.Array{ 4, p.src.path, p.src.GetState(), p.src.GetField(null)});
-        break;
       case Perform.Art.changedState:
         if(p.prim != _owner && sb.setTopic == p.src) {
-          base.SendArr(new JSL.Array{ 6, p.src.path, p.src.GetState()});
+          base.SendArr(new JSL.Array { 6, p.src.path, p.src.GetState() });
         }
         break;
       case Perform.Art.changedField:
         if(sb.setTopic == p.src) {
-          base.SendArr(new JSL.Array{ 14, p.src.path, p.src.GetField(null)});
+          base.SendArr(new JSL.Array { 14, p.src.path, p.src.GetField(null) });
         }
         break;
-      case Perform.Art.create:
-      case Perform.Art.subAck:
       case Perform.Art.move:
-      case Perform.Art.remove:
+        if(sb.setTopic != p.src) {
+          base.SendArr(new JSL.Array { 10, p.o as string, p.src.parent.path, p.src.name });
+        }
         break;
+      case Perform.Art.remove:
+        if(sb.setTopic == p.src.parent) {
+          base.SendArr(new JSL.Array { 12, p.src.path });
+          lock(_subscriptions) {
+            _subscriptions.RemoveAll(z => z.Item1.setTopic == p.src);
+          }
+        }
+        break;
+
       }
     }
   }

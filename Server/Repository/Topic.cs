@@ -444,12 +444,13 @@ namespace X13.Repository {
           }
         } else {
           if(t._subRecords != null) {
-            for(int i = 0; i < t._subRecords.Count; i++) {
+            for(int i = t._subRecords.Count-1; i >= 0 ; i--) {
               sb = t._subRecords[i];
               if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
                   && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
                   && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && (tmp_s = cmd.o as string) != null && tmp_s.StartsWith(sb.prefix)))) {
                 try {
+                  //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());
                   sb.func(cmd, sb);
                 }
                 catch(Exception ex) {

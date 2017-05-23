@@ -355,7 +355,6 @@ namespace X13.Periphery {
         if(dev == null) {
           dev = new MsDevice(this, Topic.root.Get("/vacant/" + cm.ClientId, true, _owner));
           _devs.Add(dev);
-          Log.Info(dev.owner.path + " created on connect");
         }
         dev._gate = gate;
         dev.addr = addr;
