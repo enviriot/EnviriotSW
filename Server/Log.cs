@@ -50,8 +50,9 @@ namespace X13 {
       _kickEv.Set();
     }
     public static void AddEntry(LogLevel ll, DateTime dt, string msg){
-      if(Write != null) {
-        Write(ll, dt, msg, false);
+      var wr = Write;
+      if(wr != null) {
+        wr(ll, dt, msg, false);
       }
     }
     public static event Action<LogLevel, DateTime, string, bool> Write;
@@ -76,8 +77,9 @@ namespace X13 {
           r.ll = LogLevel.Error;
           msg = "Bad format: " + r.format;
         }
-        if(Write != null) {
-          Write(r.ll, r.dt, msg, true);
+        var wr = Write;
+        if(wr != null) {
+          wr(r.ll, r.dt, msg, true);
         }
         string msgA;
         ConsoleColor cc;

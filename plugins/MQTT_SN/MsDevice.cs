@@ -1179,6 +1179,7 @@ namespace X13.Periphery {
         owner.Send(new MsPublish(this) { Data = payload });
       }
     }
+    [Flags]
     internal enum DType {
       None = 0,
       Boolean = 1,

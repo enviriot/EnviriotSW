@@ -166,7 +166,7 @@ namespace X13.Periphery {
           }
         } else {
           if(!_useSlip) {
-            if(b < 2 && b > MsMessage.MSG_MAX_LENGTH) {
+            if(b < 2 || b > MsMessage.MSG_MAX_LENGTH) {
               if(_pl.verbose) {
                 Log.Warning("r {0}:0x{1:X2} wrong length of the packet", _port.PortName, b);
               }

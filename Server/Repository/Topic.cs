@@ -125,7 +125,8 @@ namespace X13.Repository {
       if(_subRecords == null) {
         lock(this) {
           if(_subRecords == null) {
-            _subRecords = new List<SubRec>();
+            var srs = new List<SubRec>();
+            _subRecords = srs;  // PVS V3054. Potentially unsafe double-checked locking.
           }
         }
       }
@@ -587,10 +588,8 @@ namespace X13.Repository {
           }
           {
             var r = new BsonDocument();
-            if(val != null) {
-              foreach(var f in val) {
-                r[f.Key] = Js2Bs(f.Value);
-              }
+            foreach(var f in val) {
+              r[f.Key] = Js2Bs(f.Value);
             }
             return r;
           }
