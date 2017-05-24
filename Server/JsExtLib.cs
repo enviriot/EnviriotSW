@@ -7,14 +7,19 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 
 namespace X13 {
   public static class JsExtLib {
     public static readonly JSC.Context Context;
 
     static JsExtLib() {
+      _timerCnt = 0;
       Context = new JSC.Context(true);
-      Context.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue, int>(SetTimeout)));
+      Context.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
+      Context.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
+      Context.DefineVariable("clearTimeout").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimeout)));
+      
     }
 
     #region Tick
@@ -23,8 +28,11 @@ namespace X13 {
       public DateTime to;
       public int interval;
       public TimerContainer next;
+      public JSC.Context ctx;
+      public int idx;
     }
     private static TimerContainer _timer;
+    private static int _timerCnt;
     private static void AddTimer(TimerContainer tc) {
       TimerContainer cur = _timer, prev = null;
       while(cur != null && cur.to < tc.to) {
@@ -38,10 +46,54 @@ namespace X13 {
         prev.next = tc;
       }
     }
-    private static void SetTimeout(JSC.JSValue func, int to) {
+    private static JSC.JSValue SetTimeout(JSC.JSValue func, int to) {
+      return SetTimer(func, to, -1, null);
+    }
+    private static JSC.JSValue SetInterval(JSC.JSValue func, int interval) {
+      return SetTimer(func, interval, interval, null);
+    }
+
+    public static JSC.JSValue SetTimer(JSC.JSValue func, int to, int interval, JSC.Context ctx) {
       JSL.Function f;
+      int idx = -1;
       if(((f = func as JSL.Function) != null || (f = func.Value as JSL.Function)!=null) && to>0) {
-        AddTimer(new TimerContainer { func = f, to = DateTime.Now.AddMilliseconds(to), interval = -1 });
+        idx = Interlocked.Increment(ref _timerCnt);
+        AddTimer(new TimerContainer { func = f, to = DateTime.Now.AddMilliseconds(to), interval = interval, ctx = ctx, idx=idx });
+      }
+      return new JSL.Number(idx);
+    }
+    public static void ClearTimeout(JSC.Context ctx) {
+      TimerContainer t=_timer, tp=null;
+      while(t != null) {
+        if(t.ctx == ctx) {
+          if(tp == null) {
+            _timer = t.next;
+          } else {
+            tp.next = t.next;
+          }
+        } else {
+          tp = t;
+        }
+        t = t.next;
+      }
+    }
+    private static void ClearTimeout(JSC.JSValue oi) {
+      if(oi == null || !oi.IsNumber) {
+        return;
+      }
+      var idx = (int)oi;
+      TimerContainer t = _timer, tp = null;
+      while(t != null) {
+        if(t.idx == idx) {
+          if(tp == null) {
+            _timer = t.next;
+          } else {
+            tp.next = t.next;
+          }
+        } else {
+          tp = t;
+        }
+        t = t.next;
       }
     }
 

@@ -130,17 +130,21 @@ namespace X13.UI {
     }
 
     private string JSV2Type() {
-      string v;
+      if(value == null) {
+        return JSC.JSValueType.Undefined.ToString();
+      }
       switch(value.ValueType){
-      case JSC.JSValueType.String:
-        if((v = value.Value as string) != null && v.Length > 3 && v[0] == '¤') {
-          switch(v.Substring(1, 2)) {
-          case "TR":
-            return "TopicReference";
-          case "VR":
-            return "Version";
+      case JSC.JSValueType.String: {
+          string v;
+          if((v = value.Value as string) != null && v.Length > 3 && v[0] == '¤') {
+            switch(v.Substring(1, 2)) {
+            case "TR":
+              return "TopicReference";
+            case "VR":
+              return "Version";
+            }
           }
-        } 
+        }
         break;
       case JSC.JSValueType.Object:
         if(value is ByteArray || value.Value is ByteArray) {

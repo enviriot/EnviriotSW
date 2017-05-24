@@ -1150,6 +1150,9 @@ namespace X13.Periphery {
           s.Dispose();
         }
         _subsscriptions.Clear();
+        foreach(var ts in _topics) {
+          ts.Dispose();
+        }
         _topics.Clear();
         lock(_sendQueue) {
           _sendQueue.Clear();
@@ -1158,7 +1161,7 @@ namespace X13.Periphery {
       _waitAck = false;
     }
 
-    internal class TopicInfo {
+    internal class TopicInfo : IDisposable {
       public MsDevice owner;
       public Topic topic;
       public ushort TopicId;
@@ -1173,10 +1176,14 @@ namespace X13.Periphery {
         if(owner.state == State.Disconnected || owner.state == State.Lost) {
           return;
         }
-        if(owner._pl.verbose) {
-          Log.Debug("{0}.Snd {1}", this.topic.path, BitConverter.ToString(payload));
-        }
         owner.Send(new MsPublish(this) { Data = payload });
+      }
+
+      public void Dispose() {
+        var t = Interlocked.Exchange(ref twi, null);
+        if(t != null) {
+          t.Dispose();
+        }
       }
     }
     [Flags]

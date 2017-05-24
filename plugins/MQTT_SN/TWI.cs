@@ -101,6 +101,11 @@ namespace X13.Periphery {
     #region IDisposable Member
     public void Dispose() {
       _deviceChangedsSR.Dispose();
+      _reqs.Clear();
+      foreach(var d in _devs) {
+        d.Dispose();
+      }
+      _devs.Clear();
     }
     #endregion IDisposable Member
 
@@ -124,6 +129,9 @@ namespace X13.Periphery {
         if(jSrc != null) {
           try {
             _ctx = new JSC.Context(JsExtLib.Context);
+            _ctx.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
+            _ctx.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
+
             var f = _ctx.Eval(jSrc.Value as string) as JSL.Function;
             if(f != null) {
               if(f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
@@ -152,6 +160,12 @@ namespace X13.Periphery {
 
       }
 
+      private JSC.JSValue SetTimeout(JSC.JSValue func, int to) {
+        return JsExtLib.SetTimer(func, to, -1, _ctx);
+      }
+      private JSC.JSValue SetInterval(JSC.JSValue func, int interval) {
+        return JsExtLib.SetTimer(func, interval, interval, _ctx);
+      }
       private JSC.JSValue GetState(string path) {
         Topic t;
         if(owner.Exist(path, out t)) {
@@ -179,6 +193,10 @@ namespace X13.Periphery {
 
       #region IDisposable Member
       public void Dispose() {
+        if(!owner.disposed) {
+          owner.SetState(0, _twi._owner);
+        }
+        JsExtLib.ClearTimeout(_ctx);
       }
       #endregion IDisposable Member
     }
