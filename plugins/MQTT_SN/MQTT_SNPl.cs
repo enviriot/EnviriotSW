@@ -250,7 +250,9 @@ namespace X13.Periphery {
                     _gates.Add(gw);
                   }
                   gw._useSlip = escChar;
-                  Log.Debug("I {0}: SLIP={1}", port.PortName, escChar);
+                  if(verbose) {
+                    Log.Debug("I {0}: SLIP={1}", port.PortName, escChar);
+                  }
                   ProcessInPacket(gw, gw._gateAddr, buf, 0, cnt);
                   break;
                 }

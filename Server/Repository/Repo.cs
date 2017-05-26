@@ -21,6 +21,7 @@ namespace X13.Repository {
     private List<Perform> _prOp;
     private int _busyFlag;
     private int _pfPos;
+    private List<Tuple<int, BsonDocument>> _db_q;
 
     private LiteDatabase _db;
     private LiteCollection<BsonDocument> _objects, _states;
@@ -141,19 +142,19 @@ namespace X13.Repository {
       switch(cmd.art) {
       case Perform.Art.changedState:
         if(state != null) {
-          _states.Upsert(state);
+          _db_q.Add(new Tuple<int, BsonDocument>(1, state));  //_states.Upsert(state);
         }
         break;
       case Perform.Art.changedField:
-        _objects.Update(manifest);
+        _db_q.Add(new Tuple<int, BsonDocument>(2, manifest)); //_objects.Update(manifest);
         if((cmd.o as string) == "attr") {
           if(cmd.src.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
             Topic.I.SetValue(cmd.src, cmd.src.GetState());
             if(state != null) {
-              _states.Upsert(state);
+              _db_q.Add(new Tuple<int, BsonDocument>(1, state));  //_states.Upsert(state);
             }
           } else {
-            _states.Delete(manifest["_id"]);
+            _db_q.Add(new Tuple<int, BsonDocument>(3, manifest));  //_states.Delete(manifest["_id"]);
           }
         }
         break;
@@ -161,14 +162,13 @@ namespace X13.Repository {
       //  _objects.Update(manifest);
       //  break;
       case Perform.Art.create:
-        _objects.Upsert(manifest);
+        _db_q.Add(new Tuple<int, BsonDocument>(4, manifest)); //_objects.Upsert(manifest);
         if(cmd.src.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB) && state != null) {
-          _states.Upsert(state);
+          _db_q.Add(new Tuple<int, BsonDocument>(1, state));  //_states.Upsert(state);
         }
         break;
       case Perform.Art.remove:
-        _states.Delete(manifest["_id"]);
-        _objects.Delete(manifest["_id"]);
+        _db_q.Add(new Tuple<int, BsonDocument>(5, manifest));  //_states.Delete(manifest["_id"]); & _objects.Delete(manifest["_id"]);
         break;
       }
     }
@@ -187,6 +187,7 @@ namespace X13.Repository {
     public Repo() {
       _tcQueue = new ConcurrentQueue<Perform>();
       _prOp = new List<Perform>(128);
+      _db_q = new List<Tuple<int, BsonDocument>>();
     }
 
     #region Import/Export
@@ -349,7 +350,7 @@ namespace X13.Repository {
       if(Interlocked.CompareExchange(ref _busyFlag, 2, 1) != 1) {
         return;
       }
-      //var qc=_tcQueue.Count();
+      //int QC = 0;
 
       Perform cmd;
       _pfPos = 0;
@@ -357,6 +358,7 @@ namespace X13.Repository {
         if(cmd == null || cmd.src == null) {
           continue;
         }
+        //QC++;
         TickStep1(cmd);
       }
 
@@ -371,16 +373,40 @@ namespace X13.Repository {
         }
       }
       if(_db != null) {
+        for(int i = 0; i < _prOp.Count; i++) {
+          Store(_prOp[i]);
+        }
+      }
+      //int PC = _prOp.Count, DB = _db_q.Count;
+      _prOp.Clear();
+
+      if(_db_q.Any()) {
         using(var tr = _db.BeginTrans()) {
-          for(int i = 0; i < _prOp.Count; i++) {
-            Store(_prOp[i]);
+          foreach(var q in _db_q) {
+            switch(q.Item1) {
+            case 1:
+              _states.Upsert(q.Item2);
+              break;
+            case 2:
+              _objects.Update(q.Item2);
+              break;
+            case 3:
+              _states.Delete(q.Item2["_id"]);
+              break;
+            case 4:
+              _objects.Upsert(q.Item2);
+              break;
+            case 5:
+              _states.Delete(q.Item2["_id"]);
+              _objects.Delete(q.Item2["_id"]);
+              break;
+            }
           }
           tr.Commit();
         }
+        _db_q.Clear();
       }
-
-      //X13.lib.Log.Debug("PLC.Tick QC={0}, PC={1}", qc, _prOp.Count);
-      _prOp.Clear();
+      //if(QC!=0 || PC!=0 || DB!=0) X13.Log.Debug("PLC.Tick QC="+QC.ToString()+", PC="+PC.ToString()+", DB="+ DB.ToString());
       _busyFlag = 1;
     }
 
