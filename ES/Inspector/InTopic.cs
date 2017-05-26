@@ -44,6 +44,7 @@ namespace X13.UI {
       base._isExpanded = IsGroupHeader && _owner.children != null && _owner.children.Any();
       base._isVisible = IsGroupHeader || (_parent._isVisible && _parent._isExpanded);
     }
+
     private InTopic(JSC.JSValue tag, InTopic parent) {
       _parent = parent;
       _collFunc = parent._collFunc;
@@ -226,6 +227,8 @@ namespace X13.UI {
             }
           }
         }
+      } else if(art == DTopic.Art.addChild && (_items==null || !_items.Any())){
+        PropertyChangedReise("HasChildren");
       }
     }
 
