@@ -102,6 +102,7 @@ namespace X13.Repository {
       case Perform.Art.setState:
       case Perform.Art.setField:
       case Perform.Art.changedField:
+      case Perform.Art.changedLayer:
       case Perform.Art.move:
         EnquePerf(c);
         break;
@@ -144,6 +145,9 @@ namespace X13.Repository {
         if(state != null) {
           _db_q.Add(new Tuple<int, BsonDocument>(1, state));  //_states.Upsert(state);
         }
+        break;
+      case Perform.Art.changedLayer:
+        _db_q.Add(new Tuple<int, BsonDocument>(2, manifest)); //_objects.Update(manifest);
         break;
       case Perform.Art.changedField:
         _db_q.Add(new Tuple<int, BsonDocument>(2, manifest)); //_objects.Update(manifest);

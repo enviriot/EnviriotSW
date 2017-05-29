@@ -47,7 +47,7 @@ namespace X13.Repository {
       this.src = src;
       this.art = art;
       this.prim = prim;
-      this.layer = -1;  // TODO: layer
+      this.layer = src.layer;
     }
     internal bool EqualsGr(Perform other) {
       return (this.art == Art.setState || this.art == Art.changedState)
@@ -87,6 +87,7 @@ namespace X13.Repository {
       changedState = 18,
       remove = 20,
       subAck = 24,
+      changedLayer = 28,
     }
   }
 }

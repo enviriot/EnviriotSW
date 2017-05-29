@@ -60,6 +60,19 @@ namespace X13.Repository {
     }
     public string path { get { return _path; } }
     public bool disposed { get; private set; }
+    public int layer {
+      get {
+        BsonValue l;
+        return (l = _ps_manifest["layer"]).IsInt32 ? l.AsInt32 : -1;
+      }
+      set {
+        if(value!=this.layer) {
+          _ps_manifest["layer"] = value;
+          var c = Perform.Create(this, Perform.Art.changedLayer, null);
+          _repo.DoCmd(c, false);
+        }
+      }
+    }
     public Bill all { get { return new Bill(this, true); } }
     public Bill children { get { return new Bill(this, false); } }
 
@@ -449,7 +462,8 @@ namespace X13.Repository {
               sb = t._subRecords[i];
               if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
                   && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
-                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && (tmp_s = cmd.o as string) != null && tmp_s.StartsWith(sb.prefix)))) {
+                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && (tmp_s = cmd.o as string) != null && tmp_s.StartsWith(sb.prefix)))
+                  && (cmd.art != Perform.Art.changedLayer || (sb.mask & SubRec.SubMask.Layer) == SubRec.SubMask.Layer)) {
                 try {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());
                   sb.func(cmd, sb);
