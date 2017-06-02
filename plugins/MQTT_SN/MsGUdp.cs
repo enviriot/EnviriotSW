@@ -7,6 +7,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using X13.Repository;
 
 namespace X13.Periphery {
   internal class MsGUdp : IMsGate {
@@ -16,9 +17,31 @@ namespace X13.Periphery {
     private UdpClient _udp;
     private Timer _advTick;
     private byte _gwRadius;
+    private AddrWithMask[] _whiteList;
 
     public MsGUdp(MQTT_SNPl pl) {
       _pl = pl;
+      var udpT = Topic.root.Get("/$YS/MQTT-SN/udp");
+      if(udpT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
+        udpT.SetAttribute(Topic.Attribute.DB);
+        udpT.SetState(true);
+      } else if(!(bool)udpT.GetState()) {
+        return;  // udp disabled
+      }
+      List<AddrWithMask> wl = new List<AddrWithMask>();
+      foreach(var c in udpT.children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
+        var we = AddrWithMask.Parse(c.GetState().Value as string, c.name);
+        if(we == null) {
+          Log.Warning("{0} = {1} is not IpAddress wit Mask", c.path, c.GetState().Value as string);
+        } else {
+          wl.Add(we);
+        }
+      }
+
+      if(wl.Any()) {
+        _whiteList = wl.ToArray();
+        wl = null;
+      }
       _myIps = Dns.GetHostEntry(Dns.GetHostName()).AddressList.Where(z => z.AddressFamily == AddressFamily.InterNetwork).Union(new IPAddress[] { IPAddress.Loopback }).Select(z => z.GetAddressBytes()).ToArray();
       List<IPAddress> bc = new List<IPAddress>();
       try {
@@ -35,6 +58,9 @@ namespace X13.Periphery {
               result[i] = (Byte)(ip[i] | (mask[i] ^ 255));
             }
             bc.Add(new IPAddress(result));
+            if(wl != null) {
+              wl.Add(new AddrWithMask(ip, mask, nic.Name));
+            }
           }
         }
       }
@@ -44,33 +70,30 @@ namespace X13.Periphery {
         bc.Add(new IPAddress(new byte[] { 255, 255, 255, 255 }));
       }
       _bcIps = bc.ToArray();
+      if(wl != null) {
+        _whiteList = wl.ToArray();
+        foreach(var we in wl) {
+          var t = udpT.Get(we.name, true, udpT);
+          t.SetAttribute(Topic.Attribute.DB);
+          t.SetState(we.ToString());
+        }
+        wl = null;
+      }
 
       try {
         _udp = new UdpClient(1883);
         _udp.EnableBroadcast = true;
         _udp.BeginReceive(new AsyncCallback(ReceiveCallback), null);
         _advTick = new Timer(SendAdv, null, 4500, 900000);
-        //IPAddress wla_ip, wlm_ip;
-        //Topic wla_t, wlm_t;
-        //if(Topic.root.Exist("/local/cfg/MQTT-SN.udp/whitelist_addr", out wla_t) && Topic.root.Exist("/local/cfg/MQTT-SN.udp/whitelist_mask", out wlm_t)
-        //  && wla_t.valueType == typeof(string) && wlm_t.valueType == typeof(string)
-        //  && IPAddress.TryParse((wla_t as DVar<string>).value, out wla_ip) && IPAddress.TryParse((wlm_t as DVar<string>).value, out wlm_ip)) {
-        //  _wla_arr = wla_ip.GetAddressBytes();
-        //  _wlm_arr = wlm_ip.GetAddressBytes();
-        //} else {
-        //  _wla_arr = new byte[] { 0, 0, 0, 0 };
-        //  _wlm_arr = _wla_arr;
-        //}
-        //Topic t;
-        //DVar<long> tl;
-        //if(Topic.root.Exist("/local/cfg/MQTT-SN.udp/radius", out t) && t.valueType == typeof(long) && (tl = t as DVar<long>) != null) {
-        //  _gwRadius = (byte)tl.value;
-        //  if(_gwRadius < 1 || _gwRadius > 3) {
-        //    _gwRadius = 0;
-        //  }
-        //} else {
+        Topic t;
+        if(Topic.root.Exist("/$YS/MQTT-SN/radius", out t) && t.GetState().IsNumber) {
+          _gwRadius = (byte)(int)t.GetState();
+          if(_gwRadius < 1 || _gwRadius > 3) {
+            _gwRadius = 0;
+          }
+        } else {
           _gwRadius = 1;
-        //}
+        }
       }
       catch(Exception ex) {
         Log.Error("MsGUdp.ctor() {0}", ex.Message);
@@ -85,19 +108,10 @@ namespace X13.Periphery {
       try {
         buf = _udp.EndReceive(ar, ref re);
         byte[] addr = re.Address.GetAddressBytes();
-        bool allow = true;
         if(!_myIps.Any(z => addr.SequenceEqual(z))) {
           if(buf.Length > 1) {
             var mt = (MsMessageType)(buf[0] > 1 ? buf[1] : buf[3]);
-            //if((mt == MsMessageType.CONNECT || mt == MsMessageType.SEARCHGW) && addr.Length == _wla_arr.Length) {
-            //  for(int i = addr.Length - 1; i >= 0; i--) {
-            //    if((addr[i] & _wlm_arr[i]) != (_wla_arr[i] & _wlm_arr[i])) {
-            //      allow = false;
-            //      break;
-            //    }
-            //  }
-            //}
-            if(allow) {
+            if((mt != MsMessageType.CONNECT && mt != MsMessageType.SEARCHGW) || _whiteList.Any(z => z.Check(addr))) {
               _pl.ProcessInPacket(this, addr, buf, 0, buf.Length);
             } else if(_pl.verbose) {
               var msg = MsMessage.Parse(buf, 0, buf.Length);
@@ -179,5 +193,73 @@ namespace X13.Periphery {
       }
     }
     #endregion IMsGate Members
+
+    private class AddrWithMask {
+      private byte[] _addr;
+      private byte[] _mask;
+      public readonly string name;
+
+      public static AddrWithMask Parse(string s, string name) {
+        if(string.IsNullOrWhiteSpace(s)) {
+          return null;
+        }
+        var sp = s.Split('/');
+        if(sp == null || sp.Length == 0) {
+          return null;
+        }
+        byte[] addr;
+        IPAddress tmp;
+        if(IPAddress.TryParse(sp[0], out tmp)) {
+          addr = tmp.GetAddressBytes();
+        } else {
+          return null;
+        }
+        byte[] mask;
+        int mn;
+        if(sp.Length < 2) {  // no mask
+          mask = Enumerable.Repeat((byte)0xFF, addr.Length).ToArray();
+        } else if(int.TryParse(sp[1], out mn)) {
+          mask = new byte[addr.Length];
+          for(int i = 0; i < mask.Length; i++) {
+            if(mn < 1) {
+              mask[i] = 0;
+            } else if(mn > 7) {
+              mask[i] = 0xFF;
+            } else {
+              mask[i] = (byte)(0xFF << mn);
+            }
+            mn -= 8;
+          }
+        } else {
+          mask = IPAddress.Parse(sp[1]).GetAddressBytes();
+        }
+        if(addr.Length != mask.Length) {
+          return null;
+        }
+        return new AddrWithMask(addr, mask, name);
+      }
+      public AddrWithMask(byte[] addr, byte[] mask, string name) {
+        _addr = new byte[addr.Length];
+        for(int i = 0; i < addr.Length; i++) {
+          _addr[i] = (byte)(addr[i] & mask[i]);
+        }
+        _mask = mask;
+        this.name = name;
+      }
+      public bool Check(byte[] addr) {
+        if(addr == null || addr.Length != _addr.Length) {
+          return false;
+        }
+        for(int i = 0; i < addr.Length; i++) {
+          if(_addr[i] != (addr[i] & _mask[i])) {
+            return false;
+          }
+        }
+        return true;
+      }
+      public override string ToString() {
+        return (new IPAddress(_addr)).ToString() + "/" + (new IPAddress(_mask)).ToString();
+      }
+    }
   }
 }
