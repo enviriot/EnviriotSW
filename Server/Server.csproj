@@ -48,11 +48,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="LiteDB, Version=3.1.0.0, Culture=neutral, PublicKeyToken=4ee40123013c9f27, processorArchitecture=MSIL">
-      <HintPath>..\packages\LiteDB.3.1.0\lib\net35\LiteDB.dll</HintPath>
+      <HintPath>..\packages\LiteDB.3.1.1\lib\net35\LiteDB.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="NiL.JS, Version=2.4.1041.0, Culture=neutral, PublicKeyToken=f1426dd7ad77fce3, processorArchitecture=MSIL">
-      <HintPath>..\packages\NiL.JS.2.4.1041.0\lib\net40\NiL.JS.dll</HintPath>
+    <Reference Include="NiL.JS, Version=2.4.1070.0, Culture=neutral, PublicKeyToken=f1426dd7ad77fce3, processorArchitecture=MSIL">
+      <HintPath>..\packages\NiL.JS.2.4.1070.0\lib\net40\NiL.JS.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="System" />
@@ -75,6 +75,8 @@
     <Compile Include="IPlugModul.cs" />
     <Compile Include="JsExtLib.cs" />
     <Compile Include="JsLib.cs" />
+    <Compile Include="PLC\PlcAlias.cs" />
+    <Compile Include="PLC\PlcPl.cs" />
     <Compile Include="Repository\Perform.cs" />
     <Compile Include="Repository\Repo.cs" />
     <Compile Include="Repository\SubRec.cs" />

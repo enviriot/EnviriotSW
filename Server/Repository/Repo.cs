@@ -358,6 +358,8 @@ namespace X13.Repository {
 
       Perform cmd;
       _pfPos = 0;
+
+      // Step1
       while(_tcQueue.TryDequeue(out cmd)) {
         if(cmd == null || cmd.src == null) {
           continue;
@@ -365,17 +367,21 @@ namespace X13.Repository {
         //QC++;
         TickStep1(cmd);
       }
-
+      
+      // Step2
       for(int i = 0; i < _prOp.Count; i++) {
         TickStep2(_prOp[i]);
       }
-
+      
+      // Publish
       for(_pfPos = 0; _pfPos < _prOp.Count; _pfPos++) {
         cmd = _prOp[_pfPos];
         if(cmd.art != Perform.Art.setState && cmd.art != Perform.Art.setField) {
           Topic.I.Publish(cmd);
         }
       }
+      
+      // Store
       if(_db != null) {
         for(int i = 0; i < _prOp.Count; i++) {
           Store(_prOp[i]);
