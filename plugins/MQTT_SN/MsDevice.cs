@@ -29,7 +29,7 @@ namespace X13.Periphery {
       var dType = ti.dType;
       if(ti.convOut != null) {
         try {
-          val = ti.convOut.Call(ti.owner._self, new JSC.Arguments{ ti.topic.name, val } );
+          val = ti.convOut.Call(ti.owner._self, new JSC.Arguments { ti.topic.name, val });
         }
         catch(Exception ex) {
           if(ti.owner._pl.verbose) {
@@ -88,7 +88,6 @@ namespace X13.Periphery {
     private MQTT_SNPl _pl;
     private State _state;
     private bool _waitAck;
-    private int _tryCounter;
     private int _duration;
     private int _messageIdGen;
     private DateTime _toActive;
@@ -253,6 +252,9 @@ namespace X13.Periphery {
         //  if(_statistic.value) {
         //    StatConnectTime();
         //  }
+      } else if(_state == State.Lost || _state==State.Disconnected ) {
+        Send(new MsDisconnect());
+        return;
       }
       _duration = msg.Duration * 1100;
       ResetTimer();
@@ -468,9 +470,9 @@ namespace X13.Periphery {
               }
               break;
             case DType.TWI: {
-              if(ti.twi != null) {
-                ti.twi.Recv(tmp.Data);
-              }
+                if(ti.twi != null) {
+                  ti.twi.Recv(tmp.Data);
+                }
               }
               break;
             }
@@ -621,23 +623,22 @@ namespace X13.Periphery {
     }
     public void Tick() {
       if(_state != State.Lost && _state != State.Disconnected && _toActive < DateTime.Now) {
-        //Log.Debug("$ {0}.TimeOut _tryCounter={1}", Owner.name, _tryCounter);
-        if(_tryCounter > 0) {
-          MsMessage msg = null;
-          lock(_sendQueue) {
-            if(_sendQueue.Count > 0) {
-              msg = _sendQueue.Peek();
-            }
+        MsMessage msg = null;
+        lock(_sendQueue) {
+          if(_sendQueue.Count > 0) {
+            msg = _sendQueue.Peek();
           }
-          _waitAck = false;
-          if(msg != null) {
-            _tryCounter--;
-            SendIntern(msg);
-          } else {
-            ResetTimer();
-            _tryCounter = 0;
-          }
+        }
+        _waitAck = false;
+        if(msg == null) {
+          ResetTimer();
           return;
+        } else {
+          Log.Debug("$ {0}.TimeOut try={1} msg={2}", owner.name, msg.tryCnt, msg);
+          if(!msg.IsRequest || msg.tryCnt > 0) {
+            SendIntern(msg);
+            return;
+          }
         }
         state = State.Lost;
         if(owner != null) {
@@ -971,7 +972,7 @@ namespace X13.Periphery {
           }
           if(ti.convIn != null) {
             try {
-              val = ti.convIn.Call(this._self, new JSC.Arguments { ti.topic.name, val} );
+              val = ti.convIn.Call(this._self, new JSC.Arguments { ti.topic.name, val });
             }
             catch(Exception ex) {
               if(_pl.verbose) {
@@ -1026,9 +1027,6 @@ namespace X13.Periphery {
         }
       }
       if(msg != null || state == State.AWake) {
-        if(msg != null && msg.IsRequest) {
-          _tryCounter = 2;
-        }
         SendIntern(msg);
       } else if(!_waitAck) {
         ResetTimer();
@@ -1047,9 +1045,6 @@ namespace X13.Periphery {
           }
         }
         if(send) {
-          if(msg.IsRequest) {
-            _tryCounter = 2;
-          }
           SendIntern(msg);
         }
       }
@@ -1062,6 +1057,9 @@ namespace X13.Periphery {
             //  Stat(true, msg.MsgTyp, ((msg is MsPublish && (msg as MsPublish).Dup) || (msg is MsSubscribe && (msg as MsSubscribe).dup)));
             //}
             try {
+              if(msg.IsRequest) {
+                msg.tryCnt--;
+              }
               _gate.SendGw(this, msg);
             }
             catch(ArgumentOutOfRangeException ex) {
@@ -1078,7 +1076,7 @@ namespace X13.Periphery {
             }
           }
           if(msg != null && msg.IsRequest) {
-            ResetTimer(_rand.Next(ACK_TIMEOUT, ACK_TIMEOUT * 5 / 3) / (_tryCounter + 1));  // 600, 1000
+            ResetTimer(_rand.Next(ACK_TIMEOUT, ACK_TIMEOUT * 5 / 3) / (msg.tryCnt + 1));  // 333, 500, 1000
             _waitAck = true;
             break;
           }
@@ -1116,7 +1114,6 @@ namespace X13.Periphery {
           period = _rand.Next(ACK_TIMEOUT * 3 / 4, ACK_TIMEOUT);  // 450, 600
         } else if(_duration > 0) {
           period = _duration;
-          _tryCounter = 1;
         }
       }
       //Log.Debug("$ {0}._activeTimer={1}", Owner.name, period);
@@ -1135,7 +1132,6 @@ namespace X13.Periphery {
         }
         ResetTimer(3100 + duration * 1550);  // t_wakeup
         this.Send(new MsDisconnect());
-        _tryCounter = 0;
         state = State.ASleep;
         owner.SetField("MQTT-SN.SleepTime", new JSL.Number(duration), owner);
       } else {

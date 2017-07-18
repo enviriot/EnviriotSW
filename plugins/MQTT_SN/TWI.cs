@@ -12,6 +12,7 @@ using System.Threading;
 namespace X13.Periphery {
   internal class TWI : IDisposable {
     private Topic _owner;
+    private Topic _verbose;
     private Action<byte[]> _pub;
     private SubRec _deviceChangedsSR;
     private List<TwiDevice> _devs;
@@ -23,13 +24,34 @@ namespace X13.Periphery {
       this._pub = pub;
       this._devs = new List<TwiDevice>();
       this._reqs = new Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>>>();
+      this._verbose = Topic.root.Get("/$YS/TWI/verbose");
+      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
+        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+#if DEBUG
+        _verbose.SetState(true);
+#else
+        _verbose.SetState(false);
+#endif
+      }
+
       _flag = 1;
       _deviceChangedsSR = this._owner.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Field, "type", DeviceChanged);
+      if(verbose) {
+        Log.Debug("{0}.Created", _owner.path);
+      }
+    }
+
+    public bool verbose {
+      get {
+        return _verbose != null && (bool)_verbose.GetState();
+      }
     }
 
     public void Recv(byte[] buf) {
       if(buf == null || buf.Length < 4) {
-        Log.Warning("{0}.recv({1})", _owner.path, buf == null ? "null" : BitConverter.ToString(buf));
+        if(verbose) {
+          Log.Warning("{0}.recv({1})", _owner.path, buf == null ? "null" : BitConverter.ToString(buf));
+        }
         return;
       }
       if(_reqs.Any()) {
@@ -38,23 +60,42 @@ namespace X13.Periphery {
           if((buf[1] & 0xF0) == 0x10) {
             if(buf[3] == req.Item1[3]) {
               req.Item2.SetResult(new JSL.Array(buf));
+              if(verbose) {
+                Log.Debug("{0}.recv({1})", _owner.path, BitConverter.ToString(buf));
+              }
             } else {
               req.Item2.SetException(new JSC.JSException(new JSL.Number(5)));  // wrong response length
+              if(verbose) {
+                Log.Warning("{0}.recv({1}) - wrong response length", _owner.path, BitConverter.ToString(buf));
+              }
             }
           } else if((buf[1] & 0x20) != 0) {
             req.Item2.SetException(new JSC.JSException(new JSL.Number(2)));  // Timeout
+            if(verbose) {
+              Log.Warning("{0}.recv({1}) - Timeout", _owner.path, BitConverter.ToString(buf));
+            }
           } else if((buf[1] & 0x40) != 0) {
             req.Item2.SetException(new JSC.JSException(new JSL.Number(3)));  // Slave Addr NACK received - Device not present
+            if(verbose) {
+              Log.Warning("{0}.recv({1}) - Slave Addr NACK", _owner.path, BitConverter.ToString(buf));
+            }
           } else {
             req.Item2.SetException(new JSC.JSException(new JSL.Number(4)));  // Internal Error
+            if(verbose) {
+              Log.Warning("{0}.recv({1}) - Internal Error", _owner.path, BitConverter.ToString(buf));
+            }
           }
           _flag = 1;
           SendReq();
         } else {
-          Log.Warning("{0}.recv({1}) - unknown request", _owner.path, BitConverter.ToString(buf));
+          if(verbose) {
+            Log.Warning("{0}.recv({1}) - unknown response", _owner.path, BitConverter.ToString(buf));
+          }
         }
       } else {
-        Log.Warning("{0}.recv({1}) - unknown request", _owner.path, BitConverter.ToString(buf));
+        if(verbose) {
+          Log.Warning("{0}.recv({1}) - unknown response", _owner.path, BitConverter.ToString(buf));
+        }
       }
     }
     private void SendReq() {
@@ -62,6 +103,9 @@ namespace X13.Periphery {
         if(_reqs.Any()) {
           var req = _reqs.Peek();
           _pub(req.Item1);
+          if(verbose) {
+            Log.Debug("{0}.send({1})", _owner.path, BitConverter.ToString(req.Item1));
+          }
           if(req.Item1[3] == 0) {  // to recive 0 bytes => no answer
             Recv(new byte[] { req.Item1[0], 0x10, req.Item1[2], 0 });
           }
@@ -106,6 +150,9 @@ namespace X13.Periphery {
         d.Dispose();
       }
       _devs.Clear();
+      if(verbose) {
+        Log.Debug("{0}.Disposed", _owner.path);
+      }
     }
     #endregion IDisposable Member
 
