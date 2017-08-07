@@ -34,8 +34,8 @@ namespace X13.UI {
 
     public void ValueChanged(JSC.JSValue value) {
       if(_enumT != null && _enumT.value.ValueType == JSC.JSValueType.Object) {
-        base.SelectedItem = _enumT.value[value.ToString()];
         _oldValue = value;
+        base.SelectedItem = _enumT.value[value.ToString()];
       }
     }
 
@@ -78,18 +78,32 @@ namespace X13.UI {
     }
 
     private void Publish() {
-      //if(!_owner.IsReadonly && _oldValue != base.Text) {
-      //  _owner.value = new JSL.String(base.Text);
-      //}
+      if(_owner.IsReadonly || _enumT==null || _enumT.value==null || _enumT.value.ValueType!=JSC.JSValueType.Object) {
+        return;
+      }
+      JSC.JSValue v=null;
+      if((bool)JSL.Array.isArray(new JSC.Arguments{ _enumT.value}) ){
+        v = new JSL.Number(this.SelectedIndex);
+      } else {
+        foreach(var kv in _enumT.value){
+          if(kv.Value==this.SelectedItem) {
+            v=kv.Key;
+            break;
+          }
+        }
+      }
+      if(v==null) {
+        ValueChanged(_owner.value);  // restore value
+      } else if(_oldValue!=v) {
+        _owner.value = v;
+      }
     }
 
     private void ve_GotFocus(object sender, System.Windows.RoutedEventArgs e) {
       _owner.GotFocus(sender, e);
     }
     private void ve_SelectionChanged(object sender, SelectionChangedEventArgs e) {
-      if(!base.IsDropDownOpen) {
-        Publish();
-      }
+      Publish();
     }
 
   }
