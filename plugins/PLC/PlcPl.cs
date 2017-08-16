@@ -15,10 +15,10 @@ namespace X13.PLC {
     private Topic _owner;
     private Topic _verbose;
     private SubRec _subMs;
-    private Dictionary<Topic, PlcAlias> _aliases;
+    private Dictionary<Topic, IPlcItem> _items;
 
     public PlcPl() {
-      _aliases = new Dictionary<Topic, PlcAlias>();
+      _items = new Dictionary<Topic, IPlcItem>();
     }
 
     public bool verbose {
@@ -26,7 +26,6 @@ namespace X13.PLC {
         return _verbose != null && (bool)_verbose.GetState();
       }
     }
-
 
     #region IPlugModul Members
     public void Init() {
@@ -72,16 +71,20 @@ namespace X13.PLC {
     #endregion IPlugModul Members
 
     private void SubFunc(Perform p, SubRec sb) {
-      string tag;
+      int tag;
       {
         var tag_v = p.src.GetField("PLC.tag");
-        if(tag_v.ValueType!=JSC.JSValueType.String || string.IsNullOrEmpty(tag = tag_v.Value as string)) {
-          tag = null;
+        if(!tag_v.IsNumber) {
+          tag = 0;
+        } else {
+          tag =(int)tag_v;
         }
       }
       if(p.art == Perform.Art.subscribe || p.art == Perform.Art.create) {
-        if(tag == "Alias") {
-          _aliases[p.src] = new PlcAlias(p.src);
+        switch(tag) {
+        case 1:
+          _items[p.src] = new Binding(this, p.src);
+          break;
         }
       }
     }

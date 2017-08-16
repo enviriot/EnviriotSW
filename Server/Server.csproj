@@ -75,8 +75,6 @@
     <Compile Include="IPlugModul.cs" />
     <Compile Include="JsExtLib.cs" />
     <Compile Include="JsLib.cs" />
-    <Compile Include="PLC\PlcAlias.cs" />
-    <Compile Include="PLC\PlcPl.cs" />
     <Compile Include="Repository\Perform.cs" />
     <Compile Include="Repository\Repo.cs" />
     <Compile Include="Repository\SubRec.cs" />
