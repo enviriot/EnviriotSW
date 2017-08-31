@@ -415,7 +415,7 @@ namespace X13.Repository {
           } else {
             p[ps[ps.Length - 1]] = val;
           }
-          t._ps_manifest.Set("v." + fPath, Js2Bs(val));
+          t._ps_manifest["v"] =Js2Bs(t._manifest);
         }
         catch(Exception ex) {
           Log.Warning("{0}.SetField({1}, ..) - {2}", t.path, fPath, ex.Message);

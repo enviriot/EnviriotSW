@@ -367,12 +367,12 @@ namespace X13.Repository {
         //QC++;
         TickStep1(cmd);
       }
-      
+
       // Step2
       for(int i = 0; i < _prOp.Count; i++) {
         TickStep2(_prOp[i]);
       }
-      
+
       // Publish
       for(_pfPos = 0; _pfPos < _prOp.Count; _pfPos++) {
         cmd = _prOp[_pfPos];
@@ -380,7 +380,7 @@ namespace X13.Repository {
           Topic.I.Publish(cmd);
         }
       }
-      
+
       // Store
       if(_db != null) {
         for(int i = 0; i < _prOp.Count; i++) {
@@ -391,28 +391,25 @@ namespace X13.Repository {
       _prOp.Clear();
 
       if(_db_q.Any()) {
-        using(var tr = _db.BeginTrans()) {
-          foreach(var q in _db_q) {
-            switch(q.Item1) {
-            case 1:
-              _states.Upsert(q.Item2);
-              break;
-            case 2:
-              _objects.Update(q.Item2);
-              break;
-            case 3:
-              _states.Delete(q.Item2["_id"]);
-              break;
-            case 4:
-              _objects.Upsert(q.Item2);
-              break;
-            case 5:
-              _states.Delete(q.Item2["_id"]);
-              _objects.Delete(q.Item2["_id"]);
-              break;
-            }
+        foreach(var q in _db_q) {
+          switch(q.Item1) {
+          case 1:
+            _states.Upsert(q.Item2);
+            break;
+          case 2:
+            _objects.Update(q.Item2);
+            break;
+          case 3:
+            _states.Delete(q.Item2["_id"]);
+            break;
+          case 4:
+            _objects.Upsert(q.Item2);
+            break;
+          case 5:
+            _states.Delete(q.Item2["_id"]);
+            _objects.Delete(q.Item2["_id"]);
+            break;
           }
-          tr.Commit();
         }
         _db_q.Clear();
       }

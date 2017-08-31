@@ -51,7 +51,7 @@ namespace X13.PLC {
     }
 
     public void Stop() {
-
+      _subMs.Dispose();
     }
 
     public bool enabled {

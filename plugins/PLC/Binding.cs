@@ -20,5 +20,11 @@ namespace X13.PLC {
     public void Changed(Perform p, SubRec r) {
       throw new NotImplementedException();
     }
+
+    public int Layer {
+      get { 
+        return -1; 
+      }
+    }
   }
 }
