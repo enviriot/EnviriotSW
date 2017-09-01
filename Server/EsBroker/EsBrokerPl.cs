@@ -61,11 +61,11 @@ namespace X13.EsBroker {
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-//#if DEBUG
-//        _verbose.SetState(true);
-//#else
+        //#if DEBUG
+        //        _verbose.SetState(true);
+        //#else
         _verbose.SetState(false);
-//#endif
+        //#endif
       }
 
       _tcp.BeginAcceptTcpClient(new AsyncCallback(Connect), null);
@@ -77,9 +77,13 @@ namespace X13.EsBroker {
           continue;
         }
         try {
-          if(msg[0].ValueType==JSC.JSValueType.String) {
+          if(msg[0].ValueType == JSC.JSValueType.String) {
             var key = msg[0].Value as string;
-            //TODO: TryGet(Key, out func)
+            var a = new JSC.JSValue[msg.Count - 1];
+            for(int i = 1; i < msg.Count; i++) {
+              a[i - 1] = msg[i];
+            }
+            RPC.Call(key, a);
           }
         }
         catch(Exception ex) {

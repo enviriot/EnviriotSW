@@ -569,7 +569,7 @@ namespace X13.Periphery {
               var cm = fm.msg as MsConnect;
               MsDevice dev = _pl._devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
               if(dev == null) {
-                dev = new MsDevice(_pl, Topic.root.Get("/vacant/" + cm.ClientId, true, owner));
+                dev = new MsDevice(_pl, Topic.root.Get("/dev/" + cm.ClientId, true, owner));
                 _pl._devs.Add(dev);
               }
               dev._gate = this;
@@ -1032,7 +1032,7 @@ namespace X13.Periphery {
         ResetTimer();
       }
     }
-    private void Send(MsMessage msg) {
+    internal void Send(MsMessage msg) {
       if(state != State.Disconnected && state != State.Lost) {
         bool send = true;
         if(msg.MessageId == 0 && msg.IsRequest) {
@@ -1119,7 +1119,7 @@ namespace X13.Periphery {
       //Log.Debug("$ {0}._activeTimer={1}", Owner.name, period);
       _toActive = DateTime.Now.AddMilliseconds(period);
     }
-    private void Disconnect(ushort duration = 0) {
+    internal void Disconnect(ushort duration = 0) {
       if(duration == 0 && !string.IsNullOrEmpty(_willPath)) {
         TopicInfo ti = GetTopicInfo(_willPath, false);
         if(ti != null) {

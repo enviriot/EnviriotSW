@@ -48,6 +48,10 @@ namespace X13.Data {
       App.PostMsg(req);
       return req.Task;
     }
+    internal void Call(string cmd, string path) {
+      Connection.SendCmd(cmd, path);
+    }
+
     public Task<DTopic> GetAsync(string p) {
       DTopic ts;
       if(string.IsNullOrEmpty(p)) {
@@ -114,7 +118,7 @@ namespace X13.Data {
     }
     private void _typeTopic_changed(DTopic.Art art, DTopic t) {
       if(art == Art.value) {
-        ProtoDeep(_manifest, (_typeTopic == null || _typeTopic.value.ValueType!=JSC.JSValueType.Object) ? null : _typeTopic.value.ToObject());
+        ProtoDeep(_manifest, (_typeTopic == null || _typeTopic.value.ValueType != JSC.JSValueType.Object) ? null : _typeTopic.value.ToObject());
         ChangedReise(Art.type, this);
       }
     }
@@ -125,7 +129,7 @@ namespace X13.Data {
         JSC.JSObject p_c;
         JSC.JSValue pv_c;
         foreach(var kv in o) {
-          if(p != null && p.Value!=null && (pv_c = p[kv.Key]).ValueType == JSC.JSValueType.Object) {
+          if(p != null && p.Value != null && (pv_c = p[kv.Key]).ValueType == JSC.JSValueType.Object) {
             p_c = pv_c.ToObject();
           } else {
             p_c = null;
@@ -231,11 +235,11 @@ namespace X13.Data {
 
     }
     private void ExportI1(XElement x, bool isRoot = false) {
-      XElement xCur = isRoot?x:new XElement("i", new XAttribute("n", this.name));
+      XElement xCur = isRoot ? x : new XElement("i", new XAttribute("n", this.name));
 
       var tmp = JsLib.GetField(this._manifest, "attr");
       if(tmp.IsNumber && (((int)tmp) & 0x0C) != 0 && this._value.Exists) {
-          xCur.Add(new XAttribute("s", JSL.JSON.stringify(this._value, null, null)));
+        xCur.Add(new XAttribute("s", JSL.JSON.stringify(this._value, null, null)));
       }
       tmp = JsLib.GetField(this._manifest, "version");
       string vs;
@@ -252,7 +256,7 @@ namespace X13.Data {
       }
       if(isRoot) {
         var now = DateTime.Now;
-        xCur.Add(new XAttribute("ver", (new Version(0, 4, (now.Year%100)*100 + now.Month, now.Day*1000 + (int)(now.TimeOfDay.TotalDays*1000)).ToString())));
+        xCur.Add(new XAttribute("ver", (new Version(0, 4, (now.Year % 100) * 100 + now.Month, now.Day * 1000 + (int)(now.TimeOfDay.TotalDays * 1000)).ToString())));
       } else {
         x.Add(xCur);
       }
@@ -261,7 +265,7 @@ namespace X13.Data {
         for(int i = 0; i < ch.Length; i++) {
           var tt = ch[i].GetAsync(null);
           tt.Wait();
-          if(tt.IsCompleted && !tt.IsFaulted && tt.Result!=null) {
+          if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
             tt.Result.ExportI1(xCur);
           }
         }
@@ -365,7 +369,7 @@ namespace X13.Data {
         if(next == null) {
           if(_create) {
             _create = false;
-            if(_path.Length <= idx2 && _state!=null) {
+            if(_path.Length <= idx2 && _state != null) {
               _cur.Connection.SendReq(8, this, _path.Substring(0, idx2), _state, _manifest);
             } else {
               _cur.Connection.SendReq(8, this, _path.Substring(0, idx2));
@@ -545,6 +549,5 @@ namespace X13.Data {
       addChild,
       RemoveChild,
     }
-
   }
 }

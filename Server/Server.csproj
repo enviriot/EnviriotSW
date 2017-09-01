@@ -77,6 +77,7 @@
     <Compile Include="JsLib.cs" />
     <Compile Include="Repository\Perform.cs" />
     <Compile Include="Repository\Repo.cs" />
+    <Compile Include="Repository\RPC.cs" />
     <Compile Include="Repository\SubRec.cs" />
     <Compile Include="Repository\Topic.cs" />
     <Compile Include="HAServer.cs">

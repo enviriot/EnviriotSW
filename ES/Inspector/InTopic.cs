@@ -252,6 +252,9 @@ namespace X13.UI {
       } else {
         _owner.GetAsync("/$YS/TYPES/Core").ContinueWith(tt => FillContextMenuFromChildren(l, tt), TaskScheduler.FromCurrentSynchronizationContext());
       }
+      if(_manifest != null && (v1 = _manifest["Action"]).ValueType == JSC.JSValueType.Object) {
+        FillActions(l, v1);
+      }
       return l;
     }
     private async void FillContextMenuFromChildren(ObservableCollection<Control> l, Task<DTopic> tt) {
@@ -369,7 +372,45 @@ namespace X13.UI {
         l.Add(mi);
       }
     }
+    private void FillActions(ObservableCollection<Control> l, JSC.JSValue lst){
+      JSC.JSValue v2;
+      MenuItem mi;
+      MenuItem ma = new MenuItem() { Header = "Action" };
 
+      foreach(var kv in lst) {
+        mi = new MenuItem() { Header = kv.Value["text"].Value as string, Tag = kv.Value["name"].Value as string };
+
+        if((v2 = kv.Value["icon"]).ValueType == JSC.JSValueType.String) {
+          mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
+        }
+        if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
+          mi.ToolTip = v2.Value;
+        }
+        mi.Click += miAktion_Click;
+        ma.Items.Add(mi);
+      }
+      
+      if(ma.HasItems) {
+        int idx;
+        for(idx = l.Count - 1; idx > 0; idx--) {
+          var c = l[idx];
+          if(l[idx] != null && (l[idx] is Separator)) {
+            idx++;
+            break;
+          }
+        }
+
+        if(ma.Items.Count < 5) {
+          foreach(var sm in ma.Items.OfType<System.Windows.Controls.Control>()) {
+            l.Insert(idx++, sm);
+          }
+        } else {
+          l.Insert(idx++, ma);
+        }
+        l.Insert(idx, new Separator());
+      }
+
+    }
     private void AddSubMenu(MenuItem ma, string prefix, MenuItem mi) {
       MenuItem mm = ma, mn;
       string[] lvls = prefix.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
@@ -416,6 +457,17 @@ namespace X13.UI {
       if(pc_items) {
         PropertyChangedReise("items");
       }
+    }
+    private void miAktion_Click(object sender, System.Windows.RoutedEventArgs e) {
+      var mi = sender as MenuItem;
+      if(mi == null) {
+        return;
+      }
+      var tag = mi.Tag as string;
+      if(tag != null) {
+        _owner.Call(tag, _owner.path);
+      }
+
     }
     private void miOpen_Click(object sender, System.Windows.RoutedEventArgs e) {
       App.Workspace.Open(_owner.fullPath);

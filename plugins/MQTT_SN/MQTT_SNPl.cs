@@ -31,6 +31,19 @@ namespace X13.Periphery {
 
     #region IPlugModul Members
     public void Init() {
+      RPC.Register("MQTT_SN.SendDisconnect", SendDisconnectRpc);
+    }
+
+    private void SendDisconnectRpc(JSC.JSValue[] obj) {
+      string path;
+      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+        return;
+      }
+      var d = _devs.FirstOrDefault(z => z.owner.path == path);
+      if(d != null) {
+        d.Send(new MsDisconnect());
+        d.Disconnect();
+      }
     }
 
     public void Start() {
@@ -182,7 +195,7 @@ namespace X13.Periphery {
         var cm = msg as MsConnect;
         MsDevice dev = _devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
         if(dev == null) {
-          dev = new MsDevice(this, Topic.root.Get("/vacant/" + cm.ClientId, true, _owner));
+          dev = new MsDevice(this, Topic.root.Get("/dev/" + cm.ClientId, true, _owner));
           _devs.Add(dev);
         }
         dev._gate = gate;

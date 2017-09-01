@@ -86,6 +86,16 @@ namespace X13.Data {
         _socket.SendArr(arr);
       }
     }
+    public void SendCmd(string cmd, params JSC.JSValue[] arg) {
+      var arr = new JSL.Array(arg.Length + 1);
+      arr[0] = cmd;
+      for(int i = 0; i < arg.Length; i++) {
+        arr[i + 1] = arg[i] ?? JSC.JSValue.Undefined;
+      }
+      if(Status == ClientState.Ready) {
+        _socket.SendArr(arr);
+      }
+    }
 
     public void Close() {
       var sc = Interlocked.Exchange(ref _socket, null);
