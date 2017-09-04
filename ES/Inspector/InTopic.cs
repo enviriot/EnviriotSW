@@ -252,9 +252,6 @@ namespace X13.UI {
       } else {
         _owner.GetAsync("/$YS/TYPES/Core").ContinueWith(tt => FillContextMenuFromChildren(l, tt), TaskScheduler.FromCurrentSynchronizationContext());
       }
-      if(_manifest != null && (v1 = _manifest["Action"]).ValueType == JSC.JSValueType.Object) {
-        FillActions(l, v1);
-      }
       return l;
     }
     private async void FillContextMenuFromChildren(ObservableCollection<Control> l, Task<DTopic> tt) {
@@ -349,6 +346,9 @@ namespace X13.UI {
         }
         l.Add(new Separator());
       }
+      if((v2 = _manifest["Action"]).ValueType == JSC.JSValueType.Object) {
+        FillActions(l, v2);
+      }
       Uri uri;
       if(System.Windows.Clipboard.ContainsText(System.Windows.TextDataFormat.Text)
         && Uri.TryCreate(System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.Text), UriKind.Absolute, out uri)
@@ -391,23 +391,14 @@ namespace X13.UI {
       }
       
       if(ma.HasItems) {
-        int idx;
-        for(idx = l.Count - 1; idx > 0; idx--) {
-          var c = l[idx];
-          if(l[idx] != null && (l[idx] is Separator)) {
-            idx++;
-            break;
-          }
-        }
-
         if(ma.Items.Count < 5) {
           foreach(var sm in ma.Items.OfType<System.Windows.Controls.Control>()) {
-            l.Insert(idx++, sm);
+            l.Add(sm);
           }
         } else {
-          l.Insert(idx++, ma);
+          l.Add(ma);
         }
-        l.Insert(idx, new Separator());
+        l.Add(new Separator());
       }
 
     }

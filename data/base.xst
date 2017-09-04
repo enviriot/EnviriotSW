@@ -11,15 +11,19 @@
         <i n='Manifest' s='{"mi":{"attr":{"editor":"Attribute","attr":1},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"uri":""},"mi":{"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","editor":"JS","hint":"value converter for input"},"convOut":{"default":"","editor":"JS","hint":"value converter for output"}}},"PLC":{"default":{"tag":0},"mi":{"tag":{"editor":"Enum","enum":"PlcTag"}}},"type":{"default":""}}}' m='{"attr":5}' />
         <i n='Object' s='{"default":{},"willful":true}' m='{"attr":5}' />
         <i n='String' s='{"default":"","willful":true}' m='{"attr":5}' />
-        <i n='TwiDev' s='{"Fields":{"Children":{},"src":{"default":"","editor":"JS"},"type":{"default":""}}}' m='{"attr":5}' />
       </i>
       <i n='ES' m='{"attr":1}' ver="0.4.1703.7005">
         <i n='Connection' s='{"Children":{"default":{}},"Fields":{"Address":{"attr":3},"Dns":{"attr":3},"Port":{"attr":3}},"icon":"EsConnection"}' m='{"attr":5}' />
       </i>
       <i n='Enum' m='{"attr":1}'>
+        <i n='DPlcStatus' s='["unknown","Run","Stop"]'  m='{"attr":7}' />
         <i n='MsStatus' s='["Offline","Online","Sleep"]'  m='{"attr":7}' />
-        <i n='TwiStatus' s='["Offline","Online"]'  m='{"attr":7}' />
         <i n='PlcTag' s='["nope","Binding"]'  m='{"attr":7}' />
+        <i n='TwiStatus' s='["Offline","Online"]'  m='{"attr":7}' />
+      </i>
+      <i n='MsExt'>
+        <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"Enum","enum":"DPlcStatus"}'  m='{"attr":5}' />
+        <i n='TwiDev' s='{"Fields":{"Children":{},"src":{"default":"","editor":"JS"},"type":{"default":""}}}' m='{"attr":5}' />
       </i>
       <i n='MQTT-SN'>
       </i>

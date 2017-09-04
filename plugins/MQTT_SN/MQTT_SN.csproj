@@ -51,6 +51,8 @@
       <Link>Properties\VersionInfo.cs</Link>
     </Compile>
     <Compile Include="Crc16.cs" />
+    <Compile Include="DevicePLC.cs" />
+    <Compile Include="IMsExt.cs" />
     <Compile Include="IMsGate.cs" />
     <Compile Include="MQTT_SNPl.cs" />
     <Compile Include="MsDevice.cs" />

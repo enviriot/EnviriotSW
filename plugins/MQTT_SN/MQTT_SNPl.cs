@@ -22,28 +22,20 @@ namespace X13.Periphery {
 
     internal List<IMsGate> _gates;
     internal List<MsDevice> _devs;
+    internal List<DevicePLC> _plcs;
 
     public MQTT_SNPl() {
       _gates = new List<IMsGate>();
       _devs = new List<MsDevice>();
+      _plcs = new List<DevicePLC>();
       _rand = new Random((int)DateTime.Now.Ticks);
     }
 
     #region IPlugModul Members
     public void Init() {
       RPC.Register("MQTT_SN.SendDisconnect", SendDisconnectRpc);
-    }
-
-    private void SendDisconnectRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
-        return;
-      }
-      var d = _devs.FirstOrDefault(z => z.owner.path == path);
-      if(d != null) {
-        d.Send(new MsDisconnect());
-        d.Disconnect();
-      }
+      RPC.Register("MQTT_SN.PLC.Start", PlcStartRpc);
+      RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
     }
 
     public void Start() {
@@ -114,6 +106,39 @@ namespace X13.Periphery {
       }
     }
 
+    #region RPC
+    private void SendDisconnectRpc(JSC.JSValue[] obj) {
+      string path;
+      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+        return;
+      }
+      var d = _devs.FirstOrDefault(z => z.owner.path == path);
+      if(d != null) {
+        d.Send(new MsDisconnect());
+        d.Disconnect();
+      }
+    }
+    private void PlcStartRpc(JSC.JSValue[] obj) {
+      string path;
+      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+        return;
+      }
+      var d = _plcs.FirstOrDefault(z=>z.path == path);
+      if(d != null) {
+        d.StartPlc();
+      }
+    }
+    private void PlcStopRpc(JSC.JSValue[] obj) {
+      string path;
+      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+        return;
+      }
+      var d = _plcs.FirstOrDefault(z => z.path == path);
+      if(d != null) {
+        d.StopPlc();
+      }
+    }
+    #endregion RPC
     private void SubFunc(Perform p, SubRec sb) {
       if(p.art == Perform.Art.subscribe) {
         if(p.src.GetField("MQTT-SN.phy1_addr").Defined) {

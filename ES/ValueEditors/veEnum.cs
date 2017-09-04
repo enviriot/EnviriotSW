@@ -44,11 +44,13 @@ namespace X13.UI {
         _owner.Root.GetAsync("/$YS/TYPES/Enum/" + manifest["enum"].Value as string).ContinueWith(EnumRcv, TaskScheduler.FromCurrentSynchronizationContext());
       }
       if(_owner.IsReadonly) {
-        base.IsReadOnly = true;
+        //base.IsReadOnly = true;
+        base.IsEnabled = false;
         base.Background = null;
         base.BorderThickness = new System.Windows.Thickness(0, 0, 0, 0);
       } else {
-        base.IsReadOnly = false;
+        //base.IsReadOnly = false;
+        base.IsEnabled = true;
         base.Background = Brushes.White;
         base.BorderThickness = new System.Windows.Thickness(1, 0, 1, 0);
       }

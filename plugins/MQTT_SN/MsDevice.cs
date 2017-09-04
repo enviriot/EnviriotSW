@@ -79,7 +79,6 @@ namespace X13.Periphery {
       _createConv = (JsExtLib.Context.Eval("Function('src', 'return Function(\"name\", \"value\", src);')") as JSL.Function).MakeDelegate(typeof(Func<string, JSC.JSValue>)) as Func<string, JSC.JSValue>;
     }
 
-
     private string _oldName;
     private List<SubRec> _subsscriptions;
     private SubRec _srOwner;
@@ -469,9 +468,11 @@ namespace X13.Periphery {
                 }
               }
               break;
-            case DType.TWI: {
-                if(ti.twi != null) {
-                  ti.twi.Recv(tmp.Data);
+            case DType.TWI:
+            case DType.PLC: 
+              {
+                if(ti.extension != null) {
+                  ti.extension.Recv(tmp.Data);
                 }
               }
               break;
@@ -741,8 +742,13 @@ namespace X13.Periphery {
           }
           _topics.Add(rez);
         }
-        if((rez.dType & ~DType.TypeMask) == DType.TWI && rez.tag.StartsWith("Ta")) {
-          rez.twi = new TWI(rez.topic, rez.PublishWithPayload);
+        var extMask = rez.dType & ~DType.TypeMask;
+        if(extMask == DType.TWI && rez.tag.StartsWith("Ta")) {
+          rez.extension = new TWI(rez.topic, rez.PublishWithPayload);
+        } else if(extMask == DType.PLC && rez.tag == "pa0") {
+          var p = new DevicePLC(rez.topic, rez.PublishWithPayload);
+          rez.extension =  p;
+          _pl._plcs.Add(p);
         }
         //UpdateInMute();
       }
@@ -808,7 +814,11 @@ namespace X13.Periphery {
           }
           cur.SetField("MQTT-SN.tag", tag, owner);
           if(tag.StartsWith("Ta")) {
-            cur.SetField("type", "TWI", owner);
+            cur.SetField("type", "MsExt/TWI", owner);
+            cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
+          } else if(tag == "pa0") {
+            cur.SetField("type", "MsExt/DevicePLC", owner);
+            cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
           }
         }
       }
@@ -1167,7 +1177,7 @@ namespace X13.Periphery {
       public DType dType;
       public JSL.Function convIn;
       public JSL.Function convOut;
-      public TWI twi;
+      public IMsExt extension;
       public void PublishWithPayload(byte[] payload) {
         if(owner.state == State.Disconnected || owner.state == State.Lost) {
           return;
@@ -1176,8 +1186,9 @@ namespace X13.Periphery {
       }
 
       public void Dispose() {
-        var t = Interlocked.Exchange(ref twi, null);
+        var t = Interlocked.Exchange(ref extension, null);
         if(t != null) {
+          owner._pl._plcs.Remove(t as DevicePLC);
           t.Dispose();
         }
       }
@@ -1193,6 +1204,7 @@ namespace X13.Periphery {
       RTC = 0x100,
       LOG = 0x200,
       TWI = 0x300,
+      PLC = 0x400,
     }
     private static Tuple<string, DType>[] _NTTable = new Tuple<string, DType>[]{ 
       new Tuple<string, DType>("In", DType.Boolean),
@@ -1223,8 +1235,7 @@ namespace X13.Periphery {
       new Tuple<string, DType>("Sr", DType.ByteArray),  // Serial port recieve
       new Tuple<string, DType>("Ma", DType.ByteArray),  // Merkers
 
-      //new Tuple<string, DType>("pa", typeof(DevicePLC)),    // Program
-      new Tuple<string, DType>("pa", DType.ByteArray),    // Program
+      new Tuple<string, DType>("pa", DType.ByteArray | DType.PLC),    // Program
       new Tuple<string, DType>("Ta", DType.ByteArray | DType.TWI),
 
     };

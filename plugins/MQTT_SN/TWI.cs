@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using System.Threading;
 
 namespace X13.Periphery {
-  internal class TWI : IDisposable {
+  internal class TWI : IMsExt {
     private Topic _owner;
     private Topic _verbose;
     private Action<byte[]> _pub;
