@@ -251,7 +251,7 @@ namespace X13.Periphery {
         //  if(_statistic.value) {
         //    StatConnectTime();
         //  }
-      } else if(_state == State.Lost || _state==State.Disconnected ) {
+      } else if(_state == State.Lost || _state == State.Disconnected) {
         Send(new MsDisconnect());
         return;
       }
@@ -469,8 +469,7 @@ namespace X13.Periphery {
               }
               break;
             case DType.TWI:
-            case DType.PLC: 
-              {
+            case DType.PLC: {
                 if(ti.extension != null) {
                   ti.extension.Recv(tmp.Data);
                 }
@@ -660,7 +659,17 @@ namespace X13.Periphery {
         }
         return;
       }
-      if(_state == State.Connected) {
+      if(_state == State.Connected || _state==State.AWake) {
+        foreach(var t in _topics) {
+          if(t.extension != null) {
+            try {
+              t.extension.Tick();
+            }
+            catch(Exception ex) {
+              Log.Warning("{0}.Tick - {1}", t.topic.path, ex.ToString());
+            }
+          }
+        }
         if(_has_RTC) {
           var now = DateTime.Now;
           if((now - _last_RTC).TotalHours > 1) {
@@ -670,14 +679,6 @@ namespace X13.Periphery {
             Send(new MsPublish(RTC_EXCH, pl));
           }
         }
-        //if(Pool != null) {
-        //  try {
-        //    Pool();
-        //  }
-        //  catch(Exception ex) {
-        //    Log.Warning("{0}.ReisePool - {1}", Owner, ex.ToString());
-        //  }
-        //}
       }
     }
 
@@ -747,7 +748,7 @@ namespace X13.Periphery {
           rez.extension = new TWI(rez.topic, rez.PublishWithPayload);
         } else if(extMask == DType.PLC && rez.tag == "pa0") {
           var p = new DevicePLC(rez.topic, rez.PublishWithPayload);
-          rez.extension =  p;
+          rez.extension = p;
           _pl._plcs.Add(p);
         }
         //UpdateInMute();
@@ -819,6 +820,11 @@ namespace X13.Periphery {
           } else if(tag == "pa0") {
             cur.SetField("type", "MsExt/DevicePLC", owner);
             cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
+            var src = cur.Get("src", true, owner);
+            src.SetField("editor", "JS", owner);
+            src.SetField("MQTT-SN.tag", "---", owner);
+            src.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+            src.SetState("", owner);
           }
         }
       }
@@ -1033,7 +1039,7 @@ namespace X13.Periphery {
       if(msg == null && !_waitAck && state == State.AWake) {
         Tick();
         if(_waitAck) {
-          return; // sended from pool
+          return; // is busy
         }
       }
       if(msg != null || state == State.AWake) {

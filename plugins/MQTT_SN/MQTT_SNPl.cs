@@ -34,6 +34,8 @@ namespace X13.Periphery {
     #region IPlugModul Members
     public void Init() {
       RPC.Register("MQTT_SN.SendDisconnect", SendDisconnectRpc);
+      RPC.Register("MQTT_SN.PLC.Build", PlcBuildRpc);
+      RPC.Register("MQTT_SN.PLC.Run", PlcRunRpc);
       RPC.Register("MQTT_SN.PLC.Start", PlcStartRpc);
       RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
     }
@@ -118,12 +120,22 @@ namespace X13.Periphery {
         d.Disconnect();
       }
     }
+    private void PlcBuildRpc(JSC.JSValue[] obj) {
+      string path;
+      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+        return;
+      }
+      var d = _plcs.FirstOrDefault(z => z.path == path);
+      if(d != null) {
+        d.Build();
+      }
+    }
     private void PlcStartRpc(JSC.JSValue[] obj) {
       string path;
       if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
         return;
       }
-      var d = _plcs.FirstOrDefault(z=>z.path == path);
+      var d = _plcs.FirstOrDefault(z => z.path == path);
       if(d != null) {
         d.StartPlc();
       }
@@ -138,6 +150,19 @@ namespace X13.Periphery {
         d.StopPlc();
       }
     }
+    private void PlcRunRpc(JSC.JSValue[] obj) {
+      string path;
+      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+        return;
+      }
+      var d = _plcs.FirstOrDefault(z => z.path == path);
+      if(d != null) {
+        d.Run();
+      }
+    }
+
+
+
     #endregion RPC
     private void SubFunc(Perform p, SubRec sb) {
       if(p.art == Perform.Art.subscribe) {
@@ -220,7 +245,9 @@ namespace X13.Periphery {
         var cm = msg as MsConnect;
         MsDevice dev = _devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
         if(dev == null) {
-          dev = new MsDevice(this, Topic.root.Get("/dev/" + cm.ClientId, true, _owner));
+          var dt = Topic.root.Get("/dev/" + cm.ClientId, true, _owner);
+          dt.SetAttribute(Topic.Attribute.Readonly);
+          dev = new MsDevice(this, dt);
           _devs.Add(dev);
         }
         dev._gate = gate;

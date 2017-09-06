@@ -47,6 +47,7 @@ namespace X13.Periphery {
       }
     }
 
+    #region IMsExt Members
     public void Recv(byte[] buf) {
       if(buf == null || buf.Length < 4) {
         if(verbose) {
@@ -98,6 +99,10 @@ namespace X13.Periphery {
         }
       }
     }
+    public void Tick() {
+      // nothing
+    }
+    #endregion IMsExt Members
     private void SendReq() {
       if(Interlocked.CompareExchange(ref _flag, 2, 1) == 1) {
         if(_reqs.Any()) {
@@ -247,5 +252,7 @@ namespace X13.Periphery {
       }
       #endregion IDisposable Member
     }
+
+
   }
 }

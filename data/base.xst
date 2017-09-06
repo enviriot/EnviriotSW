@@ -22,7 +22,7 @@
         <i n='TwiStatus' s='["Offline","Online"]'  m='{"attr":7}' />
       </i>
       <i n='MsExt'>
-        <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"Enum","enum":"DPlcStatus"}'  m='{"attr":5}' />
+        <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Build","text":"Build programm"},{"name":"MQTT_SN.PLC.Run","text":"Run"},{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"Enum","enum":"DPlcStatus"}'  m='{"attr":5}' />
         <i n='TwiDev' s='{"Fields":{"Children":{},"src":{"default":"","editor":"JS"},"type":{"default":""}}}' m='{"attr":5}' />
       </i>
       <i n='MQTT-SN'>
