@@ -85,17 +85,30 @@ namespace X13.Periphery {
           t.SetField("MQTT-SN.tag", v);
         }
       }
-      //if(c.varList != null) {
-      //  var maping = _owner.Get("_map");
-      //  maping.Get<long>("revision").value++;
-      //  var toRemove = maping.children.Where(z => z != null && z.valueType == typeof(string)).Select(z => z.name).Except(c.varList.Select(z => z.Key)).ToArray();
-      //  for(var i = 0; i < toRemove.Length; i++) {
-      //    maping.Get(toRemove[i]).Remove();
-      //  }
-      //  foreach(var kv in c.varList) {
-      //    maping.Get<string>(kv.Key).value = kv.Value;
-      //  }
-      //}
+      var ch_t = JSC.JSObject.CreateObject();
+      if(c.varList != null) {
+        string n;
+        JSC.JSObject o, mo, mqo;
+        foreach(var kv in c.varList) {
+          n = kv.Key.Replace('.', '_');
+          o = JSC.JSObject.CreateObject();
+          mo = JSC.JSObject.CreateObject();
+          mqo = JSC.JSObject.CreateObject();
+          mqo["tag"] = kv.Value;
+          mo["MQTT-SN"] = mqo;
+          o["manifest"] = mo;
+          if(kv.Value.StartsWith("i") || kv.Value.StartsWith("o")) {
+            o["default"] = false;
+          } else {
+            o["default"] = 0;
+            o["type"] = "Integer";
+          }
+          o["menu"] = "plc";
+          ch_t[n] = o;
+        }
+      }
+      _owner.parent.SetField("Children", ch_t, _owner);
+
       _stackBottom = (c.StackBottom + 3) / 4;
       _prg = new SortedSet<Chunk>();
       foreach(var kv in c.Hex) {

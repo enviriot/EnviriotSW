@@ -243,10 +243,10 @@ namespace X13.UI {
         l.Add(mi);
         l.Add(new Separator());
       }
-      KeyValuePair<string, JSC.JSValue>[] _acts;
       if(_manifest != null && (v1 = _manifest["Children"]).ValueType == JSC.JSValueType.Object) {
-        _acts = v1.Where(z => z.Value != null && z.Value.ValueType == JSC.JSValueType.Object && z.Value["default"].Defined).ToArray();
-        FillContextMenu(l, _acts);
+        var ad = new Dictionary<string, JSC.JSValue>();
+        Jso2Acts(v1, ad);
+        FillContextMenu(l, ad);
       } else if(_manifest != null && (v1 = _manifest["Children"]).ValueType == JSC.JSValueType.String) {
         _owner.GetAsync(v1.Value as string).ContinueWith(tt=>FillContextMenuFromChildren(l, tt), TaskScheduler.FromCurrentSynchronizationContext());
       } else {
@@ -254,24 +254,34 @@ namespace X13.UI {
       }
       return l;
     }
+    private void Jso2Acts(JSC.JSValue obj, Dictionary<string, JSC.JSValue> act) {
+      foreach(var kv in obj.Where(z => z.Value != null && z.Value.ValueType == JSC.JSValueType.Object && z.Value["default"].Defined)) {
+        if(!act.ContainsKey(kv.Key)) {
+          act.Add(kv.Key, kv.Value);
+        }
+      }
+      if(obj.__proto__ != null && !obj.__proto__.IsNull && obj.Defined && obj.__proto__.ValueType == JSC.JSValueType.Object) {
+        Jso2Acts(obj.__proto__, act);
+      }
+    }
     private async void FillContextMenuFromChildren(ObservableCollection<Control> l, Task<DTopic> tt) {
-      List<KeyValuePair<string, JSC.JSValue>> acts=new List<KeyValuePair<string,JSC.JSValue>>();
+      var acts = new Dictionary<string, JSC.JSValue>();
       if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
         foreach(var t in tt.Result.children) {
           var z = await t.GetAsync(null);
           if(z.value.ValueType == JSC.JSValueType.Object && z.value.Value != null && z.value["default"].Defined) {
-            acts.Add(new KeyValuePair<string, JSC.JSValue>(z.name, z.value));
+            acts.Add(z.name, z.value);
           }
         }
       }
-      FillContextMenu(l, acts.ToArray());
+      FillContextMenu(l, acts);
     }
-    private void FillContextMenu(ObservableCollection<Control> l, KeyValuePair<string, JSC.JSValue>[] _acts) {
+    private void FillContextMenu(ObservableCollection<Control> l, Dictionary<string, JSC.JSValue> _acts) {
       JSC.JSValue v2;
       MenuItem mi;
       MenuItem ma = new MenuItem() { Header = "Add" };
 
-      if(_acts != null && _acts.Length > 0) {
+      if(_acts != null) {
         List<RcUse> resource = new List<RcUse>();
         string rName;
         JSC.JSValue tmp1;
