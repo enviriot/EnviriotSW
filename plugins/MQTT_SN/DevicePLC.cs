@@ -108,7 +108,11 @@ namespace X13.Periphery {
         }
       }
       _owner.parent.SetField("Children", ch_t, _owner);
-
+      string sTag;
+      var ToDel = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").Value as string) != null && sTag.StartsWith("M") && c.varList.All(z1 => sTag != z1.Value)).ToArray();
+      foreach(var t in ToDel) {
+        t.Remove(_owner);
+      }
       _stackBottom = (c.StackBottom + 3) / 4;
       _prg = new SortedSet<Chunk>();
       foreach(var kv in c.Hex) {
