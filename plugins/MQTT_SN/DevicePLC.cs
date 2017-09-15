@@ -9,6 +9,8 @@ using X13.Repository;
 
 namespace X13.Periphery {
   internal class DevicePLC : IMsExt {
+    private static int _cntCom = 0;
+    private readonly int _idx;
     private Topic _owner;
     private Action<byte[]> _pub;
     private Topic _verbose;
@@ -32,6 +34,7 @@ namespace X13.Periphery {
     private uint _stackBottom;
 
     public DevicePLC(Topic owner, Action<byte[]> pub) {
+      _idx = System.Threading.Interlocked.Increment(ref _cntCom);
       this._owner = owner;
       this._pub = pub;
       this._verbose = Topic.root.Get("/$YS/DevicePLC/verbose");
@@ -270,6 +273,10 @@ namespace X13.Periphery {
       _owner.SetState(0);
     }
     #endregion IDisposable Member
+
+    public override string ToString() {
+      return (_owner!=null?_owner.path:"unk") + "["+_idx.ToString()+"]";
+    }
 
     private enum Cmd : byte {
       Idle = 0,

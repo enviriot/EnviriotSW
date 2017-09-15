@@ -243,6 +243,9 @@ namespace X13.Periphery {
           s.Dispose();
         }
         _subsscriptions.Clear();
+        foreach(var ts in _topics) {
+          ts.Dispose();
+        }
         _topics.Clear();
         lock(_sendQueue) {
           _sendQueue.Clear();
@@ -634,7 +637,7 @@ namespace X13.Periphery {
           ResetTimer();
           return;
         } else {
-          Log.Debug("$ {0}.TimeOut try={1} msg={2}", owner.name, msg.tryCnt, msg);
+          //Log.Debug("$ {0}.TimeOut try={1} msg={2}", owner.name, msg.tryCnt, msg);
           if(!msg.IsRequest || msg.tryCnt > 0) {
             SendIntern(msg);
             return;
@@ -1168,6 +1171,10 @@ namespace X13.Periphery {
         _topics.Clear();
         lock(_sendQueue) {
           _sendQueue.Clear();
+        }
+        // Disconnect all devices connected via this
+        foreach(var d in _pl._devs.Where(z => z._gate == this && z.state != State.Disconnected && z.state != State.Lost).ToArray()) {
+          d.Disconnect(0);
         }
       }
       _waitAck = false;
