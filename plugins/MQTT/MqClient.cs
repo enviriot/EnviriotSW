@@ -19,7 +19,7 @@ namespace X13.MQTT {
     private string _host, _uName, _uPass;
     private int _port;
     private MqStreamer _stream;
-    private int _keepAliveMS;
+    private const int KEEP_ALIVE = 30000;
     private bool _waitPingResp;
     private Timer _tOut;
 
@@ -28,7 +28,6 @@ namespace X13.MQTT {
     public Status status { get; private set; }
 
     public MqClient(MQTTPl pl, string host, int port, string uName, string uPass) {
-      _keepAliveMS = 9950;    // 10 sec
       _tOut = new Timer(new TimerCallback(TimeOut));
       _pl = pl;
       _host = host;
@@ -80,7 +79,7 @@ namespace X13.MQTT {
         _stream = new MqStreamer(_tcp, Received, SendIdle);
         var id = string.Format("{0}_{1:X4}", Environment.MachineName, System.Diagnostics.Process.GetCurrentProcess().Id);
         var ConnInfo = new MqConnect();
-        ConnInfo.keepAlive = (ushort)(_keepAliveMS + 50 / 1000);
+        ConnInfo.keepAlive = (ushort)(KEEP_ALIVE / 1000);
         ConnInfo.cleanSession = true;
         ConnInfo.clientId = id;
         if(_uName != null) {
@@ -90,16 +89,13 @@ namespace X13.MQTT {
           }
         }
         this.Send(ConnInfo);
-        _tOut.Change(3000, _keepAliveMS);       // better often than never
+        _tOut.Change(3000, KEEP_ALIVE);       // better often than never
       }
       catch(Exception ex) {
         var se = ex as SocketException;
         if(se != null && (se.SocketErrorCode == SocketError.ConnectionRefused || se.SocketErrorCode == SocketError.TryAgain || se.SocketErrorCode == SocketError.TimedOut)) {
           status = Status.Disconnected;
-          if(_keepAliveMS < 900000) {
-            _keepAliveMS = (new Random()).Next(_keepAliveMS * 3, _keepAliveMS * 6);
-          }
-          _tOut.Change(_keepAliveMS, Timeout.Infinite);
+          _tOut.Change((new Random()).Next(KEEP_ALIVE * 3, KEEP_ALIVE * 6), Timeout.Infinite);
         } else {
           status = Status.NotAccepted;
           _tOut.Change(Timeout.Infinite, Timeout.Infinite);
@@ -117,8 +113,7 @@ namespace X13.MQTT {
           MqConnack cm = msg as MqConnack;
           if(cm.Response == MqConnack.MqttConnectionResponse.Accepted) {
             status = Status.Connected;
-            _keepAliveMS = 9950;
-            _tOut.Change(_keepAliveMS*2, _keepAliveMS);
+            _tOut.Change(KEEP_ALIVE*2, KEEP_ALIVE);
             Log.Info("Connected to {0}", Signature);
             if(Sites.Any()) {
               var sMsg = new MqSubscribe();
@@ -135,7 +130,7 @@ namespace X13.MQTT {
         break;
       case MessageType.DISCONNECT:
         status = Status.Disconnected;
-        _tOut.Change(3000, _keepAliveMS);
+        _tOut.Change(3000, KEEP_ALIVE);
         break;
       case MessageType.PINGRESP:
         _waitPingResp = false;
@@ -166,7 +161,7 @@ namespace X13.MQTT {
         break;
       }
       if(_waitPingResp) {
-        _tOut.Change(_keepAliveMS, _keepAliveMS);
+        _tOut.Change(KEEP_ALIVE, KEEP_ALIVE);
       }
     }
 
@@ -204,7 +199,7 @@ namespace X13.MQTT {
           Log.Warning("{0} - ConnAck timeout", Signature);
         }
         Dispose();
-        _tOut.Change(1500, _keepAliveMS);
+        _tOut.Change(1500, KEEP_ALIVE);
       }
     }
 

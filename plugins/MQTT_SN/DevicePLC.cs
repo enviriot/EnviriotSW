@@ -74,7 +74,6 @@ namespace X13.Periphery {
       _pub(new byte[] { (byte)Cmd.PlcStartReq });
     }
     public void StopPlc() {
-      _st = 4;
       _pub(new byte[] { (byte)Cmd.PlcStopReq });
     }
     public void Run() {
@@ -152,8 +151,10 @@ namespace X13.Periphery {
         return;
       }
       bool processed = false;
-
-      if(_st == 2 && msgData[0] == (byte)Cmd.GetCRCResp) {
+      if(msgData[0] == (byte)Cmd.Idle) {
+        PlcStoped = false;
+        processed = true;
+      } else if(_st == 2 && msgData[0] == (byte)Cmd.GetCRCResp) {
         if(_curChunk != null && msgData.Length == 4 && msgData[1] == 0) {
           _curChunk.crcDev = (msgData[3] << 8) | msgData[2];
           if(_curChunk.crcDev == _curChunk.crcCur) {
