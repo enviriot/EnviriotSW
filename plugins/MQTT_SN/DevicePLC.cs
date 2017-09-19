@@ -180,7 +180,7 @@ namespace X13.Periphery {
           _st = 0;
         } else {
           PlcStoped = true;
-          _st = _curChunk == null ? 1 : 5;
+          _st = _st==4?(_curChunk == null ? 1 : 5):0;
           processed = true;
         }
       } else if(_st == 6 && msgData.Length == 2 && msgData[0] == (byte)Cmd.WriteBlockResp) {
