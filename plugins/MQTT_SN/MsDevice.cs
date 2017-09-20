@@ -932,43 +932,6 @@ namespace X13.Periphery {
             val = new ByteArray(msgData);
           }
           break;
-        /*
-        if(ti.topic.valueType == typeof(SmartTwi)) {
-          var sa = (ti.topic.GetValue() as SmartTwi);
-          if(sa == null) {
-            sa = new SmartTwi(ti.topic);
-            sa.Recv(msgData);
-            val = sa;
-          } else {
-            sa.Recv(msgData);
-            return;
-          }
-          break;
-        } else if(ti.topic.valueType == typeof(TWIDriver)) {
-          var twi = (ti.topic.GetValue() as TWIDriver);
-          if(twi == null) {
-            twi = new TWIDriver(ti.topic);
-            twi.Recv(msgData);
-            val = twi;
-          } else {
-            twi.Recv(msgData);
-            return;
-          }
-          break;
-        } else if(ti.topic.valueType == typeof(DevicePLC)) {
-          var plc = (ti.topic.GetValue() as DevicePLC);
-          if(plc == null) {
-            plc = new DevicePLC(ti.topic);
-            plc.Recv(msgData);
-            val = plc;
-          } else {
-            plc.Recv(msgData);
-            return;
-          }
-          break;
-        } else {
-          return;
-        }*/
         default:
           return;
         }
@@ -988,6 +951,9 @@ namespace X13.Periphery {
             if(ti.topic.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
               ti.topic.ClearAttribute(Topic.Attribute.DB);
             }
+          }
+          if(ti.it == TopicIdType.PreDefined && ti.TopicId >= 0xFFC0) {
+            ti.topic.SetAttribute(Topic.Attribute.Readonly);
           }
           if(ti.convIn != null) {
             try {

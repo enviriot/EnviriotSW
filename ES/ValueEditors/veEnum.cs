@@ -33,9 +33,20 @@ namespace X13.UI {
     }
 
     public void ValueChanged(JSC.JSValue value) {
-      if(_enumT != null && _enumT.value.ValueType == JSC.JSValueType.Object) {
+      if(!base.Items.IsEmpty) {
+        if(value.ValueType == JSC.JSValueType.Double) {
+          value = new JSL.Number((int)value);
+        }
         _oldValue = value;
-        base.SelectedItem = _enumT.value[value.ToString()];
+        var it = base.Items.SourceCollection.OfType<TextBlock>().FirstOrDefault(z =>  value.Equals(z.Tag as JSC.JSValue) );
+        if(it == null) {
+          base.SelectedIndex = 0;
+        } else {
+          base.SelectedItem = it;
+        }
+        if((it = base.SelectedItem as TextBlock) != null) {
+          base.Background = it.Background;
+        }
       }
     }
 
@@ -46,12 +57,10 @@ namespace X13.UI {
       if(_owner.IsReadonly) {
         //base.IsReadOnly = true;
         base.IsEnabled = false;
-        base.Background = null;
         base.BorderThickness = new System.Windows.Thickness(0, 0, 0, 0);
       } else {
         //base.IsReadOnly = false;
         base.IsEnabled = true;
-        base.Background = Brushes.White;
         base.BorderThickness = new System.Windows.Thickness(1, 0, 1, 0);
       }
     }
@@ -71,9 +80,37 @@ namespace X13.UI {
 
     private void _enumT_changed(DTopic.Art a, DTopic t) {
       this.Items.Clear();
+
+      string text;
+      Brush bg_b;
+      Brush fg_b;
+
+
       if(_enumT != null && _enumT.value.ValueType == JSC.JSValueType.Object) {
+        bool isArr = (bool)JSL.Array.isArray(new JSC.Arguments { _enumT.value });
         foreach(var kv in _enumT.value) {
-          this.Items.Add(kv.Value);
+          text = string.Empty;
+          bg_b = null;
+          fg_b = Brushes.Black;
+
+          if(kv.Value.ValueType == JSC.JSValueType.String) {
+            text = kv.Value.Value as string;
+          } else if(kv.Value.ValueType == JSC.JSValueType.Object) {
+            text = kv.Value["text"].Value as string;
+            var bg = kv.Value["BG"];
+            if(bg.ValueType == JSC.JSValueType.String) {
+              try {
+                var c = (Color)ColorConverter.ConvertFromString(bg.Value as string);
+                bg_b = new SolidColorBrush(c);
+                if(Math.Max(c.B, Math.Max(c.G, c.R)) < 64) {
+                  fg_b = Brushes.White;
+                }
+              }
+              catch(Exception) {
+              }
+            }
+          }
+          this.Items.Add(new TextBlock { Tag = isArr ? ((JSC.JSValue)new JSL.Number(int.Parse(kv.Key))) : ((JSC.JSValue)new JSL.String(kv.Key)), Text = text, Background = bg_b, Foreground = fg_b });
         }
         ValueChanged(_owner.value);
       }
@@ -83,21 +120,12 @@ namespace X13.UI {
       if(_owner.IsReadonly || _enumT==null || _enumT.value==null || _enumT.value.ValueType!=JSC.JSValueType.Object) {
         return;
       }
-      JSC.JSValue v=null;
-      if((bool)JSL.Array.isArray(new JSC.Arguments{ _enumT.value}) ){
-        v = new JSL.Number(this.SelectedIndex);
-      } else {
-        foreach(var kv in _enumT.value){
-          if(kv.Value==this.SelectedItem) {
-            v=kv.Key;
-            break;
-          }
-        }
-      }
-      if(v==null) {
+      var v = base.SelectedItem as TextBlock;
+      JSC.JSValue k;
+      if(v==null || (k = v.Tag as JSC.JSValue)==null) {
         ValueChanged(_owner.value);  // restore value
-      } else if(_oldValue!=v) {
-        _owner.value = v;
+      } else if(_oldValue!=k) {
+        _owner.value = k;
       }
     }
 

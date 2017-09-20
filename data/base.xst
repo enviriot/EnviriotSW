@@ -16,10 +16,10 @@
         <i n='Connection' s='{"Children":{"default":{}},"Fields":{"Address":{"attr":3},"Dns":{"attr":3},"Port":{"attr":3}},"icon":"EsConnection"}' m='{"attr":5}' />
       </i>
       <i n='Enum' m='{"attr":1}'>
-        <i n='DPlcStatus' s='["unknown","Run","Stop"]'  m='{"attr":7}' />
-        <i n='MsStatus' s='["Offline","Online","Sleep"]'  m='{"attr":7}' />
+        <i n='DPlcStatus' s='[{"text":"unknown","BG":"LightGray"},{"text":"Run","BG":"MediumAquamarine"},{"text":"Stop","BG":"Tomato"}]'  m='{"attr":7}'  ver="0.4.1709.20010" />
+        <i n='MsStatus' s='[{"text":"Offline","BG":"Tomato"},{"text":"Online","BG":"MediumAquamarine"},{"text":"Sleep","BG":"SkyBlue"}]'  m='{"attr":7}'  ver="0.4.1709.20010" />
         <i n='PlcTag' s='["nope","Binding"]'  m='{"attr":7}' />
-        <i n='TwiStatus' s='["Offline","Online"]'  m='{"attr":7}' />
+        <i n='TwiStatus' s='[{"text":"Offline","BG":"Tomato"},{"text":"Online","BG":"MediumAquamarine"}]'  m='{"attr":7}'  ver="0.4.1709.20010" />
       </i>
       <i n='MsExt'>
         <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Build","text":"Build programm"},{"name":"MQTT_SN.PLC.Run","text":"Run"},{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"Enum","enum":"DPlcStatus"}'  m='{"attr":5}' />
