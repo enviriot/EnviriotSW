@@ -28,14 +28,15 @@ namespace X13.UI {
       _editors["Attribute"] = veAttribute.Create;
       _editors["Boolean"] = veSliderBool.Create;
       _editors["ByteArray"] = veByteArray.Create;
+      _editors["Date"] = veDateTimePicker.Create;
       _editors["Double"] = veDouble.Create;
       _editors["Editor"] = veEditor.Create;
       _editors["Enum"] = veEnum.Create;
       _editors["Integer"] = veInteger.Create;
       _editors["JS"] = veJS.Create;
       _editors["Hexadecimal"] = veHexadecimal.Create;
+      _editors["MsStatus"] = veMsStatus.Create;
       _editors["String"] = veString.Create;
-      _editors["Date"] = veDateTimePicker.Create;
       _editors["TopicReference"] = veTopicReference.Create;
       _editors["Version"] = veVersion.Create;
     }

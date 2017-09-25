@@ -247,8 +247,9 @@ namespace X13.Periphery {
         if(dev == null) {
           var dt = Topic.root.Get("/dev/" + cm.ClientId, true, _owner);
           dt.SetAttribute(Topic.Attribute.Readonly);
-          dt.SetField("editor", "Enum");
-          dt.SetField("enum", "MsStatus");
+          dt.SetField("editor", "MsStatus");
+          //dt.SetField("editor", "Enum");
+          //dt.SetField("enum", "MsStatus");
           dev = new MsDevice(this, dt);
           _devs.Add(dev);
         }

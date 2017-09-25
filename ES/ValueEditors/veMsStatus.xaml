@@ -1,0 +1,18 @@
+﻿<UserControl x:Class="X13.UI.veMsStatus"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="20" d:DesignWidth="300">
+    <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="20"/>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition/>
+    </Grid.ColumnDefinitions>
+    <Image Grid.Column="0" Name="imStatus" Source="/ES;component/Images/log_deb.png" Height="16" Width="16"  />
+    <TextBlock  Grid.Column="1" Name="tbStatus" Text="unknown" Margin="15,0" Foreground="Gray" VerticalAlignment="Center"/>
+    <TextBlock Grid.Column="2" Name="tbVia" Text="Test" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+  </Grid>
+</UserControl>

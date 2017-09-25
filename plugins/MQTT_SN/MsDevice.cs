@@ -207,13 +207,20 @@ namespace X13.Periphery {
       set {
         if(_state != value) {
           _state = value;
+          int st;
           if(_state == State.Connected || _state == State.AWake) {
-            owner.SetState(1);
+            st = 1;
           } else if(_state == State.ASleep) {
-            owner.SetState(2);
+            st = 2;
           } else {
-            owner.SetState(0);
+            st = 0;
           }
+          var v = JSC.JSObject.CreateObject();
+          v["st"] = st;
+          if(st != 0 && _gate != null) {
+            v["via"] = _gate.name;
+          }
+          owner.SetState(v);
         }
       }
     }
