@@ -2,13 +2,13 @@
 <xst path='/'>
   <i n='$YS' m='{"attr":1}'>
     <i n='TYPES' m='{"attr":1}'>
-      <i n='Core' m='{"attr":1}' ver="0.4.1705.4008">
+      <i n='Core' m='{"attr":1}' ver="0.4.1709.25010">
         <i n='Boolean' s='{"default":false,"willful":true}' m='{"attr":5}' />
         <i n='ByteArray' s='{"default":"¤BA","willful":true}' m='{"attr":5}' />
         <i n='Date' s='{"default":"1001-01-01T12:00:00.000Z","willful":true}' m='{"attr":5}' />
         <i n='Double' s='{"default":0,"willful":true}' m='{"attr":5}' />
         <i n='Integer' s='{"default":0,"manifest":{"editor":"Integer"},"willful":true}' m='{"attr":5}' />
-        <i n='Manifest' s='{"mi":{"attr":{"editor":"Attribute","attr":1},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"uri":""},"mi":{"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","editor":"JS","hint":"value converter for input"},"convOut":{"default":"","editor":"JS","hint":"value converter for output"}}},"PLC":{"default":{"tag":0},"mi":{"tag":{"editor":"Enum","enum":"PlcTag"}}},"type":{"default":""}}}' m='{"attr":5}' />
+        <i n='Manifest' s='{"mi":{"attr":{"editor":"Attribute","attr":1},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"uri":""},"mi":{"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","editor":"JS","hint":"value converter for input"},"convOut":{"default":"","editor":"JS","hint":"value converter for output"},"suppressed":{"default":true}}},"PLC":{"default":{"tag":0},"mi":{"tag":{"editor":"Enum","enum":"PlcTag"}}},"type":{"default":""}}}' m='{"attr":5}' />
         <i n='Object' s='{"default":{},"willful":true}' m='{"attr":5}' />
         <i n='String' s='{"default":"","willful":true}' m='{"attr":5}' />
       </i>
@@ -17,7 +17,6 @@
       </i>
       <i n='Enum' m='{"attr":1}'>
         <i n='DPlcStatus' s='[{"text":"unknown","BG":"LightGray"},{"text":"Run","BG":"MediumAquamarine"},{"text":"Stop","BG":"Tomato"}]'  m='{"attr":7}'  ver="0.4.1709.20010" />
-        <i n='MsStatus' s='[{"text":"Offline","BG":"Tomato"},{"text":"Online","BG":"MediumAquamarine"},{"text":"Sleep","BG":"SkyBlue"}]'  m='{"attr":7}'  ver="0.4.1709.20010" />
         <i n='PlcTag' s='["nope","Binding"]'  m='{"attr":7}' />
         <i n='TwiStatus' s='[{"text":"Offline","BG":"Tomato"},{"text":"Online","BG":"MediumAquamarine"}]'  m='{"attr":7}'  ver="0.4.1709.20010" />
       </i>

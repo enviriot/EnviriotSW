@@ -97,6 +97,7 @@ namespace X13.Periphery {
     private bool _has_RTC;
     private DateTime _last_RTC;
     private JSC.JSObject _self;
+    private byte[] _suppressedInputs;
 
     public readonly Topic owner;
     public IMsGate _gate;
@@ -360,6 +361,7 @@ namespace X13.Periphery {
           Send(new MsSuback(tmp.qualityOfService, topicId, msg.MessageId, retCode));
           if(state == State.PreConnect) {
             state = State.Connected;
+            UpdateSuppressedInputs();
           }
           if(t != null) {
             SubRec s = t.Subscribe(mask, "MQTT-SN.", PublishTopic);
@@ -876,6 +878,7 @@ namespace X13.Periphery {
       }
       if(p.art == Perform.Art.changedField && ti != null) {
         UpdateConverters(ti);
+        UpdateSuppressedInputs();
       }
       if(ti == null && (p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe)) {
         ti = GetTopicInfo(p.src, true);
@@ -990,6 +993,26 @@ namespace X13.Periphery {
       }
       if(nid > (int)_messageIdGen || (nid < 0x0100 && _messageIdGen > 0xFF00)) {
         _messageIdGen = (ushort)nid;      // synchronize messageId
+      }
+    }
+
+    private void UpdateSuppressedInputs() {
+      List<byte> si = new List<byte>();
+      si.Add(0);
+      int idx, i;
+      JSC.JSValue sj;
+      foreach(var ti in _topics.Where(z=>z.tag.StartsWith("I") || z.tag.StartsWith("A"))) {
+        if(ti.tag.Length > 2 && int.TryParse(ti.tag.Substring(2), out idx) && (sj = ti.topic.GetField("MQTT-SN.suppressed")).ValueType == JSC.JSValueType.Boolean && ((bool)sj)) {
+          i = idx / 8;
+          while(si.Count <= i) {
+            si.Add(0);
+          }
+          si[i] |= (byte)(1 << (idx % 8));
+        }
+      }
+      if(_suppressedInputs == null || _suppressedInputs.Length != si.Count || !_suppressedInputs.SequenceEqual(si)) {
+        _suppressedInputs = si.ToArray();
+        Send(new MsPublish(0xFF09, _suppressedInputs)); //".MQTT-SN.SupressInputs"
       }
     }
 
