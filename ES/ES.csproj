@@ -253,6 +253,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <Resource Include="Images\filter.png" />
     <Resource Include="Images\ty_topic.png" />
   </ItemGroup>
   <ItemGroup>

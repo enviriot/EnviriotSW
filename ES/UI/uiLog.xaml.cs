@@ -18,6 +18,8 @@ using System.Windows.Shapes;
 namespace X13.UI {
   public partial class uiLog : BaseWindow {
     private ObservableCollection<LogEntry> LogCollection;
+    private System.Text.RegularExpressions.Regex _filter;
+    private bool _showDebug, _useFilter;
 
     public uiLog() {
       LogCollection = new ObservableCollection<LogEntry>();
@@ -28,7 +30,7 @@ namespace X13.UI {
       InitializeComponent();
 
       var v = CollectionViewSource.GetDefaultView(LogCollection);
-      (v as System.ComponentModel.ICollectionView).Filter = (o) => (o as LogEntry).ll != LogLevel.Debug;
+      v.Filter = FilterFunc;
       lbLog.ItemsSource = v;
     }
     public override Visibility IsVisibleL {
@@ -77,16 +79,40 @@ namespace X13.UI {
     private void BaseWindow_MouseLeave(object sender, MouseEventArgs e) {
       lbLog.SelectedItem = null;
     }
-    private void ToggleButton_Changed(object sender, RoutedEventArgs e) {
-      if(tbShowDebug.IsChecked == true) {
-        (lbLog.ItemsSource as System.ComponentModel.ICollectionView).Filter = (o) => true;
-      } else {
-        (lbLog.ItemsSource as System.ComponentModel.ICollectionView).Filter = (o) => (o as LogEntry).ll != LogLevel.Debug;
-      }
-    }
 
     private void buClearLog_Click(object sender, RoutedEventArgs e) {
       LogCollection.Clear();
+    }
+
+    private void buFilter_Changed(object sender, RoutedEventArgs e) {
+      _showDebug = tbShowDebug.IsChecked == true;
+      _useFilter = buFilter.IsChecked == true;
+      (lbLog.ItemsSource as System.ComponentModel.ICollectionView).Refresh();
+    }
+
+    private void tbFilter_TextChanged(object sender, TextChangedEventArgs e) {
+      try {
+        _filter = new System.Text.RegularExpressions.Regex(tbFilter.Text);
+        tbFilter.Background = Brushes.White;
+        (lbLog.ItemsSource as System.ComponentModel.ICollectionView).Refresh();
+      }
+      catch(Exception) {
+        _filter = null;
+        tbFilter.Background = Brushes.Orange;
+      }
+    }
+    private bool FilterFunc(object o) {
+      var e = o as LogEntry;
+      if(e == null) {
+        return false;
+      }
+      if(!_showDebug && e.ll == LogLevel.Debug) {
+        return false;
+      }
+      if(_useFilter && _filter!=null && !_filter.IsMatch(e.msg)) {
+        return false;
+      }
+      return true;
     }
   }
 }
