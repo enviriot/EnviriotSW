@@ -827,7 +827,7 @@ namespace X13.Periphery {
           }
           cur.SetField("MQTT-SN.tag", tag, owner);
           if(tag.StartsWith("Ta")) {
-            cur.SetField("type", "MsExt/TWI", owner);
+            cur.SetField("type", "TWI", owner);
             cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
           } else if(tag == "pa0") {
             cur.SetField("type", "MsExt/DevicePLC", owner);

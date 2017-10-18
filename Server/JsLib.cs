@@ -10,7 +10,7 @@ using System.Text;
 
 namespace X13 {
   public static class JsLib {
-    
+
     public static readonly char[] SPLITTER_OBJ = new char[] { '.' };
     private static JSF.ExternalFunction _JSON_Replacer;
     static JsLib() {
@@ -40,27 +40,40 @@ namespace X13 {
     public static JSC.JSValue ParseJson(string json) {
       return JSL.JSON.parse(json, _JSON_Replacer);
     }
-    public static void SetField(ref JSC.JSValue obj, string path, JSC.JSValue val) {
-      var ps = path.Split(SPLITTER_OBJ, StringSplitOptions.RemoveEmptyEntries);
-      if(obj == null) {
-        obj = JSC.JSObject.CreateObject();
+    public static JSC.JSValue SetField(JSC.JSValue oc, string path, JSC.JSValue val) {
+      if(string.IsNullOrEmpty(path)) {
+        return val;
       }
-      JSC.JSValue p = obj, c;
-      for(int i = 0; i < ps.Length - 1; i++) {
-        c = p.GetProperty(ps[i]);
-        if(c.ValueType <= JSC.JSValueType.Undefined || c.IsNull) {
-          c = JSC.JSObject.CreateObject();
-          p[ps[i]] = c;
-        } else if(c.ValueType != JSC.JSValueType.Object) {
-          return;
+      if(oc == null) {
+        oc = JSC.JSValue.Null;
+      }
+      var ps = path.Split(JsLib.SPLITTER_OBJ, StringSplitOptions.RemoveEmptyEntries);
+      JSC.JSValue ro = JSC.JSObject.CreateObject(), rc, rn, on;
+      rc = ro;
+      for(int i = 0; i < ps.Length; i++) {
+        on = JSC.JSValue.Null;
+        if(oc.ValueType == JSC.JSValueType.Object && oc.Value != null) {
+          foreach(var kv in oc) {
+            if(kv.Key != ps[i]) {
+              rc[kv.Key] = kv.Value;
+            } else {
+              on = kv.Value;
+            }
+          }
         }
-        p = c;
+        if(i == ps.Length-1) {
+          if(val != null && !val.IsNull) {
+            rc[ps[i]] = val;
+          }
+          rn = null;
+        } else {
+          rn = JSC.JSObject.CreateObject();
+          rc[ps[i]] = rn;
+        }
+        rc = rn;
+        oc = on;
       }
-      if(val == null || val.IsNull) {
-        p.DeleteProperty(ps[ps.Length - 1]);
-      } else {
-        p[ps[ps.Length - 1]] = val;
-      }
+      return ro;
     }
     public static JSC.JSValue GetField(JSC.JSValue obj, string path) {
       if(obj == null) {
@@ -70,7 +83,7 @@ namespace X13 {
         return obj;
       }
       var ps = path.Split(SPLITTER_OBJ, StringSplitOptions.RemoveEmptyEntries);
-      JSC.JSValue p = obj, c=null;
+      JSC.JSValue p = obj, c = null;
       for(int i = 0; i < ps.Length; i++) {
         if(p.ValueType != JSC.JSValueType.Object || p.Value == null) {
           return JSC.JSValue.NotExists;
@@ -81,10 +94,10 @@ namespace X13 {
       return c;
     }
     public static JSC.JSValue Clone(JSC.JSValue org) {
-      if(org==null || !org.Defined) {
+      if(org == null || !org.Defined) {
         return org;
       }
-      if(org.ValueType==JSC.JSValueType.Object) {
+      if(org.ValueType == JSC.JSValueType.Object) {
         var ret = JSC.JSObject.CreateObject();
         foreach(var kv in org) {
           ret[kv.Key] = Clone(kv.Value);

@@ -24,6 +24,7 @@ namespace X13.Repository {
     private BsonDocument _ps_manifest;
     private JSValue _state;
     private JSValue _manifest;
+    private JSValue _mfst_upd;
 
     #endregion Member variables
 
@@ -396,30 +397,24 @@ namespace X13.Repository {
           t._ps_state["v"] = Js2Bs(val);
         }
       }
-      public static void SetField(Topic t, string fPath, JSValue val) {
-        try {
-          var ps = fPath.Split(Bill.delmiterObj, StringSplitOptions.RemoveEmptyEntries);
-          JSValue p = t._manifest, c;
-          for(int i = 0; i < ps.Length - 1; i++) {
-            c = p.GetProperty(ps[i]);
-            if(c.ValueType <= JSValueType.Undefined || c.IsNull) {
-              c = JSObject.CreateObject();
-              p[ps[i]] = c;
-            } else if(c.ValueType != JSValueType.Object) {
-              return;
-            }
-            p = c;
-          }
-          if(val == null) {
-            p.DeleteProperty(ps[ps.Length - 1]);
-          } else {
-            p[ps[ps.Length - 1]] = val;
-          }
-          t._ps_manifest["v"] =Js2Bs(t._manifest);
+      public static bool SetField(Perform cmd){
+        Topic t = cmd.src;
+        bool r;
+        JSValue oc;
+        if(t._mfst_upd == null) {
+          r = true;
+          oc = t._manifest??JSValue.Null;
+        } else {
+          r = false;
+          oc = t._mfst_upd;
         }
-        catch(Exception ex) {
-          Log.Warning("{0}.SetField({1}, ..) - {2}", t.path, fPath, ex.Message);
-        }
+
+        t._mfst_upd = JsLib.SetField(oc, cmd.o as string, cmd.f_v);
+        return r;
+      }
+      public static void SetField2(Topic t) {
+        t._manifest = System.Threading.Interlocked.Exchange(ref t._mfst_upd, null);
+        t._ps_manifest["v"] = Js2Bs(t._manifest);
       }
 
       public static void UpdatePath(Topic t) {
@@ -447,7 +442,6 @@ namespace X13.Repository {
       public static void Publish(Perform cmd) {
         SubRec sb;
         Topic t = cmd.src;
-        string tmp_s;
 
         if((cmd.art == Perform.Art.subscribe || cmd.art == Perform.Art.subAck) && (sb = cmd.o as SubRec) != null) {
           try {
@@ -462,7 +456,7 @@ namespace X13.Repository {
               sb = t._subRecords[i];
               if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
                   && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
-                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && (tmp_s = cmd.o as string) != null && tmp_s.StartsWith(sb.prefix)))
+                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))/* (tmp_s = cmd.o as string) != null && tmp_s.StartsWith(sb.prefix)*/))
                   && (cmd.art != Perform.Art.changedLayer || (sb.mask & SubRec.SubMask.Layer) == SubRec.SubMask.Layer)) {
                 try {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());
@@ -661,6 +655,7 @@ namespace X13.Repository {
         }
         throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
       }
+
     }
     [Flags]
     public enum Attribute {

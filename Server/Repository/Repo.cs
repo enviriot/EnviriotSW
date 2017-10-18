@@ -97,10 +97,16 @@ namespace X13.Repository {
           }
         }
         break;
+      case Perform.Art.setField: {
+          if(Topic.I.SetField(c)) {
+            c.art = Perform.Art.changedField;
+            EnquePerf(c);
+          }
+        }
+        break;
 
       case Perform.Art.changedState:
       case Perform.Art.setState:
-      case Perform.Art.setField:
       case Perform.Art.changedField:
       case Perform.Art.changedLayer:
       case Perform.Art.move:
@@ -121,11 +127,8 @@ namespace X13.Repository {
           cmd.art = Perform.Art.changedState;
         }
       }
-      if(cmd.art == Perform.Art.setField) {
-        string fPath = cmd.o as string;
-        cmd.old_o = cmd.src.GetField(fPath);
-        Topic.I.SetField(cmd.src, fPath, cmd.f_v);
-        cmd.art = Perform.Art.changedField;
+      if(cmd.art == Perform.Art.changedField) {
+        Topic.I.SetField2(cmd.src);
       }
       if(cmd.art == Perform.Art.move) {
         Topic.I.SubscribeByMove(cmd.src);
@@ -172,7 +175,7 @@ namespace X13.Repository {
         }
         break;
       case Perform.Art.remove:
-        _states.Delete(manifest["_id"]); 
+        _states.Delete(manifest["_id"]);
         _objects.Delete(manifest["_id"]);
         break;
       }
@@ -248,7 +251,7 @@ namespace X13.Repository {
         }
       }
       if(setVersion) {
-        JsLib.SetField(ref manifest, "version", "¤VR" + ver.ToString());
+        manifest = JsLib.SetField(manifest, "version", "¤VR" + ver.ToString());
       }
 
       if(xElement.Attribute("s") != null) {
@@ -332,7 +335,7 @@ namespace X13.Repository {
 
     public void Start() {
       bool exist = File.Exists("../data/persist.ldb");
-      _db = new LiteDatabase(new ConnectionString("Filename=../data/persist.ldb") { CacheSize=500, Mode = LiteDB.FileMode.Exclusive });
+      _db = new LiteDatabase(new ConnectionString("Filename=../data/persist.ldb") { CacheSize = 500, Mode = LiteDB.FileMode.Exclusive });
       if(exist && !_db.GetCollectionNames().Any(z => z == "objects")) {
         exist = false;
       }
