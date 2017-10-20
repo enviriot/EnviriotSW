@@ -1,5 +1,4 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
-using LiteDB;
 using NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -21,13 +20,9 @@ namespace X13.Repository {
     private List<Perform> _prOp;
     private int _busyFlag;
     private int _pfPos;
-    //private List<Tuple<int, BsonDocument>> _db_q;
-
-    private LiteDatabase _db;
-    private LiteCollection<BsonDocument> _objects, _states;
 
     internal void DoCmd(Perform cmd, bool intern) {
-      if(intern && _prOp.Count > 0 && _pfPos < _prOp.Count && _prOp[_pfPos].layer <= cmd.layer) {  // !!! *.layer==-1
+      if(intern && _prOp.Count > 0 && _pfPos < _prOp.Count) {
         TickStep1(cmd);
         TickStep2(cmd);
       } else {
@@ -108,7 +103,6 @@ namespace X13.Repository {
       case Perform.Art.changedState:
       case Perform.Art.setState:
       case Perform.Art.changedField:
-      case Perform.Art.changedLayer:
       case Perform.Art.move:
         EnquePerf(c);
         break;
@@ -136,58 +130,6 @@ namespace X13.Repository {
       if(cmd.art == Perform.Art.remove) {
         Topic.I.Remove(cmd.src);
       }
-    }
-    private void Store(Perform cmd) {
-      if(_objects == null) {
-        return;
-      }
-      BsonDocument manifest, state;
-      Topic.I.ReqData(cmd.src, out manifest, out state);
-      switch(cmd.art) {
-      case Perform.Art.changedState:
-        if(state != null) {
-          _states.Upsert(state);
-        }
-        break;
-      case Perform.Art.changedLayer:
-        _objects.Update(manifest);
-        break;
-      case Perform.Art.changedField:
-        _objects.Update(manifest);
-        if((cmd.o as string) == "attr") {
-          if(cmd.src.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
-            Topic.I.SetValue(cmd.src, cmd.src.GetState());
-            if(state != null) {
-              _states.Upsert(state);
-            }
-          } else {
-            _states.Delete(manifest["_id"]);
-          }
-        }
-        break;
-      //case Perform.Art.move:
-      //  _objects.Update(manifest);
-      //  break;
-      case Perform.Art.create:
-        _objects.Upsert(manifest);
-        if(cmd.src.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB) && state != null) {
-          _states.Upsert(state);
-        }
-        break;
-      case Perform.Art.remove:
-        _states.Delete(manifest["_id"]);
-        _objects.Delete(manifest["_id"]);
-        break;
-      }
-    }
-
-    internal string Id2Topic(ObjectId id) {
-      var d = _objects.FindById(id);
-      BsonValue p;
-      if(d != null && (p = d["p"]) != null && p.IsString) {
-        return p.AsString;
-      }
-      return null;
     }
 
     #endregion internal Members
@@ -334,21 +276,7 @@ namespace X13.Repository {
     }
 
     public void Start() {
-      bool exist = File.Exists("../data/persist.ldb");
-      _db = new LiteDatabase(new ConnectionString("Filename=../data/persist.ldb") { CacheSize = 500, Mode = LiteDB.FileMode.Exclusive });
-      if(exist && !_db.GetCollectionNames().Any(z => z == "objects")) {
-        exist = false;
-      }
-      _objects = _db.GetCollection<BsonDocument>("objects");
-      _states = _db.GetCollection<BsonDocument>("states");
-      if(!exist) {
-        _objects.EnsureIndex("p", true);
-      } else {
-        foreach(var obj in _objects.FindAll().OrderBy(z => z["p"])) {
-          Topic.I.Create(obj, _states.FindById(obj["_id"]));
-        }
-      }
-      Import("../data/base.xst");
+      Repo.Import("../data/base.xst");
     }
 
     public void Tick() {
@@ -382,12 +310,6 @@ namespace X13.Repository {
         }
       }
 
-      // Store
-      if(_db != null) {
-        for(int i = 0; i < _prOp.Count; i++) {
-          Store(_prOp[i]);
-        }
-      }
       //int PC = _prOp.Count, DB = _db_q.Count;
       _prOp.Clear();
 
@@ -396,10 +318,6 @@ namespace X13.Repository {
     }
 
     public void Stop() {
-      var db = Interlocked.Exchange(ref _db, null);
-      if(db != null) {
-        db.Dispose();
-      }
       Export("../data/server.xst", Topic.root, true);
     }
 

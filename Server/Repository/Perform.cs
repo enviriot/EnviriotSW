@@ -39,7 +39,6 @@ namespace X13.Repository {
 
     public readonly Topic src;
     public Topic prim { get; internal set; }
-    public readonly int layer;
     public Art art { get; internal set; }
     public string FieldPath { get { return this.art == Art.changedField ? (o as string) : null; } }
 
@@ -47,7 +46,6 @@ namespace X13.Repository {
       this.src = src;
       this.art = art;
       this.prim = prim;
-      this.layer = src.layer;
     }
     internal bool EqualsGr(Perform other) {
       return (this.art == Art.setState || this.art == Art.changedState)
@@ -64,16 +62,13 @@ namespace X13.Repository {
       if(p1 != p2) {
         return p1.CompareTo(p2);
       }
-      if(this.layer != other.layer) {
-        return this.layer > other.layer ? 1 : -1;
-      }
       if(this.src == other.src && (this.art == Art.setState || this.art == Art.changedState)) {
         return 0;
       }
       return -1;  // сохраняется порядок поступления
     }
     public override string ToString() {
-      return string.Concat(src.path, "[", art.ToString(), ", ", layer.ToString(), "]=", o == null ? "null" : o.ToString());
+      return string.Concat(src.path, "[", art.ToString(), "]=", o == null ? "null" : o.ToString());
     }
 
     public enum Art {
@@ -87,7 +82,6 @@ namespace X13.Repository {
       changedState = 18,
       remove = 20,
       subAck = 24,
-      changedLayer = 28,
     }
   }
 }

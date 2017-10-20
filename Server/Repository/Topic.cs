@@ -1,5 +1,4 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
-using LiteDB;
 using NiL.JS.Core;
 using JST = NiL.JS.BaseLibrary;
 using System;
@@ -20,15 +19,13 @@ namespace X13.Repository {
     private ConcurrentDictionary<string, Topic> _children;
     private List<SubRec> _subRecords;
 
-    private BsonDocument _ps_state;
-    private BsonDocument _ps_manifest;
     private JSValue _state;
     private JSValue _manifest;
     private JSValue _mfst_upd;
 
     #endregion Member variables
 
-    private Topic(Topic parent, string name, bool fill) {
+    private Topic(Topic parent, string name) {
       _name = name;
       _parent = parent;
       _state = JSValue.Undefined;
@@ -39,16 +36,6 @@ namespace X13.Repository {
         _path = "/" + name;
       } else {
         _path = parent._path + "/" + name;
-      }
-      if(fill) {
-        _ps_manifest = new BsonDocument();
-        var id = ObjectId.NewObjectId();
-        _ps_manifest["_id"] = id;
-        _ps_manifest["p"] = new BsonValue(_path);
-        var m_v = new BsonDocument();
-        m_v["attr"] = new BsonValue(0);
-        _ps_manifest["v"] = m_v;
-        _manifest = I.Bs2Js(m_v);
       }
     }
 
@@ -61,19 +48,6 @@ namespace X13.Repository {
     }
     public string path { get { return _path; } }
     public bool disposed { get; private set; }
-    public int layer {
-      get {
-        BsonValue l;
-        return (l = _ps_manifest["layer"]).IsInt32 ? l.AsInt32 : -1;
-      }
-      set {
-        if(value!=this.layer) {
-          _ps_manifest["layer"] = value;
-          var c = Perform.Create(this, Perform.Art.changedLayer, null);
-          _repo.DoCmd(c, false);
-        }
-      }
-    }
     public Bill all { get { return new Bill(this, true); } }
     public Bill children { get { return new Bill(this, false); } }
 
@@ -298,32 +272,14 @@ namespace X13.Repository {
     internal static class I {
       public static void Init(Repo repo) {
         Topic._repo = repo;
-        Topic.root = new Topic(null, "/", false);
+        Topic.root = new Topic(null, "/");
       }
 
-      public static void Create(BsonDocument obj, BsonDocument state) {
-        Topic t = I.Get(Topic.root, obj["p"].AsString, true, null, false, false);
-        t._ps_manifest = obj;
-        t._manifest = Bs2Js(t._ps_manifest["v"]);
-        if(state != null) {
-          if(t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
-            t._ps_state = state;
-          }
-          t._state = Bs2Js(state["v"]);
-        }
-      }
       public static void Fill(Topic t, JSValue state, JSValue manifest, Topic prim) {
         t._manifest = manifest??JSObject.CreateObject();
         if(!t._manifest["attr"].IsNumber) {
           t._manifest["attr"] = new JST.Number(0);
         }
-        if(t._ps_manifest == null) {
-          t._ps_manifest = new BsonDocument();
-          var id = ObjectId.NewObjectId();
-          t._ps_manifest["_id"] = id;
-          t._ps_manifest["p"] = new BsonValue(t._path);
-        }
-        t._ps_manifest["v"] = Js2Bs(t._manifest) as BsonDocument;
 
         var c = Perform.Create(t, Perform.Art.create, prim);
         _repo.DoCmd(c, false);
@@ -372,7 +328,7 @@ namespace X13.Repository {
               if(home._children.TryGetValue(pt[i], out next)) {
                 home = next;
               } else {
-                next = new Topic(home, pt[i], fill);
+                next = new Topic(home, pt[i]);
                 home._children[pt[i]] = next;
                 if(fill) {  // else the Perform(create) will be added in Fill()
                   var c = Perform.Create(next, Perform.Art.create, prim);
@@ -389,13 +345,6 @@ namespace X13.Repository {
       }
       public static void SetValue(Topic t, JSValue val) {
         t._state = val;
-        if(t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
-          if(t._ps_state == null) {
-            t._ps_state = new BsonDocument();
-            t._ps_state["_id"] = t._ps_manifest["_id"];
-          }
-          t._ps_state["v"] = Js2Bs(val);
-        }
       }
       public static bool SetField(Perform cmd){
         Topic t = cmd.src;
@@ -414,14 +363,10 @@ namespace X13.Repository {
       }
       public static void SetField2(Topic t) {
         t._manifest = System.Threading.Interlocked.Exchange(ref t._mfst_upd, null);
-        t._ps_manifest["v"] = Js2Bs(t._manifest);
       }
 
       public static void UpdatePath(Topic t) {
         t._path = t.parent == root ? "/" + t._name : t.parent._path + "/" + t._name;
-        t._ps_manifest["p"] = t._path;
-        var c = Perform.Create(t, Perform.Art.changedField, null);
-        _repo.DoCmd(c, false);
         if(t._children != null) {
           foreach(var ch in t._children) {
             UpdatePath(ch.Value);
@@ -434,10 +379,6 @@ namespace X13.Repository {
           Topic tmp;
           t._parent._children.TryRemove(t._name, out tmp);
         }
-      }
-      public static void ReqData(Topic t, out BsonDocument obj, out BsonDocument state) {
-        obj = t._ps_manifest;
-        state = t._ps_state;
       }
       public static void Publish(Perform cmd) {
         SubRec sb;
@@ -457,7 +398,7 @@ namespace X13.Repository {
               if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
                   && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
                   && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))/* (tmp_s = cmd.o as string) != null && tmp_s.StartsWith(sb.prefix)*/))
-                  && (cmd.art != Perform.Art.changedLayer || (sb.mask & SubRec.SubMask.Layer) == SubRec.SubMask.Layer)) {
+                  ) {
                 try {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());
                   sb.func(cmd, sb);
@@ -539,123 +480,6 @@ namespace X13.Repository {
         }
         return fl;
       }
-
-      public static BsonValue Js2Bs(JSValue val) {
-        if(val == null) {
-          return BsonValue.Null;
-        }
-        switch(val.ValueType) {
-        case JSValueType.NotExists:
-        case JSValueType.NotExistsInObject:
-        case JSValueType.Undefined:
-          return BsonValue.Null;
-        case JSValueType.Boolean:
-          return new BsonValue((bool)val);
-        case JSValueType.Date: {
-            var jsd = val.Value as JST.Date;
-            if(jsd != null) {
-              return new BsonValue(jsd.ToDateTime().ToUniversalTime());
-            }
-            return BsonValue.Null;
-          }
-        case JSValueType.Double:
-          return new BsonValue((double)val);
-        case JSValueType.Integer:
-          return new BsonValue((int)val);
-        case JSValueType.String: {
-            var s = val.Value as string;
-            if(s != null && s.StartsWith("¤TR")) {
-              var t = Get(Topic.root, s.Substring(3), false, null, false, false);
-              if(t!=null) {
-                return t._ps_manifest["_id"];
-              } else {
-                throw new ArgumentException("TopicRefernce("+s.Substring(3)+") NOT FOUND");
-              }
-            }
-            return new BsonValue(s);
-          }
-        case JSValueType.Object:
-          if(val.IsNull) {
-            return BsonValue.Null;
-          }
-          var arr = val as JST.Array;
-          if(arr != null) {
-            var r = new BsonArray();
-            int i;
-            foreach(var f in arr) {
-              if(int.TryParse(f.Key, out i)) {
-                while(i >= r.Count()) { r.Add(BsonValue.Null); }
-                r[i] = Js2Bs(f.Value);
-              }
-            }
-            return r;
-          }
-          ByteArray ba = val as ByteArray;
-          if(ba != null || (ba = val.Value as ByteArray) != null) {
-            return new BsonValue(ba.GetBytes());
-          }
-          {
-            var r = new BsonDocument();
-            foreach(var f in val) {
-              r[f.Key] = Js2Bs(f.Value);
-            }
-            return r;
-          }
-        default:
-          throw new NotImplementedException("js2Bs(" + val.ValueType.ToString() + ")");
-        }
-      }
-      public static JSValue Bs2Js(BsonValue val) {
-        if(val == null) {
-          return JSValue.Undefined;
-        }
-        switch(val.Type) {
-          case BsonType.ObjectId: {
-              var p = _repo.Id2Topic(val.AsObjectId);
-              if(p!=null) {
-                return new JST.String("¤TR" + p);
-              } else {
-                throw new ArgumentException("Unknown ObjectId: " + val.AsObjectId.ToString());
-              }
-            }
-        case BsonType.Array: {
-            var arr = val.AsArray;
-            var r = new JST.Array(arr.Count);
-            for(int i = 0; i < arr.Count; i++) {
-              if(!arr[i].IsNull) {
-                r[i] = Bs2Js(arr[i]);
-              }
-            }
-            return r;
-          }
-        case BsonType.Boolean:
-          return new JST.Boolean(val.AsBoolean);
-        case BsonType.DateTime:
-          return JSValue.Marshal(val.AsDateTime.ToLocalTime());
-        case BsonType.Binary:
-          return new ByteArray(val.AsBinary);
-        case BsonType.Document: {
-            var r = JSObject.CreateObject();
-            var o = val.AsDocument;
-            foreach(var i in o) {
-              r[i.Key] = Bs2Js(i.Value);
-            }
-            return r;
-          }
-        case BsonType.Double:
-          return new JST.Number(val.AsDouble);
-        case BsonType.Int32:
-          return new JST.Number(val.AsInt32);
-        case BsonType.Int64:
-          return new JST.Number(val.AsInt64);
-        case BsonType.Null:
-          return JSValue.Null;
-        case BsonType.String:
-          return new JST.String(val.AsString);
-        }
-        throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
-      }
-
     }
     [Flags]
     public enum Attribute {

@@ -35,7 +35,6 @@ namespace X13.Repository {
       OnceOrAll = 5,
       Value = 8,
       Field = 16,
-      Layer = 32,
     }
   }
 }

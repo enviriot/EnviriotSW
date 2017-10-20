@@ -116,7 +116,21 @@
                   <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="Message" VerticalAlignment="Center" />
-                <TextBox Grid.Column="1" Name="tbFilter" Grid.ColumnSpan="2" Margin="5,0,0,0" BorderThickness="1,0" BorderBrush="Black" TextChanged="tbFilter_TextChanged" />
+                <TextBox Grid.Column="1" Name="tbFilter" Margin="5,0,0,0" BorderThickness="1,0" TextChanged="tbFilter_TextChanged"  Focusable="{Binding ElementName=buFilter, Path=IsChecked}" >
+                  <TextBox.Style>
+                    <Style TargetType="TextBox">
+                      <Setter Property="Background" Value="White" />
+                      <Setter Property="BorderBrush" Value="Black" />
+                      <Style.Triggers>
+                        <Trigger Property="Focusable" Value="False">
+                          <Setter Property="Background" Value="#00000000" />
+                          <Setter Property="Foreground" Value="DarkGray" />
+                          <Setter Property="BorderBrush" Value="#00000000" />
+                        </Trigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBox.Style>
+                </TextBox>
                 <ToggleButton Grid.Column="2" Name="buFilter" ToolTip="Filter" Width="24" Margin="5,0" ClickMode="Release" Unchecked="buFilter_Changed" Checked="buFilter_Changed" Focusable="False">
                   <Image Source="/ES;component/Images/filter.png" Width="20" Height="16" />
                 </ToggleButton>
