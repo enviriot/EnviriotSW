@@ -225,6 +225,13 @@ namespace X13.DevicePLC {
       } else if(node.Source is This) {
         _compiler.cur.AddInst(EP_InstCode.LD_P0, 0, 1);
         sc = _compiler.cur;
+        while(sc.fm.type!=EP_Type.CLASS) {
+          sc = sc._parent;
+          if(sc==null) {
+            sc = _compiler.cur;
+            break;
+          }
+        }
       } else {
         throw new NotSupportedException("P2: " + node.ToString());
       }
@@ -987,6 +994,13 @@ namespace X13.DevicePLC {
       } else if(src is This) {
         _compiler.cur.AddInst(EP_InstCode.LD_P0, 0, 1);
         sc = _compiler.cur;
+        while(sc.fm.type!=EP_Type.CLASS) {
+          sc = sc._parent;
+          if(sc==null) {
+            sc = _compiler.cur;
+            break;
+          }
+        }
       } else {
         throw new NotSupportedException(src.ToString() + " as object");
       }

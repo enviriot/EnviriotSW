@@ -122,11 +122,14 @@ namespace X13.DevicePLC {
               continue;
             }
             if(m.Addr == uint.MaxValue) {
-              m.Addr = global.AllocateMemory(uint.MaxValue, mLen) / (mLen >= 32 ? 32 : mLen);
+              m.Addr = global.AllocateMemory(uint.MaxValue, mLen) / ( mLen >= 32 ? 32 : mLen );
             }
             if(p == global) {
               if(vName != null) {
                 varList[m.vd.Name] = vName + m.Addr.ToString();
+                if(Verbose) {
+                  Log.Debug("{0}<{1}> = {2}; {3}", m.vd.Name, m.type, vName + m.Addr.ToString(), mLen==1?( ( m.Addr/8 ).ToString("X2")+"."+( m.Addr%8 ).ToString() ):( m.Addr*mLen/8 ).ToString("X2"));
+                }
               } else {    // REFERENCE
                 foreach(var m1 in m.scope.memory) {
                   switch(m1.type) {
@@ -157,16 +160,21 @@ namespace X13.DevicePLC {
                   default:
                     continue;
                   }
-                  varList[m.vd.Name + "." + m1.pName] = vName + (m.Addr * 32 / mLen + m1.Addr).ToString();
+                  varList[m.vd.Name + "." + m1.pName] = vName + ( m.Addr * 32 / mLen + m1.Addr ).ToString();
+                  if(Verbose) {
+                    Log.Debug("{0}<{1}> = {2}; {3}:{4}", m.vd.Name + "." + m1.pName, m1.type, vName + ( m.Addr * 32 / mLen + m1.Addr ).ToString()
+                      , ( m.Addr*4 ).ToString("X2")
+                      , mLen==1?( ( m1.Addr/8 ).ToString("X2")+"."+( m1.Addr%8 ).ToString() ):( m1.Addr*mLen/8 ).ToString("X2"));
+                  }
+
                 }
               }
             }
           }
         }
-
         foreach(var p in _programm) {
           p.Optimize();
-          addr += (32 - (addr % 32)) % 32;
+          addr += ( 32 - ( addr % 32 ) ) % 32;
           if(p.fm != null) {
             p.fm.Addr = addr;
           }
@@ -197,7 +205,7 @@ namespace X13.DevicePLC {
           bytes.Clear();
         }
         Hex = HexN;
-        StackBottom = (uint)((global.memBlocks.Last().start + 7) / 8);
+        StackBottom = (uint)( ( global.memBlocks.Last().start + 7 ) / 8 );
         Log.Info("Used ROM: {0} bytes, RAM: {1} bytes", Hex.Select(z => z.Key + z.Value.Length).Max(), StackBottom);
         success = true;
       }
@@ -245,7 +253,7 @@ namespace X13.DevicePLC {
       if(m == null) {
         addr = uint.MaxValue;
         if(v.Name.Length > 2 && _predefs.TryGetValue(v.Name.Substring(0, 2), out ioType) && UInt32.TryParse(v.Name.Substring(2), out addr)) {
-          addr = (uint)((uint)(((byte)v.Name[0]) << 24) | (uint)(((byte)v.Name[1]) << 16) | addr & 0xFFFF);
+          addr = (uint)( (uint)( ( (byte)v.Name[0] ) << 24 ) | (uint)( ( (byte)v.Name[1] ) << 16 ) | addr & 0xFFFF );
           type = ioType;
         } else if(type == EP_Type.NONE) {
           if(v.Initializer != null && v.Initializer is FunctionDefinition) {
@@ -254,7 +262,7 @@ namespace X13.DevicePLC {
             type = EP_Type.LOCAL;
             addr = (uint)cur.memory.Where(z => z.type == EP_Type.LOCAL).Count();
             if(addr > 15) {
-              throw new ArgumentOutOfRangeException("Too many local variables: " + v.Name + cur.fm == null ? string.Empty : ("in " + cur.fm.ToString()));
+              throw new ArgumentOutOfRangeException("Too many local variables: " + v.Name + cur.fm == null ? string.Empty : ( "in " + cur.fm.ToString() ));
             }
           } else {
             type = EP_Type.SINT32;
@@ -269,7 +277,7 @@ namespace X13.DevicePLC {
           m.fName = v.Name;
         } else {
           cur.memory.Add(m);
-          m.fName = (cur == global ? v.Name : cur.fm.fName + (cur.fm.type == EP_Type.FUNCTION ? "+" : ".") + v.Name);
+          m.fName = ( cur == global ? v.Name : cur.fm.fName + ( cur.fm.type == EP_Type.FUNCTION ? "+" : "." ) + v.Name );
         }
 
       } else if(m.type != type && m.type == EP_Type.NONE) {
@@ -367,7 +375,7 @@ namespace X13.DevicePLC {
         return other == null ? int.MaxValue : this.start.CompareTo(other.start);
       }
       public bool Check(uint length, int o) {
-        return (length + (o - (start % o)) % o) <= end - start + 1;
+        return ( length + ( o - ( start % o ) ) % o ) <= end - start + 1;
       }
     }
     internal class Merker {
@@ -387,7 +395,7 @@ namespace X13.DevicePLC {
     }
     internal class Scope {
       private EP_Compiler _compiler;
-      private Scope _parent;
+      public Scope _parent;
       public List<Instruction> code;
       public List<Merker> memory;
       public Stack<EP_VP2.Loop> loops;
@@ -447,7 +455,7 @@ namespace X13.DevicePLC {
             throw new ArgumentOutOfRangeException("Not enough memory");
           }
           memBlocks.Remove(fb);
-          start = (uint)(fb.start + (o - (fb.start % o)) % o);
+          start = (uint)( fb.start + ( o - ( fb.start % o ) ) % o );
           end = start + length - 1;
           if(fb.start < start) {
             memBlocks.Add(new DP_MemBlock(fb.start, start - 1));
@@ -506,7 +514,7 @@ namespace X13.DevicePLC {
           }
           sb.Append("| ").Append(c.ToString());
           if(c._cn != null) {
-            while((sb.Length - ls) < 50) {
+            while(( sb.Length - ls ) < 50) {
               sb.Append(" ");
             }
             sb.Append("; ").Append(c._cn.ToString());
@@ -514,12 +522,12 @@ namespace X13.DevicePLC {
           sb.Append("\r\n");
           ls = sb.Length;
           for(; j < hex.Length; j++) {
-            if((j & 7) == 0) {
-              sb.Append((c.addr + j).ToString("X4"));
+            if(( j & 7 ) == 0) {
+              sb.Append(( c.addr + j ).ToString("X4"));
               sb.Append(" ");
             }
             sb.Append(hex[j].ToString("X2"));
-            if((j & 7) == 7 || j == hex.Length - 1) {
+            if(( j & 7 ) == 7 || j == hex.Length - 1) {
               sb.Append("\r\n");
             } else {
               sb.Append(" ");
@@ -563,7 +571,7 @@ namespace X13.DevicePLC {
           default:
             continue;
           }
-          m.Addr = AllocateMemory(uint.MaxValue, mLen) / (mLen >= 32 ? 32 : mLen);
+          m.Addr = AllocateMemory(uint.MaxValue, mLen) / ( mLen >= 32 ? 32 : mLen );
         }
       }
       public void Optimize() {
@@ -572,7 +580,7 @@ namespace X13.DevicePLC {
         if(code.Count == 0) {
           return;
         }
-        if((i0 = code[code.Count - 1])._code.Length != 1 || i0._code[0] != (byte)EP_InstCode.RET) {
+        if(( i0 = code[code.Count - 1] )._code.Length != 1 || i0._code[0] != (byte)EP_InstCode.RET) {
           AddInst(EP_InstCode.RET);
         }
         // remove unreachable code
@@ -586,7 +594,7 @@ namespace X13.DevicePLC {
               code.RemoveAt(i);
               continue;
             }
-          } else if(i0._code.Length > 0 && (i0._code[0] == (byte)EP_InstCode.RET || i0._code[0] == (byte)EP_InstCode.JMP)) {
+          } else if(i0._code.Length > 0 && ( i0._code[0] == (byte)EP_InstCode.RET || i0._code[0] == (byte)EP_InstCode.JMP )) {
             fl = true;
           }
           i++;
@@ -597,7 +605,7 @@ namespace X13.DevicePLC {
           while(i < code.Count) {
             i0 = code[i];
             // enclosed jump  {jmp l0 ... :l0 jmp l1}
-            if(i0._code.Length == 3 && (i0._code[0] == (byte)EP_InstCode.JMP || i0._code[0] == (byte)EP_InstCode.JZ || i0._code[0] == (byte)EP_InstCode.JNZ)) {
+            if(i0._code.Length == 3 && ( i0._code[0] == (byte)EP_InstCode.JMP || i0._code[0] == (byte)EP_InstCode.JZ || i0._code[0] == (byte)EP_InstCode.JNZ )) {
               for(j = 0; j < code.Count; j++) {
                 if(code[j] == i0._ref) {
                   do {
@@ -619,7 +627,7 @@ namespace X13.DevicePLC {
             if(i0._code.Length == 1 && i0._code[0] == (byte)EP_InstCode.RET) {
               for(j = i - 1; j >= 0; j--) {
                 i1 = code[j];
-                if(i1._code.Length == 1 && (i1._code[0] == (byte)EP_InstCode.DROP || i1._code[0] == (byte)EP_InstCode.NIP)) {
+                if(i1._code.Length == 1 && ( i1._code[0] == (byte)EP_InstCode.DROP || i1._code[0] == (byte)EP_InstCode.NIP )) {
                   code.RemoveAt(j);
                   i--;
                   cnt++;
@@ -654,7 +662,7 @@ namespace X13.DevicePLC {
         _code = arr;
       }
       public bool Link() {
-        if((_param == null && _ref == null)) {
+        if(( _param == null && _ref == null )) {
           return true;
         }
         if(_blob) {
@@ -788,7 +796,7 @@ namespace X13.DevicePLC {
             _code = new byte[2];
           }
           _code[0] = (byte)cmd;
-          _code[1] = (byte)((int)((Constant)_cn).Value & 0x1F);
+          _code[1] = (byte)( (int)( (Constant)_cn ).Value & 0x1F );
           break;
         case EP_InstCode.LDM_B1_CS8:
         case EP_InstCode.STM_B1_CS8:
@@ -847,7 +855,7 @@ namespace X13.DevicePLC {
           }
           _code[0] = (byte)cmd;
           _code[1] = (byte)_param.Addr;
-          _code[2] = (byte)(_param.Addr >> 8);
+          _code[2] = (byte)( _param.Addr >> 8 );
           break;
         case EP_InstCode.API:
           if(_code == null || _code.Length != 2) {
@@ -864,10 +872,10 @@ namespace X13.DevicePLC {
         case EP_InstCode.LDI_S2:
         case EP_InstCode.LDI_U2:
         case EP_InstCode.LDI_S4:
-          if(_param != null && (_param.type == EP_Type.REFERENCE || _param.type == EP_Type.FUNCTION)) {
+          if(_param != null && ( _param.type == EP_Type.REFERENCE || _param.type == EP_Type.FUNCTION )) {
             tmp_d = (int)_param.Addr;
-          } else if((_cn as Constant) != null) {
-            tmp_d = (int)((Constant)_cn).Value;
+          } else if(( _cn as Constant ) != null) {
+            tmp_d = (int)( (Constant)_cn ).Value;
           } else {
             tmp_d = 0;
           }
@@ -891,15 +899,15 @@ namespace X13.DevicePLC {
             if(_code == null || _code.Length != 2) {
               _code = new byte[2];
             }
-            _code[0] = (byte)(tmp_d < 0 ? EP_InstCode.LDI_S1 : EP_InstCode.LDI_U1);
+            _code[0] = (byte)( tmp_d < 0 ? EP_InstCode.LDI_S1 : EP_InstCode.LDI_U1 );
             _code[1] = (byte)tmp_d;
           } else if(tmp_d > -32768 && tmp_d < 65536) {
             if(_code == null || _code.Length != 3) {
               _code = new byte[3];
             }
-            _code[0] = (byte)(tmp_d < 0 ? EP_InstCode.LDI_S2 : EP_InstCode.LDI_U2);
+            _code[0] = (byte)( tmp_d < 0 ? EP_InstCode.LDI_S2 : EP_InstCode.LDI_U2 );
             _code[1] = (byte)tmp_d;
-            _code[2] = (byte)(tmp_d >> 8);
+            _code[2] = (byte)( tmp_d >> 8 );
 
           } else {
             if(_code == null || _code.Length != 5) {
@@ -907,9 +915,9 @@ namespace X13.DevicePLC {
             }
             _code[0] = (byte)EP_InstCode.LDI_S4;
             _code[1] = (byte)tmp_d;
-            _code[2] = (byte)(tmp_d >> 8);
-            _code[3] = (byte)(tmp_d >> 16);
-            _code[4] = (byte)(tmp_d >> 24);
+            _code[2] = (byte)( tmp_d >> 8 );
+            _code[3] = (byte)( tmp_d >> 16 );
+            _code[4] = (byte)( tmp_d >> 24 );
           }
           break;
         case EP_InstCode.OUT:
@@ -918,10 +926,10 @@ namespace X13.DevicePLC {
             _code = new byte[5];
           }
           _code[0] = (byte)cmd;
-          _code[1] = (byte)(_param.Addr >> 24);     // Place
-          _code[2] = (byte)(_param.Addr >> 16);     // Type
+          _code[1] = (byte)( _param.Addr >> 24 );     // Place
+          _code[2] = (byte)( _param.Addr >> 16 );     // Type
           _code[3] = (byte)_param.Addr;             // Base low
-          _code[4] = (byte)(_param.Addr >> 8);      // Base high
+          _code[4] = (byte)( _param.Addr >> 8 );      // Base high
           break;
 
         case EP_InstCode.JZ:
@@ -933,7 +941,7 @@ namespace X13.DevicePLC {
           }
           _code[0] = (byte)cmd;
           _code[1] = (byte)tmp_D;
-          _code[2] = (byte)(tmp_D >> 8);
+          _code[2] = (byte)( tmp_D >> 8 );
           break;
         case EP_InstCode.CHECK_IDX:
           if(_code == null || _code.Length != 3) {
@@ -941,7 +949,7 @@ namespace X13.DevicePLC {
           }
           _code[0] = (byte)cmd;
           _code[1] = (byte)_param.pOut;
-          _code[2] = (byte)(_param.pOut >> 8);
+          _code[2] = (byte)( _param.pOut >> 8 );
           break;
         default:
           throw new NotImplementedException(this.ToString());
@@ -969,7 +977,7 @@ namespace X13.DevicePLC {
             }
             sb.Append(_param.init.ToString());
           } else {
-            sb.Append(((EP_InstCode)_code[0]).ToString());
+            sb.Append(( (EP_InstCode)_code[0] ).ToString());
 
             if(_code.Length > 1) {
               while(sb.Length < 12) {

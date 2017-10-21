@@ -47,11 +47,11 @@ namespace X13.DevicePLC {
       mc.scope = _compiler.ScopePush(mc);
       var ctor = _compiler.DefineMerker(node.Constructor.Reference.Descriptor, EP_Type.FUNCTION);
       DefineFunction(node.Constructor, ctor, mc.scope.memory);
-      foreach(var m in ctor.scope.memory.Where(z=>IsProperty(z.type))){
-        int idx=m.fName.IndexOf(".constructor");
-        m.fName=m.fName.Remove(idx, 12);
-      }
-      mc.scope.memory.AddRange(ctor.scope.memory.Where(z => IsProperty(z.type)));
+      //foreach(var m in ctor.scope.memory.Where(z=>IsProperty(z.type))){
+      //  int idx=m.fName.IndexOf(".constructor");
+      //  m.fName=m.fName.Remove(idx, 12);
+      //}
+      //mc.scope.memory.AddRange(ctor.scope.memory.Where(z => IsProperty(z.type)));
       mc.scope.AllocatFields();
       
       foreach(var fv in node.Members.Where(z => z.Value is FunctionDefinition && z.Name is Constant)) {
@@ -235,6 +235,13 @@ namespace X13.DevicePLC {
         sc = m.scope;
       } else if(node.Source is This) {
         sc = _compiler.cur;
+        while(sc.fm.type!=EP_Type.CLASS) {
+          sc = sc._parent;
+          if(sc==null) {
+            sc = _compiler.cur;
+            break;
+          }
+        }
       } else {
         throw new NotSupportedException(node.Source.ToString() + " as object");
       }
@@ -581,9 +588,9 @@ namespace X13.DevicePLC {
 
     private void DefineFunction(FunctionDefinition node, EP_Compiler.Merker fm, List<EP_Compiler.Merker> parentMemory) {
       fm.scope = _compiler.ScopePush(fm);
-      if(parentMemory != null) {
-        fm.scope.memory.AddRange(parentMemory.Where(z => IsProperty(z.type)));
-      }
+      //if(parentMemory != null) {
+      //  fm.scope.memory.AddRange(parentMemory.Where(z => IsProperty(z.type)));
+      //}
 
       for(int i = 0; i < node.Parameters.Count; i++) {
         if(i > 15) {
