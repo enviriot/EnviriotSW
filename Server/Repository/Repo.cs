@@ -104,6 +104,7 @@ namespace X13.Repository {
       case Perform.Art.setState:
       case Perform.Art.changedField:
       case Perform.Art.move:
+      case Perform.Art.subAck:
         EnquePerf(c);
         break;
       case Perform.Art.remove:

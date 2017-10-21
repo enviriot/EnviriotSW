@@ -25,7 +25,7 @@ namespace X13.Repository {
 
     #endregion Member variables
 
-    private Topic(Topic parent, string name) {
+    private Topic(Topic parent, string name, bool fill) {
       _name = name;
       _parent = parent;
       _state = JSValue.Undefined;
@@ -36,6 +36,10 @@ namespace X13.Repository {
         _path = "/" + name;
       } else {
         _path = parent._path + "/" + name;
+      }
+      if(fill) {
+        _manifest = JSObject.CreateObject();
+        _manifest["attr"] = new JST.Number((int)0);
       }
     }
 
@@ -128,6 +132,10 @@ namespace X13.Repository {
       }
       if(!exist) {
         var c = Perform.Create(this, Perform.Art.subscribe, this);
+        c.o = sb;
+        _repo.DoCmd(c, false);
+      } else {
+        var c = Perform.Create(this, Perform.Art.subAck, this);
         c.o = sb;
         _repo.DoCmd(c, false);
       }
@@ -272,7 +280,7 @@ namespace X13.Repository {
     internal static class I {
       public static void Init(Repo repo) {
         Topic._repo = repo;
-        Topic.root = new Topic(null, "/");
+        Topic.root = new Topic(null, "/", false);
       }
 
       public static void Fill(Topic t, JSValue state, JSValue manifest, Topic prim) {
@@ -328,7 +336,7 @@ namespace X13.Repository {
               if(home._children.TryGetValue(pt[i], out next)) {
                 home = next;
               } else {
-                next = new Topic(home, pt[i]);
+                next = new Topic(home, pt[i], fill);
                 home._children[pt[i]] = next;
                 if(fill) {  // else the Perform(create) will be added in Fill()
                   var c = Perform.Create(next, Perform.Art.create, prim);
