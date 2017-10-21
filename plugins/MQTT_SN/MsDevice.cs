@@ -581,7 +581,10 @@ namespace X13.Periphery {
               var cm = fm.msg as MsConnect;
               MsDevice dev = _pl._devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
               if(dev == null) {
-                dev = new MsDevice(_pl, Topic.root.Get("/dev/" + cm.ClientId, true, owner));
+                var dt = Topic.root.Get("/dev/" + cm.ClientId, true, owner);
+                dt.SetAttribute(Topic.Attribute.Readonly);
+                dt.SetField("editor", "MsStatus");
+                dev = new MsDevice(_pl, dt);
                 _pl._devs.Add(dev);
               }
               dev._gate = this;

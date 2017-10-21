@@ -23,7 +23,7 @@ namespace X13.Periphery {
       _pl = pl;
       var udpT = Topic.root.Get("/$YS/MQTT-SN/udp");
       if(udpT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
-        udpT.SetAttribute(Topic.Attribute.DB);
+        udpT.SetAttribute(Topic.Attribute.Config);
         udpT.SetState(true);
       } else if(!(bool)udpT.GetState()) {
         return;  // udp disabled

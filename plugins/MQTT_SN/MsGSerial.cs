@@ -60,7 +60,7 @@ namespace X13.Periphery {
             }
             var portT = serialT.Get(pn, true, serialT);
             if(portT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
-              portT.SetAttribute(Topic.Attribute.DB);
+              portT.SetAttribute(Topic.Attribute.Config);
               portT.SetState(true, serialT);
             } else if((bool)portT.GetState() == false) {
               continue;
