@@ -17,7 +17,7 @@ namespace X13.PersistentStorage {
   internal class PersistentStoragePl : IPlugModul {
     #region internal Members
     private LiteDatabase _db;
-    private LiteCollection<BsonDocument> _objects, _states;
+    private LiteCollection<BsonDocument> _objects, _states, _history;
     private SubRec _subMq;
     private Topic _owner;
     private System.Collections.Generic.SortedDictionary<Topic, Stash> _base;
@@ -213,6 +213,34 @@ namespace X13.PersistentStorage {
     }
     #endregion internal Members
 
+    public PersistentStoragePl() {
+      Log.History = History;
+      Log.Write += Log_Write;
+    }
+
+    #region History
+    private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
+      if(_history != null && ll != LogLevel.Debug) {
+        var d = new BsonDocument();
+        d["_id"] = ObjectId.NewObjectId();
+        d["t"] = new BsonValue(dt.ToUniversalTime());
+        d["l"] = new BsonValue((int)ll);
+        d["m"] = new BsonValue(msg);
+        _history.Insert(d);
+      }
+    }
+    private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
+      var t = new BsonValue(dt);
+      return _history.Find(Query.And(Query.All("t", Query.Descending), Query.LT("t", t)), 0, cnt)
+        .Select(z => new Log.LogRecord {
+          dt = z["t"].AsDateTime,
+          ll = (LogLevel)z["l"].AsInt32,
+          format = z["m"].AsString,
+          args = null
+        });
+    }
+    #endregion History
+
     #region IPlugModul Members
     public void Init() {
       _owner = Topic.root.Get("/$YS/PersistentStorage", true);
@@ -226,8 +254,10 @@ namespace X13.PersistentStorage {
       }
       _objects = _db.GetCollection<BsonDocument>("objects");
       _states = _db.GetCollection<BsonDocument>("states");
+      _history = _db.GetCollection<BsonDocument>("history");
       if(!exist) {
         _objects.EnsureIndex("p", true);
+        _history.EnsureIndex("t");
       } else {
         Topic t;
         Stash a;

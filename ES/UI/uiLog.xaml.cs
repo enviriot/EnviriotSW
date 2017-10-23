@@ -114,5 +114,12 @@ namespace X13.UI {
       }
       return true;
     }
+
+    private void buHistory_Click(object sender, RoutedEventArgs e) {
+      var dt = LogCollection.Any()?LogCollection.First().dt:DateTime.Now;
+      foreach(var c in App.Workspace.Clients) {
+        c.SendCmd(91, NiL.JS.Core.JSValue.Marshal(dt.ToUniversalTime()), 20);
+      }
+    }
   }
 }

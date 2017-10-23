@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 
 namespace X13 {
-  public class Log {
+  public static class Log {
     private static bool _useDiagnostic;
     private static bool _useConsole;
     public static bool useFile;
@@ -56,6 +56,7 @@ namespace X13 {
       }
     }
     public static event Action<LogLevel, DateTime, string, bool> Write;
+    public static Func<DateTime, int, IEnumerable<Log.LogRecord>> History;
     public static void Finish() {
       _kickEv.Set();
       AutoResetEvent fin = new AutoResetEvent(false);
@@ -143,7 +144,7 @@ namespace X13 {
       }
       _busy = 1;
     }
-    private class LogRecord {
+    public class LogRecord {
       public LogLevel ll;
       public DateTime dt;
       public string format;

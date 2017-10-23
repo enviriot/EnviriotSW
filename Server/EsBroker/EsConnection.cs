@@ -52,7 +52,7 @@ namespace X13.EsBroker {
     }
 
     private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
-      base.SendArr(new JSL.Array { 90, JSC.JSValue.Marshal(dt), (int)ll, msg }, false);
+      base.SendArr(new JSL.Array { 90, JSC.JSValue.Marshal(dt.ToUniversalTime()), (int)ll, msg }, false);
     }
     private void RcvMsg(EsMessage msg) {
       if(msg.Count == 0) {
@@ -82,9 +82,13 @@ namespace X13.EsBroker {
           case 16:
             this.Import(msg);
             break;
+          case 91:
+            this.History(msg);
+            break;
           case 99: {
               var o = Interlocked.Exchange(ref _owner, null);
               if(o != null) {
+                Log.Write -= Log_Write;
                 Log.Info("{0} connection dropped", o.path);
                 o.Remove(o);
                 lock(_subscriptions) {
@@ -106,7 +110,6 @@ namespace X13.EsBroker {
         }
       }
     }
-
     public override bool verbose {
       get {
         return _basePl.verbose;
@@ -255,6 +258,27 @@ namespace X13.EsBroker {
       }
       catch(Exception ex) {
         Log.Warning("Import({0}) - {1}", msg[1].Value as string, ex.Message);
+      }
+    }
+    /// <summary>Read old log entrys</summary>
+    /// <param name="msg">Req: [91, Date. count]</param>
+    private void History(EsMessage msg) {
+      if(msg.Count != 3 || msg[1].ValueType != JSC.JSValueType.Date || !msg[2].IsNumber) {
+        if(_basePl.verbose) {
+          Log.Warning("Syntax error: {0}", msg);
+        }
+        return;
+      }
+      try {
+        if(Log.History != null) {
+          var resp = Log.History((msg[1].Value as JSL.Date).ToDateTime(), (int)msg[2]);
+          foreach(var e in resp) {
+            base.SendArr(new JSL.Array { 90, JSC.JSValue.Marshal(e.dt), (int)e.ll, e.format }, false);
+          }
+        }
+      }
+      catch(Exception ex) {
+        Log.Warning("History({0}) - {1}", msg[1].Value as string, ex.Message);
       }
     }
 

@@ -216,7 +216,7 @@ namespace X13.Data {
           Log.Warning("Synax error {0}", msg);
           break;
         }
-        Log.AddEntry((LogLevel)(int)msg[2], (msg[1].Value as JSL.Date).ToDateTime(), msg[3].Value as string);
+        Log.AddEntry((LogLevel)(int)msg[2], (msg[1].Value as JSL.Date).ToDateTime().ToLocalTime(), msg[3].Value as string);
         break;
       }
     }
