@@ -834,11 +834,11 @@ namespace X13.Periphery {
             cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
           } else if(tag == "pa0") {
             cur.SetField("type", "MsExt/DevicePLC", owner);
-            cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
+            cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Internal);
             var src = cur.Get("src", true, owner);
             src.SetField("editor", "JS", owner);
             src.SetField("MQTT-SN.tag", "---", owner);
-            src.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+            src.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB | Topic.Attribute.Internal);
             src.SetState("", owner);
           }
         }

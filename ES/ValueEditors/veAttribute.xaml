@@ -12,12 +12,13 @@
       <ColumnDefinition Width="Auto"/>
       <ColumnDefinition Width="Auto"/>
       <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="Auto"/>
       <ColumnDefinition IsEnabled="False"/>
     </Grid.ColumnDefinitions>
     <Grid.Resources>
       <Style TargetType="ToggleButton">
         <Setter Property="Margin" Value="10,0" />
-        <Setter Property="Width" Value="90" />
+        <Setter Property="Width" Value="50" />
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="ToggleButton">
@@ -50,9 +51,10 @@
         </Setter>
       </Style>
     </Grid.Resources>
-    <ToggleButton Grid.Column="0" Name="tbRequired" Content="Requred" />
-    <ToggleButton Grid.Column="1" Name="tbReadonly" Content="Readonly" />
-    <ToggleButton Grid.Column="2" Name="tbSaved" Content="Saved" />
-    <ToggleButton Grid.Column="3" Name="tbConfig" Content="Config" />
+    <ToggleButton Grid.Column="0" Name="tbRequired" Content="Req" ToolTip="Required" />
+    <ToggleButton Grid.Column="1" Name="tbReadonly" Content="RO" ToolTip="Readonly" />
+    <ToggleButton Grid.Column="2" Name="tbSaved" Content="DB" ToolTip="Save in DB" />
+    <ToggleButton Grid.Column="3" Name="tbConfig" Content="Cfg" ToolTip="Save in Config" />
+    <ToggleButton Grid.Column="4" Name="tbInternal" Content="Int" ToolTip="Internal Topic" />
   </Grid>
 </UserControl>

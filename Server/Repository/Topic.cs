@@ -497,6 +497,7 @@ namespace X13.Repository {
       DB = 4,
       Config = 8,
       Saved = Attribute.DB | Attribute.Config,
+      Internal = 64,
 
     }
     #endregion nested types

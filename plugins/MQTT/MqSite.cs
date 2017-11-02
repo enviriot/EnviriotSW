@@ -46,7 +46,9 @@ namespace X13.MQTT {
       try {
         var o = JsLib.ParseJson(payload);
         var t = Owner.Get(lp, true, Owner);
-        t.SetState(o, Owner);
+        if(!t.CheckAttribute(Topic.Attribute.Internal)) {
+          t.SetState(o, Owner);
+        }
       }
       catch(Exception ex) {
         if(_pl.verbose) {
@@ -64,7 +66,7 @@ namespace X13.MQTT {
     }
 
     private void Changed(Perform p, SubRec sr) {
-      if(Client == null || Client.status != MqClient.Status.Connected) {
+      if(Client == null || Client.status != MqClient.Status.Connected || p.src.CheckAttribute(Topic.Attribute.Internal)) {
         return;
       }
       if(p.art == Perform.Art.subscribe || ((p.art == Perform.Art.changedState || p.art==Perform.Art.create) && p.prim != Owner)) {
