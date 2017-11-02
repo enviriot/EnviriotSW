@@ -24,7 +24,7 @@ namespace X13.UI {
     private string _path;
     private string _view;
     private IBaseForm _contentForm;
-
+    private Client _cl;
     public UIDocument(string path, string view) {
       _path = path;
       _view = view;
@@ -42,7 +42,7 @@ namespace X13.UI {
 
     private DTopic _data;
 
-    public bool connected { get { return _data != null && _data.Connection.Status==ClientState.Ready; } }
+    public bool connected { get { return _cl != null && _cl.Status==ClientState.Ready; } }
     public DTopic data { get { return _data; } }
     public IBaseForm contentForm {
       get {
@@ -53,6 +53,22 @@ namespace X13.UI {
           _contentForm = value;
           PropertyChangedReise("contentForm");
         }
+      }
+    }
+
+    private void ClientChanged(object sender, PropertyChangedEventArgs e) {
+      if(e.PropertyName == "Status") {
+        if(this.connected) {
+          Uri url;
+          if(_data == null && _path != null && Uri.TryCreate(_path, UriKind.Absolute, out url)) {
+            RequestData(url);
+          }
+        } else {
+          contentForm = null;
+          _data = null;
+          PropertyChangedReise("data");
+        }
+        PropertyChangedReise("connected");
       }
     }
 
@@ -68,6 +84,9 @@ namespace X13.UI {
         if(_data == null) {  // topic deleted
           App.Workspace.Close(this);
           return;
+        }
+        if(System.Threading.Interlocked.CompareExchange(ref _cl, _data.Connection, null) == null) {
+          _cl.PropertyChanged += ClientChanged;
         }
         _path = _data.fullPath;
         PropertyChangedReise("data");
