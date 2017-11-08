@@ -439,13 +439,13 @@ namespace X13.Periphery {
           } else {
             throw new NotSupportedException("QoS -1 not supported " + owner.path);
           }
-          if(ti != null) {
+          if(ti != null 
+            && !tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId) {  // else arready recieved
+
+            _lastInPub = tmp;
             switch(ti.dType & ~DType.TypeMask) {
             case DType.None:
-              if(!tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId) {  // else arready recieved
                 SetValue(ti, tmp.Data, tmp.Retained);
-              }
-              _lastInPub = tmp;
               break;
             case DType.RTC:
               if(tmp.Data != null && tmp.Data.Length == 6) {
