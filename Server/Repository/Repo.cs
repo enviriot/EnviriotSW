@@ -132,6 +132,47 @@ namespace X13.Repository {
         Topic.I.Remove(cmd.src);
       }
     }
+    private void CheckCCtor(Perform p) {
+      SortedList<string, JSValue> lo = null, ln = null, lc = null;
+      if(p.art == Perform.Art.changedField) {
+        JSValue o = JsLib.GetField(p.o as JSValue, "cctor"), n = p.src.GetField("cctor"), vn;
+        if(!object.ReferenceEquals(o, n)) {
+          JsLib.PropertyDeep(ref lo, o);
+          JsLib.PropertyDeep(ref ln, n);
+          if(lo != null && ln != null) {
+            foreach(var k in lo.Where(z => ln.ContainsKey(z.Key)).Select(z => z.Key).ToArray()) {
+              vn = ln[k];
+              if(!JSValue.ReferenceEquals(lo[k], vn)) {
+                lc.Add(k, vn);
+              }
+              lo.Remove(k);
+              ln.Remove(k);
+            }
+          }
+        }
+      } else if(p.art == Perform.Art.create) {
+        JsLib.PropertyDeep(ref ln, p.src.GetField("cctor"));
+      } else if(p.art == Perform.Art.remove) {
+        JsLib.PropertyDeep(ref lo, p.src.GetField("cctor"));
+      } else {
+        return;
+      }
+      if(lo != null) {
+        ProcessCCtor(lo, p.src, Perform.Art.remove);
+      }
+      if(ln != null) {
+        ProcessCCtor(ln, p.src, Perform.Art.create);
+      }
+      if(lc != null) {
+        ProcessCCtor(lc, p.src, Perform.Art.changedField);
+      }
+    }
+
+    private void ProcessCCtor(SortedList<string, JSValue> l, Topic t, Perform.Art a) {
+      foreach(var kv in l) {
+        RPC.CCtor(kv.Key, t, a);
+      }
+    }
 
     #endregion internal Members
 
@@ -301,6 +342,10 @@ namespace X13.Repository {
       // Step2
       for(int i = 0; i < _prOp.Count; i++) {
         TickStep2(_prOp[i]);
+      }
+      // Check constructors
+      for(int i = 0; i < _prOp.Count; i++) {
+        CheckCCtor(_prOp[i]);
       }
 
       // Publish

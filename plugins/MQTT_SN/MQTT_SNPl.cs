@@ -38,6 +38,7 @@ namespace X13.Periphery {
       RPC.Register("MQTT_SN.PLC.Run", PlcRunRpc);
       RPC.Register("MQTT_SN.PLC.Start", PlcStartRpc);
       RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
+      RPC.Register("MqsDev", MqsDevCctor);
     }
 
     public void Start() {
@@ -62,7 +63,9 @@ namespace X13.Periphery {
       //  man.SetState(manJ);
       //  _owner.SetField("version", "¤VR" + verC.ToString());
       //}
-      _subMs = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "MQTT-SN.phy1_addr", SubFunc);
+      //_subMs = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "MQTT-SN.phy1_addr", SubFunc);
+      _gates.Add(new MsGUdp(this));
+      MsGSerial.Init(this);
     }
 
     public void Tick() {
@@ -161,9 +164,16 @@ namespace X13.Periphery {
       }
     }
 
-
+    private void MqsDevCctor(Topic t, Perform.Art a) {
+      var dev = _devs.FirstOrDefault(z => z.name == t.name);
+      if(dev == null) {
+        dev = new MsDevice(this, t);
+        _devs.Add(dev);
+      }
+    }
 
     #endregion RPC
+    /*
     private void SubFunc(Perform p, SubRec sb) {
       if(p.art == Perform.Art.subscribe) {
         if(p.src.GetField("MQTT-SN.phy1_addr").Defined) {
@@ -177,7 +187,7 @@ namespace X13.Periphery {
         _gates.Add(new MsGUdp(this));
         MsGSerial.Init(this);
       }
-    }
+    }*/
     internal bool ProcessInPacket(IMsGate gate, byte[] addr, byte[] buf, int start, int end) {
       var msg = MsMessage.Parse(buf, start, end);
       if(msg == null) {
@@ -246,12 +256,11 @@ namespace X13.Periphery {
         MsDevice dev = _devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
         if(dev == null) {
           var dt = Topic.root.Get("/dev/" + cm.ClientId, true, _owner);
-          dt.SetAttribute(Topic.Attribute.Readonly);
-          dt.SetField("editor", "MsStatus");
-          //dt.SetField("editor", "Enum");
-          //dt.SetField("enum", "MsStatus");
           dev = new MsDevice(this, dt);
           _devs.Add(dev);
+          dt.SetAttribute(Topic.Attribute.Readonly);
+          dt.SetField("editor", "MsStatus", _owner);
+          dt.SetField("cctor.MqsDev", string.Empty, _owner);
         }
         dev._gate = gate;
         dev.addr = addr;

@@ -9,9 +9,11 @@ using System.Text;
 namespace X13.Repository {
   public static class RPC {
     private static Dictionary<string, Action<JSC.JSValue[]>> _list;
+    private static Dictionary<string, Action<Topic, Perform.Art>> _cctors;
 
     static RPC() {
       _list = new Dictionary<string, Action<JSC.JSValue[]>>();
+      _cctors = new Dictionary<string, Action<Topic, Perform.Art>>();
     }
 
     public static void Register(string name, Action<JSC.JSValue[]> cb) {
@@ -19,10 +21,26 @@ namespace X13.Repository {
         _list.Add(name, cb);
       }
     }
+    public static void Register(string name, Action<Topic, Perform.Art> cb) {
+      lock(_list) {
+        _cctors.Add(name, cb);
+      }
+    }
     internal static void Call(string name, JSC.JSValue[] args) {
       Action<JSC.JSValue[]> cb;
       if(_list.TryGetValue(name, out cb)) {
         cb.Invoke(args);
+      }
+    }
+    internal static void CCtor(string name, Topic t, Perform.Art a) {
+      Action<Topic, Perform.Art> cb;
+      if(_cctors.TryGetValue(name, out cb)) {
+        try {
+          cb.Invoke(t, a);
+        }
+        catch(Exception ex) {
+          Log.Warning("RPC.CCtor({0}, {1}, {2}) - {3}", name, t.path, a, ex);
+        }
       }
     }
   }

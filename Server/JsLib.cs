@@ -106,6 +106,21 @@ namespace X13 {
       }
       return JSC.JSValue.Marshal(org.Value);
     }
+
+    internal static void PropertyDeep(ref SortedList<string, JSC.JSValue> l, JSC.JSValue o) {
+      if(o == null || o.ValueType != JSC.JSValueType.Object || o.Value == null) {
+        return;
+      }
+      if(l == null) {
+        l = new SortedList<string, JSC.JSValue>();
+      }
+      foreach(var kv in o) {
+        if(!l.ContainsKey(kv.Key)) {
+          l.Add(kv.Key, kv.Value);
+        }
+      }
+      PropertyDeep(ref l, o.__proto__);
+    }
   }
   public class ByteArray : JSI.CustomType {
     private byte[] _val;

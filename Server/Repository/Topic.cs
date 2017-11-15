@@ -405,7 +405,7 @@ namespace X13.Repository {
               sb = t._subRecords[i];
               if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
                   && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
-                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))/* (tmp_s = cmd.o as string) != null && tmp_s.StartsWith(sb.prefix)*/))
+                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
                   ) {
                 try {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());

@@ -582,10 +582,11 @@ namespace X13.Periphery {
               MsDevice dev = _pl._devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
               if(dev == null) {
                 var dt = Topic.root.Get("/dev/" + cm.ClientId, true, owner);
-                dt.SetAttribute(Topic.Attribute.Readonly);
-                dt.SetField("editor", "MsStatus");
                 dev = new MsDevice(_pl, dt);
                 _pl._devs.Add(dev);
+                dt.SetAttribute(Topic.Attribute.Readonly);
+                dt.SetField("editor", "MsStatus");
+                dt.SetField("cctor.MqsDev", string.Empty, owner);
               }
               dev._gate = this;
               dev.addr = fm.addr;
@@ -949,7 +950,7 @@ namespace X13.Periphery {
           return;
         }
         if(ti.tag[0] == '.') {
-          if(ti.tag == ".MQTT-SN.tag" && val.ValueType == JSC.JSValueType.String) {
+          if(ti.tag == ".cctor.MqsDev" && val.ValueType == JSC.JSValueType.String) {
             var v = val.Value as string;
             var type = "MQTT-SN/" + v.Substring(0, v.IndexOf('.'));
             ti.topic.SetField("type", type, owner);
@@ -1270,7 +1271,7 @@ namespace X13.Periphery {
       new Tuple<ushort, string, DType>(0xFF23, ".MQTT-SN.IPRouter",       DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFF24, ".MQTT-SN.IPBroker",       DType.ByteArray),
 
-      new Tuple<ushort, string, DType>(0xFFC0, ".MQTT-SN.tag",            DType.String),
+      new Tuple<ushort, string, DType>(0xFFC0, ".cctor.MqsDev",           DType.String),
       new Tuple<ushort, string, DType>(0xFFC1, ".MQTT-SN.phy1_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC2, ".MQTT-SN.phy2_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC3, ".MQTT-SN.phy3_addr",      DType.ByteArray),
