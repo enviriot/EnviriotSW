@@ -7,18 +7,17 @@ using System.Linq;
 using System.Text;
 using X13.Repository;
 
-namespace X13.PLC {
+namespace X13.Logram {
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 5)]
-  [System.ComponentModel.Composition.ExportMetadata("name", "PLC")]
-  class PlcPl : IPlugModul {
+  [System.ComponentModel.Composition.ExportMetadata("name", "Logram")]
+  class LogramPl : IPlugModul {
     private Topic _owner;
     private Topic _verbose;
-    private SubRec _subMs;
-    private Dictionary<Topic, IPlcItem> _items;
+    private Dictionary<Topic, ILoItem> _items;
 
-    public PlcPl() {
-      _items = new Dictionary<Topic, IPlcItem>();
+    public LogramPl() {
+      _items = new Dictionary<Topic, ILoItem>();
     }
 
     public bool verbose {
@@ -29,11 +28,11 @@ namespace X13.PLC {
 
     #region IPlugModul Members
     public void Init() {
-
+      RPC.Register("LoBind", BindCh);
+      RPC.Register("LoRef", RefCh);
     }
-
     public void Start() {
-      _owner = Topic.root.Get("/$YS/PLC");
+      _owner = Topic.root.Get("/$YS/Logram");
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -43,20 +42,15 @@ namespace X13.PLC {
         _verbose.SetState(false);
 #endif
       }
-      _subMs = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "PLC.tag", SubFunc);
     }
-
     public void Tick() {
 
     }
-
     public void Stop() {
-      _subMs.Dispose();
     }
-
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/PLC", true);
+        var en = Topic.root.Get("/$YS/Logram", true);
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -65,27 +59,41 @@ namespace X13.PLC {
         return (bool)en.GetState();
       }
       set {
-        Topic.root.Get("/$YS/PLC", true).SetState(value);
+        Topic.root.Get("/$YS/Logram", true).SetState(value);
       }
     }
     #endregion IPlugModul Members
 
-    private void SubFunc(Perform p, SubRec sb) {
-      int tag;
-      {
-        var tag_v = p.src.GetField("PLC.tag");
-        if(!tag_v.IsNumber) {
-          tag = 0;
-        } else {
-          tag =(int)tag_v;
+    private void BindCh(Topic t, Perform.Art a) {
+      ILoItem it;
+      if(_items.TryGetValue(t, out it)) {
+        LoBinding b = it as LoBinding;
+        if(a == Perform.Art.remove) {
+          if(b != null) {
+            //b.Remove();
+          }
+          _items.Remove(t);
+        } else if(b != null) {
+          //b.Update();
         }
+      } else if(a == Perform.Art.create) {
+        _items[t] = new LoBinding(this, t);
       }
-      if(p.art == Perform.Art.subscribe || p.art == Perform.Art.create) {
-        switch(tag) {
-        case 1:
-          _items[p.src] = new Binding(this, p.src);
-          break;
+    }
+    private void RefCh(Topic t, Perform.Art a) {
+      ILoItem it;
+      if(_items.TryGetValue(t, out it)) {
+        LoReference b = it as LoReference;
+        if(a == Perform.Art.remove) {
+          if(b != null) {
+            //b.Remove();
+          }
+          _items.Remove(t);
+        } else if(b != null) {
+          //b.Update();
         }
+      } else if(a == Perform.Art.create) {
+        _items[t] = new LoReference(this, t);
       }
     }
   }

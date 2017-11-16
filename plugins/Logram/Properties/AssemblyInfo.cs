@@ -5,8 +5,8 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("PLC")]
-[assembly: AssemblyDescription("PLC plugin for Enviriot")]
+[assembly: AssemblyTitle("Logram")]
+[assembly: AssemblyDescription("Logram plugin for Enviriot")]
 [assembly: AssemblyConfiguration("")]
 
 // Setting ComVisible to false makes the types in this assembly not visible 

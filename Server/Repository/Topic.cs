@@ -21,7 +21,7 @@ namespace X13.Repository {
 
     private JSValue _state;
     private JSValue _manifest;
-    private JSValue _mfst_upd;
+    private Perform _mfst_pu;
 
     #endregion Member variables
 
@@ -358,19 +358,23 @@ namespace X13.Repository {
         Topic t = cmd.src;
         bool r;
         JSValue oc;
-        if(t._mfst_upd == null) {
+        if(t._mfst_pu == null) {
           r = true;
           oc = t._manifest??JSValue.Null;
+          t._mfst_pu = cmd;
         } else {
           r = false;
-          oc = t._mfst_upd;
+          oc = t._mfst_pu.f_v;
+          if(cmd.prim != t._mfst_pu.prim) {
+            t._mfst_pu.prim = null; // inform all subscribers
+          }
         }
-
-        t._mfst_upd = JsLib.SetField(oc, cmd.o as string, cmd.f_v);
+        t._mfst_pu.f_v = JsLib.SetField(oc, cmd.o as string, cmd.f_v);
         return r;
       }
       public static void SetField2(Topic t) {
-        t._manifest = System.Threading.Interlocked.Exchange(ref t._mfst_upd, null);
+        var p = System.Threading.Interlocked.Exchange(ref t._mfst_pu, null);
+        t._manifest = p.f_v;
       }
 
       public static void UpdatePath(Topic t) {

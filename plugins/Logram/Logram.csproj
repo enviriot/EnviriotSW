@@ -7,8 +7,8 @@
     <ProjectGuid>{61FCBADD-489E-4493-92D5-B607F28C25AC}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>PLC</RootNamespace>
-    <AssemblyName>PLC</AssemblyName>
+    <RootNamespace>X13.Logram</RootNamespace>
+    <AssemblyName>Logram</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -48,9 +48,10 @@
     <Compile Include="..\..\Server\Properties\VersionInfo.cs">
       <Link>Properties\VersionInfo.cs</Link>
     </Compile>
-    <Compile Include="Binding.cs" />
-    <Compile Include="IPlcItem.cs" />
-    <Compile Include="PlcPl.cs" />
+    <Compile Include="LoBinding.cs" />
+    <Compile Include="ILoItem.cs" />
+    <Compile Include="LogramPl.cs" />
+    <Compile Include="LoReference.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

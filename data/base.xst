@@ -18,7 +18,7 @@
       <i n='Enum' m='{"attr":65}'>
         <i n='DPlcStatus' s='[{"text":"unknown","BG":"LightGray"},{"text":"Run","BG":"MediumAquamarine"},{"text":"Stop","BG":"Tomato"}]'  m='{"attr":71}'  ver="0.4.1709.20010" />
         <i n='PlcTag' s='["nope","Binding"]'  m='{"attr":71}' />
-        <i n='TwiStatus' s='[{"text":"Offline","BG":"Tomato"},{"text":"Online","BG":"MediumAquamarine"}]'  m='{"attr":71}'  ver="0.4.1709.20010" />
+        <i n='TwiStatus' s='[{"text":"Offline","BG":"Tomato"},{"text":"Online","BG":"MediumAquamarine"}]'  m='{"attr":71}' ver="0.4.1709.20010" />
       </i>
       <i n='MsExt' m='{"attr":65}'>
         <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Build","text":"Build programm"},{"name":"MQTT_SN.PLC.Run","text":"Run"},{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"Enum","enum":"DPlcStatus"}'  m='{"attr":69}' />
@@ -33,5 +33,12 @@
         <i n='LM75' s='{"Children":{},"default":0,"editor":"Enum","enum":"TwiStatus","manifest":{"MQTT-SN":{"tag":"---"},"TWI":{"addr":4},"type":"TWI/LM75"},"mi":{"TWI":{"attr":1,"mi":{"addr":{"attr":1,"type":"Integer"}}}},"src":"class LM75{\r\n  constructor(){\r\n    setTimeout(this.Tick.bind(this), 500*(1+Math.random()));\r\n  }\r\n  Tick(){\r\n    var addr=this.GetField(null, \"TWI.addr\");\r\n    this.TwiReq([0x48|addr, 0x03, 0x01, 0x02, 0]).then(\r\n      r =&gt; {\r\n        this.SetState(null,1);\r\n        let t = r[4]*256 + r[5];\r\n        t = (t&amp;0x7FFF) - (t&amp;0x8000);\r\n        this.SetState(\"T\", t/256);\r\n        setTimeout(this.Tick.bind(this), 60000);\r\n      },\r\n      error =&gt; {\r\n        this.SetState(null,0);\r\n        setTimeout(this.Tick.bind(this), 60000*(1+Math.random()));\r\n      }\r\n    );\r\n  }\r\n}"}' m='{"attr":69,"type":"MsExt/TwiDev"}' ver='0.4.1710.25003' />
       </i>
     </i>
+  </i>
+  <i n='Lo1' m='{"attr":64}' ver="0.4.1711.16003">
+    <i n='A' s='true' m='{"attr":4}' />
+    <i n='B' m='{"attr":0,"cctor":{"LoBind":"/Lo1/A"}}' />
+  </i>
+  <i n='Lo2' m='{"attr":64}' ver="0.4.1711.16003">
+    <i n='C' m='{"attr":0,"cctor":{"LoRef":"/Lo1/A"}}' />
   </i>
 </xst>

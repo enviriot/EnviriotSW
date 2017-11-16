@@ -6,8 +6,8 @@ using System.Text;
 using System.Threading.Tasks;
 using X13.Repository;
 
-namespace X13.PLC {
-  interface IPlcItem {
+namespace X13.Logram {
+  interface ILoItem {
     void Changed(Perform p, SubRec r);
     int Layer { get; }
   }
