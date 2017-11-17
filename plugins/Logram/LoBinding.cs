@@ -20,7 +20,7 @@ namespace X13.Logram {
       this.Changed(null, null);
     }
     private void SourceChanged(Perform p, SubRec sr) {
-      if(p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe) {
+      if(p.prim != _owner && (p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe)) {
         _owner.SetState(_src.GetState(), _src);
       }
     }

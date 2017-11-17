@@ -107,7 +107,7 @@ namespace X13 {
       return JSC.JSValue.Marshal(org.Value);
     }
 
-    internal static void PropertyDeep(ref SortedList<string, JSC.JSValue> l, JSC.JSValue o) {
+    internal static void Propertys(ref SortedList<string, JSC.JSValue> l, JSC.JSValue o) {
       if(o == null || o.ValueType != JSC.JSValueType.Object || o.Value == null) {
         return;
       }
@@ -119,7 +119,6 @@ namespace X13 {
           l.Add(kv.Key, kv.Value);
         }
       }
-      PropertyDeep(ref l, o.__proto__);
     }
   }
   public class ByteArray : JSI.CustomType {

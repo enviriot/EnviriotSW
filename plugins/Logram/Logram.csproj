@@ -50,8 +50,8 @@
     </Compile>
     <Compile Include="LoBinding.cs" />
     <Compile Include="ILoItem.cs" />
+    <Compile Include="LoBlock.cs" />
     <Compile Include="LogramPl.cs" />
-    <Compile Include="LoReference.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

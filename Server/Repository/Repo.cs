@@ -134,29 +134,41 @@ namespace X13.Repository {
     }
     private void CheckCCtor(Perform p) {
       SortedList<string, JSValue> lo = null, ln = null, lc = null;
+      JSValue to = null, tn = p.src.GetField("type"), vn;
       if(p.art == Perform.Art.changedField) {
-        JSValue o = JsLib.GetField(p.o as JSValue, "cctor"), n = p.src.GetField("cctor"), vn;
+        JSValue o = JsLib.GetField(p.o as JSValue, "cctor"), n = p.src.GetField("cctor");
+        to = JsLib.GetField(p.o as JSValue, "type");
         if(!object.ReferenceEquals(o, n)) {
-          JsLib.PropertyDeep(ref lo, o);
-          JsLib.PropertyDeep(ref ln, n);
-          if(lo != null && ln != null) {
-            foreach(var k in lo.Where(z => ln.ContainsKey(z.Key)).Select(z => z.Key).ToArray()) {
-              vn = ln[k];
-              if(!JSValue.ReferenceEquals(lo[k], vn)) {
-                lc.Add(k, vn);
-              }
-              lo.Remove(k);
-              ln.Remove(k);
-            }
-          }
+          JsLib.Propertys(ref lo, o);
+          JsLib.Propertys(ref ln, n);
         }
       } else if(p.art == Perform.Art.create) {
-        JsLib.PropertyDeep(ref ln, p.src.GetField("cctor"));
+        JsLib.Propertys(ref ln, p.src.GetField("cctor"));
       } else if(p.art == Perform.Art.remove) {
-        JsLib.PropertyDeep(ref lo, p.src.GetField("cctor"));
+        JsLib.Propertys(ref lo, p.src.GetField("cctor"));
       } else {
         return;
       }
+      if(!object.ReferenceEquals(to, tn)) {
+        Topic tt;
+        if(to!=null && to.ValueType == JSValueType.String && to.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(to.Value as string, out tt)) {
+          JsLib.Propertys(ref lo, JsLib.GetField(tt.GetState(), "cctor"));
+        }
+        if(tn != null && tn.ValueType == JSValueType.String && tn.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(tn.Value as string, out tt)) {
+          JsLib.Propertys(ref ln, JsLib.GetField(tt.GetState(), "cctor"));
+        }
+      }
+      if(lo != null && ln != null) {
+        foreach(var k in lo.Where(z => ln.ContainsKey(z.Key)).Select(z => z.Key).ToArray()) {
+          vn = ln[k];
+          if(!JSValue.ReferenceEquals(lo[k], vn)) {
+            lc.Add(k, vn);
+          }
+          lo.Remove(k);
+          ln.Remove(k);
+        }
+      }
+
       if(lo != null) {
         ProcessCCtor(lo, p.src, Perform.Art.remove);
       }

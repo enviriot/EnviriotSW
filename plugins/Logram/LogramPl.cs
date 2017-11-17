@@ -29,7 +29,7 @@ namespace X13.Logram {
     #region IPlugModul Members
     public void Init() {
       RPC.Register("LoBind", BindCh);
-      RPC.Register("LoRef", RefCh);
+      RPC.Register("LoBlock", BlockCh);
     }
     public void Start() {
       _owner = Topic.root.Get("/$YS/Logram");
@@ -74,27 +74,28 @@ namespace X13.Logram {
           }
           _items.Remove(t);
         } else if(b != null) {
-          //b.Update();
+          b.Changed(null, null);
         }
       } else if(a == Perform.Art.create) {
         _items[t] = new LoBinding(this, t);
       }
     }
-    private void RefCh(Topic t, Perform.Art a) {
+    private void BlockCh(Topic t, Perform.Art a) {
       ILoItem it;
       if(_items.TryGetValue(t, out it)) {
-        LoReference b = it as LoReference;
+        LoBlock b = it as LoBlock;
         if(a == Perform.Art.remove) {
           if(b != null) {
             //b.Remove();
           }
           _items.Remove(t);
         } else if(b != null) {
-          //b.Update();
+          b.Changed(null, null);
         }
       } else if(a == Perform.Art.create) {
-        _items[t] = new LoReference(this, t);
+        _items[t] = new LoBlock(this, t);
       }
     }
+
   }
 }
