@@ -25,7 +25,6 @@ namespace X13.Logram {
       }
     }
 
-
     #region IloItem Members
     public int Layer {
       get { 

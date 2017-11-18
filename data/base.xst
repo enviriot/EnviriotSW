@@ -2,12 +2,12 @@
 <xst path='/' m='{"attr":65}'>
   <i n='$YS' m='{"attr":65}'>
     <i n='TYPES' m='{"attr":65}'>
-      <i n='Core' m='{"attr":65}' ver="0.4.1709.25010">
+      <i n='Core' m='{"attr":65}' ver="0.4.1711.18011">
         <i n='Boolean' s='{"default":false,"willful":true}' m='{"attr":69}' />
         <i n='ByteArray' s='{"default":"¤BA","willful":true}' m='{"attr":69}' />
         <i n='Date' s='{"default":"1001-01-01T12:00:00.000Z","willful":true}' m='{"attr":69}' />
         <i n='Double' s='{"default":0,"willful":true}' m='{"attr":69}' />
-        <i n='Integer' s='{"default":0,"manifest":{"editor":"Integer"},"willful":true}' m='{"attr":69}' />
+        <i n='Integer' s='{"default":0,"manifest":{"type":"Integer"},"willful":true}' m='{"attr":69}' />
         <i n='Manifest' s='{"mi":{"attr":{"editor":"Attribute","attr":1},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"uri":""},"mi":{"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","editor":"JS","hint":"value converter for input"},"convOut":{"default":"","editor":"JS","hint":"value converter for output"},"suppressed":{"default":true}}},"PLC":{"default":{"tag":0},"mi":{"tag":{"editor":"Enum","enum":"PlcTag"}}},"type":{"default":""}}}' m='{"attr":69}' />
         <i n='Object' s='{"default":{},"willful":true}' m='{"attr":69}' />
         <i n='String' s='{"default":"","willful":true}' m='{"attr":69}' />
@@ -18,6 +18,12 @@
       <i n='Enum' m='{"attr":65}'>
         <i n='DPlcStatus' s='[{"text":"unknown","BG":"LightGray"},{"text":"Run","BG":"MediumAquamarine"},{"text":"Stop","BG":"Tomato"}]'  m='{"attr":71}'  ver="0.4.1709.20010" />
         <i n='TwiStatus' s='[{"text":"Offline","BG":"Tomato"},{"text":"Online","BG":"MediumAquamarine"}]'  m='{"attr":71}' ver="0.4.1709.20010" />
+      </i>
+      <i n='Ext' m='{"attr":65}' >
+        <i n='Logram' s='{"Children":"/$YS/TYPES/LoBlock","icon":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAadEVYdFNvZnR3YXJlAFBhaW50Lk5FVCB2My41LjEwMPRyoQAAAGBJREFUOE9jKK9pIh7FJaUzAFX/Jw4AVSI0xNZlQhBQ7+YprBAEZCOLU6aBGEeh2ECyhtCsOmQE1I8WdBARhKdpr4FkP5CsoS4rDIKQdSLHGrqnSdZAmpNIS63AuCAJAQDZygmbQTNYbQAAAABJRU5ErkJggg=="}' m='{"attr":69}'  ver="0.4.1711.18002" />
+      </i>
+      <i n='LoBlock' m='{"attr":65}'>
+        <i n='ADD' s='{"cctor":{"LoBlock":"ADD"},"default":"","icon":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAABGdBTUEAAK/INwWK6QAAAAlwSFlzAAAOwwAADsMBx2+oZAAAABp0RVh0U29mdHdhcmUAUGFpbnQuTkVUIHYzLjUuMTAw9HKhAAAANUlEQVQ4T2O48/8/SYiBJNVAxQOlgYEBp83YJWimAWgwJkALRjo7CW47yZ7GE/0DFdPUdBIAaGK1DRx76sAAAAAASUVORK5CYII=","manifest":{"type":"LoBlock/ADD"},"willful":true,"src":"class ADD{\r\n  constructor(){\r\n    this.inputs=[\"A\", \"B\", \"C\", \"D\", \"E\", \"F\", \"G\", \"H\"];\r\n  }\r\n  Calculate(pin){\r\n    let R=0, i, v;\r\n    for(i=0; i&lt;this.inputs.length; i++){\r\n      v = this.GetState(this.inputs[i]);\r\n      if(typeof(v)==\"number\"){\r\n        R+=v;\r\n      } else if(v===true){\r\n        R++;\r\n      }\r\n    }\r\n    this.SetState(\"Q\", R);\r\n  }\r\n}"}' m='{"attr":69,"type":"MsExt/TwiDev"}' ver='0.4.1711.18007' />
       </i>
       <i n='MsExt' m='{"attr":65}' ver="0.4.1711.14006">
         <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Build","text":"Build programm"},{"name":"MQTT_SN.PLC.Run","text":"Run"},{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"Enum","enum":"DPlcStatus"}'  m='{"attr":69}' />

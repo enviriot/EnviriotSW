@@ -131,6 +131,9 @@
     </Compile>
     <Compile Include="Inspector\InTopic.cs" />
     <Compile Include="Inspector\InValue.cs" />
+    <Compile Include="Logram\LogramForm.xaml.cs">
+      <DependentUpon>LogramForm.xaml</DependentUpon>
+    </Compile>
     <Compile Include="UI\BaseWindow.cs" />
     <Compile Include="UI\uiLog.xaml.cs">
       <DependentUpon>uiLog.xaml</DependentUpon>
@@ -166,6 +169,10 @@
     </Compile>
     <Compile Include="ValueEditors\veString.cs" />
     <Page Include="Inspector\InspectorForm.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Logram\LogramForm.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

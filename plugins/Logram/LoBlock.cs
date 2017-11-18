@@ -105,11 +105,7 @@ namespace X13.Logram {
       return JSC.JSValue.NotExists;
     }
     private void SetState(string path, JSC.JSValue value) {
-      Topic t;
-      if(!_owner.Exist(path, out t)) {
-        t = _owner.Get(path, true, _owner);
-        t.SetAttribute(Topic.Attribute.Required);
-      }
+      Topic t = _owner.Get(path, true, _owner);
       t.SetState(value, _owner);
     }
     private JSC.JSValue GetField(string path, string field) {
