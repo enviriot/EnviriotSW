@@ -1,4 +1,6 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using JSC = NiL.JS.Core;
+using JSL = NiL.JS.BaseLibrary;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -41,6 +43,9 @@ namespace X13.UI {
     }
 
     private DTopic _data;
+    private BitmapSource _icon;
+    private string _altView;
+
 
     public bool connected { get { return _cl != null && _cl.Status==ClientState.Ready; } }
     public DTopic data { get { return _data; } }
@@ -55,6 +60,19 @@ namespace X13.UI {
         }
       }
     }
+    public BitmapSource Icon {
+      get {
+        return _icon;
+      }
+      set {
+        if(_icon!=value) {
+          _icon = value;
+          PropertyChangedReise();
+        }
+      }
+    }
+    public bool ChangeViewEn { get { return _altView!=null; } }
+
 
     private void ClientChanged(object sender, PropertyChangedEventArgs e) {
       if(e.PropertyName == "Status") {
@@ -85,6 +103,7 @@ namespace X13.UI {
           App.Workspace.Close(this);
           return;
         }
+        _data.changed+=DataChanged;
         if(System.Threading.Interlocked.CompareExchange(ref _cl, _data.Connection, null) == null) {
           _cl.PropertyChanged += ClientChanged;
         }
@@ -96,14 +115,10 @@ namespace X13.UI {
           _pathItems.Insert(0, c);
           c = c.parent;
         }
+        DataChanged(DTopic.Art.type, _data);
         if(_view == null) {
-          //if(_data.typeStr == "Logram") {
-          //  _view = "LO";
-          //} else {
-            _view = "IN";
-          //}
+          _view = _altView??"IN";
         }
-        ContentId = _path + (_view == null ? string.Empty : ("?view=" + _view));
         if(_data == _data.Connection.root) {
           Title = _data.Connection.alias;
         } else {
@@ -111,20 +126,80 @@ namespace X13.UI {
         }
 
         PropertyChangedReise("connected");
-        if(_view == "IN") {
-          if((ccMain.Content as InspectorForm) == null) {
-            contentForm = new InspectorForm(_data);
-          }
-
-        //} else if(_view == "LO") {
-        //  if((ccMain.Content as LogramForm) == null) {
-        //    contentForm = new LogramForm(_data);
-        //  }
-
-        }
+        UpdContent();
       }
       this.Focus();
       this.Cursor = Cursors.Arrow;
+    }
+
+    private void DataChanged(DTopic.Art a, DTopic t) {
+      if(a == DTopic.Art.type) {
+        System.Windows.Media.Imaging.BitmapSource ni = null;
+        string ne = null, nv=_altView;
+
+        if(t.Manifest != null && t.Manifest.ValueType == JSC.JSValueType.Object && t.Manifest.Value!=null) {
+          var vv = t.Manifest["editor"];
+          string tmp_s;
+          if(vv.ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(tmp_s = vv.Value as string)) {
+            ne = tmp_s;
+          }
+          var iv = t.Manifest["icon"];
+          if(iv.ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(tmp_s= iv.Value as string)) {
+            ni = App.GetIcon(tmp_s);
+          }
+          string typeStr;
+          if(_data == null || _data.Manifest==null || _data.Manifest.ValueType!=JSC.JSValueType.Object 
+            || _data.Manifest.Value==null || string.IsNullOrEmpty(typeStr = _data.Manifest["type"].Value as string)) {
+            typeStr = null;
+          }
+          if(typeStr == "Core/Logram") {
+            nv = "LO";
+          }
+          if(nv!=_altView) {
+            _altView = nv;
+            PropertyChangedReise("ChangeViewEn");
+          }
+        }
+        if(ne == null) {
+          ne = DTopic.JSV2Type(t.State);
+        }
+        if(ni == null) {
+          if(t.State.ValueType == JSC.JSValueType.Object && t.State.Value == null) {
+            ni = App.GetIcon(string.Empty);  // Folder icon
+          }
+        }
+        if(ni == null) {
+          ni = App.GetIcon(ne);
+        }
+        if(Icon!=ni) {
+          Icon = ni;
+        }
+      }
+    }
+    private void buChangeView_Click(object sender, RoutedEventArgs e) {
+      string nv = _view;
+      if(( ccMain.Content as InspectorForm ) != null && _altView!=null) {
+        nv = _altView;
+      } else {
+        nv = "IN";
+      }
+      if(_view!=nv) {
+        _view = nv;
+        UpdContent();
+      }
+    }
+    private void UpdContent() {
+      ContentId = _path + ( _view == null ? string.Empty : ( "?view=" + _view ) );
+
+      if(_view == "IN") {
+        if(( ccMain.Content as InspectorForm ) == null) {
+          contentForm = new InspectorForm(_data);
+        }
+      } else if(_view == "LO") {
+        if(( ccMain.Content as LogramForm ) == null) {
+          contentForm = new LogramForm(_data);
+        }
+      }
     }
 
     #region Address bar
@@ -164,19 +239,5 @@ namespace X13.UI {
       }
     }
     #endregion Address bar
-
-    private void buChangeView_Click(object sender, RoutedEventArgs e) {
-      //if((ccMain.Content as InspectorForm) != null) {
-      //  if(_data.typeStr == "Logram") {
-      //    _view = "LO";
-      //    contentForm = new LogramForm(_data);
-      //    PropertyChangedReise("ContentId");
-      //  }
-      //} else {
-        //_view = "IN";
-        //contentForm = new InspectorForm(_data);
-        //PropertyChangedReise("ContentId");
-      //}
-    }
   }
 }

@@ -86,9 +86,9 @@ namespace X13.UI {
       Brush fg_b;
 
 
-      if(_enumT != null && _enumT.value.ValueType == JSC.JSValueType.Object) {
-        bool isArr = (bool)JSL.Array.isArray(new JSC.Arguments { _enumT.value });
-        foreach(var kv in _enumT.value) {
+      if(_enumT != null && _enumT.State.ValueType == JSC.JSValueType.Object) {
+        bool isArr = (bool)JSL.Array.isArray(new JSC.Arguments { _enumT.State });
+        foreach(var kv in _enumT.State) {
           text = string.Empty;
           bg_b = null;
           fg_b = Brushes.Black;
@@ -117,7 +117,7 @@ namespace X13.UI {
     }
 
     private void Publish() {
-      if(_owner.IsReadonly || _enumT==null || _enumT.value==null || _enumT.value.ValueType!=JSC.JSValueType.Object) {
+      if(_owner.IsReadonly || _enumT==null || _enumT.State==null || _enumT.State.ValueType!=JSC.JSValueType.Object) {
         return;
       }
       var v = base.SelectedItem as TextBlock;

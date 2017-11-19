@@ -27,7 +27,7 @@ namespace X13.UI {
       IsGroupHeader = _parent == null;
       _owner.changed += _owner_PropertyChanged;
       if(IsGroupHeader) {
-        _manifest = _owner.type;  // if(IsGroupHeader) don't use UpdateType(...)
+        _manifest = _owner.Manifest;  // if(IsGroupHeader) don't use UpdateType(...)
         name = "children";
         icon = App.GetIcon("children");
         editor = null;
@@ -38,7 +38,7 @@ namespace X13.UI {
         }
       } else {
         name = _owner.name;
-        base.UpdateType(_owner.type);
+        base.UpdateType(_owner.Manifest);
         levelPadding = _parent.levelPadding + 8;
       }
       base._isExpanded = IsGroupHeader && _owner.children != null && _owner.children.Any();
@@ -73,7 +73,7 @@ namespace X13.UI {
         return (_owner != null && _owner.children != null && _owner.children.Any()) || (_items != null && _items.Any());
       }
     }
-    public override JSC.JSValue value { get { return _owner != null ? _owner.value : JSC.JSValue.NotExists; } set { if(_owner != null) { _owner.SetValue(value); } } }
+    public override JSC.JSValue value { get { return _owner != null ? _owner.State : JSC.JSValue.NotExists; } set { if(_owner != null) { _owner.SetValue(value); } } }
     public override DTopic Root {
       get { return _owner.Connection.root; }
     }
@@ -195,14 +195,14 @@ namespace X13.UI {
       }
       if(IsGroupHeader) {
         if(art == DTopic.Art.type) {
-          _manifest = _owner.type;
+          _manifest = _owner.Manifest;
         }
       } else {
         if(art == DTopic.Art.type) {
-          this.UpdateType(_owner.type);
+          this.UpdateType(_owner.Manifest);
         } else if(art == DTopic.Art.value) {
-          this.UpdateType(_owner.type);
-          this.editor.ValueChanged(_owner.value);
+          this.UpdateType(_owner.Manifest);
+          this.editor.ValueChanged(_owner.State);
         }
       }
       if(_populated) {
@@ -269,8 +269,8 @@ namespace X13.UI {
       if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
         foreach(var t in tt.Result.children) {
           var z = await t.GetAsync(null);
-          if(z.value.ValueType == JSC.JSValueType.Object && z.value.Value != null && z.value["default"].Defined) {
-            acts.Add(z.name, z.value);
+          if(z.State.ValueType == JSC.JSValueType.Object && z.State.Value != null && z.State["default"].Defined) {
+            acts.Add(z.name, z.State);
           }
         }
       }
@@ -290,7 +290,7 @@ namespace X13.UI {
         // fill used resources
         if(_owner.children != null) {
           foreach(var ch in _owner.children) {
-            if((tmp1 = JsLib.GetField(ch.type, "MQTT-SN.tag")).ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(rName = tmp1.Value as string)) {
+            if((tmp1 = JsLib.GetField(ch.Manifest, "MQTT-SN.tag")).ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(rName = tmp1.Value as string)) {
               rName = ch.name;
             }
             rca = _acts.FirstOrDefault(z => z.Key == rName);

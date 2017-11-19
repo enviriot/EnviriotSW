@@ -9,8 +9,5 @@ using System.Windows.Media.Imaging;
 
 namespace X13.UI {
   public interface IBaseForm {
-    string view { get; }
-    BitmapSource icon { get; }
-    bool altView { get; }  // exist others view
   }
 }

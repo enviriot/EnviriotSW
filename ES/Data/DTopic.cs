@@ -14,11 +14,39 @@ namespace X13.Data {
     private static char[] FIELDS_SEPARATOR = new char[] { '.' };
     private static char[] PATH_SEPARATOR = new char[] { '/' };
 
+    public static string JSV2Type(JSC.JSValue value) {
+      if(value == null) {
+        return JSC.JSValueType.Undefined.ToString();
+      }
+      switch(value.ValueType) {
+      case JSC.JSValueType.String: {
+          string v;
+          if(( v = value.Value as string ) != null && v.Length > 3 && v[0] == '¤') {
+            switch(v.Substring(1, 2)) {
+            case "TR":
+              return "TopicReference";
+            case "VR":
+              return "Version";
+            }
+          }
+        }
+        break;
+      case JSC.JSValueType.Object:
+        if(value is ByteArray || value.Value is ByteArray) {
+          return "ByteArray";
+        }
+        break;
+      case JSC.JSValueType.Integer:
+        return JSC.JSValueType.Double.ToString();
+      }
+      return value.ValueType.ToString();
+    }
+
     internal readonly Client Connection;
 
     private bool _disposed;
     private List<DTopic> _children;
-    private JSC.JSValue _value;
+    private JSC.JSValue _state;
     private JSC.JSValue _manifest;
     private DTopic _typeTopic;
     private TopicReq _req;
@@ -39,8 +67,8 @@ namespace X13.Data {
     public string path { get; private set; }
     public string fullPath { get { return Connection.ToString() + this.path; } }
     public DTopic parent { get; private set; }
-    public JSC.JSValue value { get { return _value; } }
-    public JSC.JSValue type { get { return _manifest; } }  // TODO: rename
+    public JSC.JSValue State { get { return _state; } }
+    public JSC.JSValue Manifest { get { return _manifest; } }
     public ReadOnlyCollection<DTopic> children { get { return _children == null ? null : _children.AsReadOnly(); } }
 
     public Task<DTopic> CreateAsync(string name, JSC.JSValue st, JSC.JSValue manifest) {
@@ -92,7 +120,7 @@ namespace X13.Data {
     public event Action<Art, DTopic> changed;
 
     private void ValuePublished(JSC.JSValue value) {
-      _value = value;
+      _state = value;
       ChangedReise(Art.value, this);
     }
     private void ManifestPublished(JSC.JSValue manifest) {
@@ -118,7 +146,7 @@ namespace X13.Data {
     }
     private void _typeTopic_changed(DTopic.Art art, DTopic t) {
       if(art == Art.value) {
-        ProtoDeep(_manifest, (_typeTopic == null || _typeTopic.value.ValueType != JSC.JSValueType.Object) ? null : _typeTopic.value.ToObject());
+        ProtoDeep(_manifest, (_typeTopic == null || _typeTopic.State.ValueType != JSC.JSValueType.Object) ? null : _typeTopic.State.ToObject());
         ChangedReise(Art.type, this);
       }
     }
@@ -143,6 +171,7 @@ namespace X13.Data {
         App.mainWindow.Dispatcher.BeginInvoke(changed, System.Windows.Threading.DispatcherPriority.DataBind, art, src);
       }
     }
+
     private DTopic GetChild(string cName, bool create) {
       if(_children == null) {
         if(create) {
@@ -238,8 +267,8 @@ namespace X13.Data {
       XElement xCur = isRoot ? x : new XElement("i", new XAttribute("n", this.name));
 
       var tmp = JsLib.GetField(this._manifest, "attr");
-      if(tmp.IsNumber && (((int)tmp) & 0x0C) != 0 && this._value.Exists) {
-        xCur.Add(new XAttribute("s", JSL.JSON.stringify(this._value, null, null)));
+      if(tmp.IsNumber && (((int)tmp) & 0x0C) != 0 && this._state.Exists) {
+        xCur.Add(new XAttribute("s", JSL.JSON.stringify(this._state, null, null)));
       }
       tmp = JsLib.GetField(this._manifest, "version");
       string vs;
@@ -317,7 +346,7 @@ namespace X13.Data {
                 }
               }
             }
-          } else if(_cur._value != null) {
+          } else if(_cur._state != null) {
             _tcs.SetResult(_cur);
             lock(_cur) {
               _cur._req = null;
@@ -350,7 +379,7 @@ namespace X13.Data {
         }
         string name = _path.Substring(idx1, idx2 - idx1);
 
-        if(_cur._children == null && _cur._value == null) {
+        if(_cur._children == null && _cur._state == null) {
           lock(_cur) {
             if(_cur._req != null && _cur._req != this) {
               if(_cur._req._reqs == null) {
@@ -419,7 +448,7 @@ namespace X13.Data {
 
       public void Process() {
         if(!_complete) {
-          if(_value == null ? _topic.value != null : _value.Equals(_topic.value)) {
+          if(_value == null ? _topic.State != null : _value.Equals(_topic.State)) {
             _tcs.SetResult(true);
           } else {
             _topic.Connection.SendReq(6, this, _topic.path, _value);
@@ -510,7 +539,7 @@ namespace X13.Data {
             }
             next = new DTopic(parent, _p2.Value as string);
             next._children = cur._children;
-            next._value = cur._value;
+            next._state = cur._state;
             next._manifest = cur._manifest;
             next._typeTopic = cur._typeTopic;
 

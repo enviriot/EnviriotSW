@@ -1,4 +1,5 @@
-﻿<UserControl x:Class="X13.UI.LogramForm"
+﻿<!--This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.-->
+  <UserControl x:Class="X13.UI.LogramForm"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 

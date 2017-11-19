@@ -42,7 +42,7 @@ namespace X13.UI {
       if(td.IsCompleted && !td.IsFaulted && td.Result != null) {
         _tManifest = td.Result;
         _tManifest.changed += Manifest_changed;
-        UpdateType(_tManifest.value, _data.type);
+        UpdateType(_tManifest.State, _data.Manifest);
         base._isExpanded = IsGroupHeader && this.HasChildren;
       }
     }
@@ -74,19 +74,19 @@ namespace X13.UI {
     
     private void _data_PropertyChanged(DTopic.Art art, DTopic child) {
       if(art == DTopic.Art.type) {
-        _value = _data.type;
-        UpdateType(_tManifest != null ? _tManifest.value : null, _data.type);
+        _value = _data.Manifest;
+        UpdateType(_tManifest != null ? _tManifest.State : null, _data.Manifest);
       }
     }
     private void Manifest_changed(DTopic.Art art, DTopic src) {
       if(art == DTopic.Art.value) {
-        UpdateType(_tManifest != null ? _tManifest.value : null, _value);
+        UpdateType(_tManifest != null ? _tManifest.State : null, _value);
       }
     }
     private void SetFieldResp(Task<JSC.JSValue> r) {
       if(r.IsCompleted) {
         if(r.IsFaulted) {
-          UpdateType(_tManifest != null ? _tManifest.value : null, value);
+          UpdateType(_tManifest != null ? _tManifest.State : null, value);
           Log.Warning("{0}.{1} - {2}", _data.fullPath, _path, r.Exception.InnerException);
         }
       }
@@ -250,7 +250,7 @@ namespace X13.UI {
         } else {
           if(_data.Connection.TypeManifest != null) {
             foreach(var t in _data.Connection.TypeManifest.parent.children) {
-              if(t.name == "Manifest" || (v1 = t.value).ValueType != JSC.JSValueType.Object || v1.Value == null) {
+              if(t.name == "Manifest" || (v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null) {
                 continue;
               }
               mi = new MenuItem() { Header = t.name, Tag = v1 };

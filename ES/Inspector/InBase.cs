@@ -1,4 +1,6 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using JSC = NiL.JS.Core;
+using JSL = NiL.JS.BaseLibrary;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -10,8 +12,6 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using X13.Data;
-using JSC = NiL.JS.Core;
-using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.UI {
   public abstract class InBase : NPC_UI, IComparable<InBase> {
@@ -106,7 +106,7 @@ namespace X13.UI {
       IsReadonly = (attr&2)!=0;
       IsRequired = (attr&1)!=0;
       if(nv == null){
-        nv = JSV2Type();
+        nv = DTopic.JSV2Type(value);
       }
       if(ni == null) {
         if(value.ValueType == JSC.JSValueType.Object && value.Value == null) {
@@ -129,33 +129,6 @@ namespace X13.UI {
       this.editor.TypeChanged(_manifest);
     }
 
-    private string JSV2Type() {
-      if(value == null) {
-        return JSC.JSValueType.Undefined.ToString();
-      }
-      switch(value.ValueType){
-      case JSC.JSValueType.String: {
-          string v;
-          if((v = value.Value as string) != null && v.Length > 3 && v[0] == '¤') {
-            switch(v.Substring(1, 2)) {
-            case "TR":
-              return "TopicReference";
-            case "VR":
-              return "Version";
-            }
-          }
-        }
-        break;
-      case JSC.JSValueType.Object:
-        if(value is ByteArray || value.Value is ByteArray) {
-          return "ByteArray";
-        }
-        break;
-      case JSC.JSValueType.Integer:
-        return JSC.JSValueType.Double.ToString();
-      }
-      return value.ValueType.ToString();
-    }
     public void Deleted() {
       if(_isVisible) {
         if(_isExpanded) {

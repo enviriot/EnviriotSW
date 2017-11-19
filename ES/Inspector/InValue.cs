@@ -30,9 +30,9 @@ namespace X13.UI {
       base.IsGroupHeader = true;
       levelPadding = 1;
       _items = new List<InBase>();
-      _value = _data.value;
-      UpdateType(_data.type);
-      UpdateData(_data.value);
+      _value = _data.State;
+      UpdateType(_data.Manifest);
+      UpdateData(_data.State);
       _isExpanded = this.HasChildren;
       _data.changed += _data_PropertyChanged;
     }
@@ -137,10 +137,10 @@ namespace X13.UI {
     }
     private void _data_PropertyChanged(DTopic.Art art, DTopic child) {
       if(art == DTopic.Art.type) {
-        UpdateType(_data.type);
+        UpdateType(_data.Manifest);
       } else if(art == DTopic.Art.value) {
-        _value = _data.value;
-        UpdateData(_data.value);
+        _value = _data.State;
+        UpdateData(_data.State);
       }
     }
 
@@ -229,7 +229,7 @@ namespace X13.UI {
         } else {
           if(_data.Connection.TypeManifest != null) {
             foreach(var t in _data.Connection.TypeManifest.parent.children) {
-              if(t.name == "Manifest" || (v1 = t.value).ValueType != JSC.JSValueType.Object || v1.Value == null) {
+              if(t.name == "Manifest" || (v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null) {
                 continue;
               }
               mi = new MenuItem() { Header = t.name, Tag = v1 };

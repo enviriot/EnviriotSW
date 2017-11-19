@@ -175,18 +175,6 @@ namespace X13.UI {
       tv.FinishNameEdit(tb.Text);
       e.Handled = true;
     }
-
-    #region IBaseForm Members
-    public string view { get { return "Inspector"; } }
-    public BitmapSource icon { get { return App.GetIcon(null); } }
-    public bool altView { 
-      get {
-        JSC.JSValue dt;
-        return _data != null && _data.type!=null && _data.type.ValueType==JSC.JSValueType.Object 
-          && _data.type.Value!=null && (dt =_data.type["type"]).ValueType==JSC.JSValueType.String && ( dt.Value as string ) == "Core/Logram"; 
-      } 
-    }
-    #endregion IBaseForm Members
   }
   internal class GridColumnSpringConverter : IMultiValueConverter {
     public object Convert(object[] values, System.Type targetType, object parameter, System.Globalization.CultureInfo culture) {

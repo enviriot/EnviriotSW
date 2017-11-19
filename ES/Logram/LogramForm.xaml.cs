@@ -28,10 +28,5 @@ namespace X13.UI {
       this._data = data;
       InitializeComponent();
     }
-    #region IBaseForm Member
-    public string view { get { return "Logram"; } }
-    public BitmapSource icon { get { return App.GetIcon(null); } }
-    public bool altView { get { return true; } }
-    #endregion IBaseForm Member
   }
 }
