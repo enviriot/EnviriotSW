@@ -183,7 +183,7 @@ namespace X13.UI {
       get {
         JSC.JSValue dt;
         return _data != null && _data.type!=null && _data.type.ValueType==JSC.JSValueType.Object 
-          && _data.type.Value!=null && (dt =_data.type["type"]).ValueType==JSC.JSValueType.String && ( dt.Value as string ) == "Ext/Logram"; 
+          && _data.type.Value!=null && (dt =_data.type["type"]).ValueType==JSC.JSValueType.String && ( dt.Value as string ) == "Core/Logram"; 
       } 
     }
     #endregion IBaseForm Members

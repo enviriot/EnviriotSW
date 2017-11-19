@@ -35,7 +35,7 @@ namespace X13.UI {
       base.levelPadding = 1;
       base._items = new List<InBase>();
       _data.changed += _data_PropertyChanged;
-      _data.GetAsync("/$YS/TYPES/Core/Manifest").ContinueWith(ManifestLoaded, TaskScheduler.FromCurrentSynchronizationContext());
+      _data.GetAsync("/$YS/TYPES/Ext/Manifest").ContinueWith(ManifestLoaded, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     private void ManifestLoaded(Task<DTopic> td) {

@@ -57,7 +57,7 @@ namespace X13.Periphery {
       //Version ver, verC = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
 
       //if(verV.ValueType != JSC.JSValueType.String || (verS = verV.Value as string) == null || !verS.StartsWith("¤VR") || !Version.TryParse(verS.Substring(3), out ver) || ver < verC) {
-      //  var man = Topic.root.Get("/$YS/TYPES/Core/Manifest");
+      //  var man = Topic.root.Get("/$YS/TYPES/Ext/Manifest");
       //  var manJ = JsLib.Clone(man.GetState());
       //  JsLib.SetField(ref manJ, "Fields.MQTT-SN", JSL.JSON.parse(X13.Periphery.Properties.Resources.MQTT_SN_MANIFEST));
       //  man.SetState(manJ);

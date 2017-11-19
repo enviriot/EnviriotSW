@@ -155,7 +155,7 @@ namespace X13.Data {
             }
             _connEvnt.Clear();
           }
-          this.root.GetAsync("/$YS/TYPES/Core/Manifest").ContinueWith(HelloComplete);
+          this.root.GetAsync("/$YS/TYPES/Ext/Manifest").ContinueWith(HelloComplete);
         }
         break;
       case 3:  // [Response, msgId, success, [parameter | error]]

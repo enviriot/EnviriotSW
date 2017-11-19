@@ -28,7 +28,7 @@ namespace X13.EsBroker {
       this.SendArr(new JSL.Array { 1, Environment.MachineName });
       _owner = Topic.root.Get("/$YS/ES").Get(base.ToString());
       _owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
-      _owner.SetField("type", "ES/Connection", _owner);
+      _owner.SetField("type", "Ext/Connection", _owner);
       System.Net.Dns.BeginGetHostEntry(EndPoint.Address, EndDnsReq, null);
     }
     private void EndDnsReq(IAsyncResult ar) {
