@@ -134,6 +134,8 @@
     <Compile Include="Logram\LogramForm.xaml.cs">
       <DependentUpon>LogramForm.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Logram\LogramItems.cs" />
+    <Compile Include="Logram\LogramView.cs" />
     <Compile Include="UI\BaseWindow.cs" />
     <Compile Include="UI\uiLog.xaml.cs">
       <DependentUpon>uiLog.xaml</DependentUpon>
