@@ -67,7 +67,8 @@ namespace X13.UI {
       if(tt.IsFaulted || !tt.IsCompleted || (t = tt.Result) == null) {
         return;
       }
-      ModelChanged(DTopic.Art.addChild, t);
+      t.changed+=ChildChanged;
+      ChildChanged(DTopic.Art.addChild, t);
     }
     private void ModelChanged(DTopic.Art a, DTopic t) {
       if(t == _model) {
@@ -76,6 +77,17 @@ namespace X13.UI {
           this.Height = JsLib.OfInt(JsLib.GetField(_model.Manifest, "Logram.height"), 18 * CELL_SIZE);
         }
       } else if(t.parent == _model) {
+        if(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBlock"), null) != null) {
+          // LoBlock
+        } else {
+          if(a == DTopic.Art.addChild) {
+            t.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
+          }
+        }
+      }
+    }
+    private void ChildChanged(DTopic.Art a, DTopic t) {
+      if(t.parent == _model) {
         if(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBlock"), null) != null) {
           // LoBlock
         } else {

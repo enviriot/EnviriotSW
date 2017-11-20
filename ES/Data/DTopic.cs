@@ -50,6 +50,7 @@ namespace X13.Data {
     private JSC.JSValue _manifest;
     private DTopic _typeTopic;
     private TopicReq _req;
+    private bool _typeLoading;
 
     private DTopic(DTopic parent, string name) {
       this.parent = parent;
@@ -129,6 +130,7 @@ namespace X13.Data {
       if(_manifest.ValueType == JSC.JSValueType.Object && _manifest.Value != null) {
         var tt = _manifest["type"];
         if(tt.ValueType == JSC.JSValueType.String && tt.Value != null) {
+          _typeLoading = true;
           this.GetAsync("/$YS/TYPES/" + (tt.Value as string)).ContinueWith(TypeLoaded);
           send = false;
         }
@@ -142,6 +144,7 @@ namespace X13.Data {
         _typeTopic = td.Result;
         _typeTopic.changed += _typeTopic_changed;
       }
+      _typeLoading = false;
       _typeTopic_changed(Art.value, _typeTopic);
     }
     private void _typeTopic_changed(DTopic.Art art, DTopic t) {
@@ -347,7 +350,11 @@ namespace X13.Data {
               }
             }
           } else if(_cur._state != null) {
-            _tcs.SetResult(_cur);
+            if(_cur._typeLoading) {
+              _cur.changed+=TypeLoaded;
+            } else {
+              _tcs.SetResult(_cur);
+            }
             lock(_cur) {
               _cur._req = null;
               if(this._reqs != null) {
@@ -419,6 +426,7 @@ namespace X13.Data {
         _cur = next;
         App.PostMsg(this);
       }
+
       public void Response(bool success, JSC.JSValue value) {
         if(success) {   // value == null after connect
           if(value != null && (value.ValueType != JSC.JSValueType.Boolean || !((bool)value))) {
@@ -426,6 +434,13 @@ namespace X13.Data {
           }
         } else {
           _tcs.SetException(new ApplicationException((value == null ? "TopicReqError" : value.ToString())));
+        }
+      }
+
+      private void TypeLoaded(Art a, DTopic t) {
+        if(a==Art.type && t==_cur && !_cur._typeLoading) {
+          _cur.changed-=TypeLoaded;
+          _tcs.SetResult(_cur);
         }
       }
 
