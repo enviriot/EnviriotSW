@@ -32,12 +32,14 @@ namespace X13.UI {
     private TranslateTransform _translateTransform;
     private ScaleTransform _zoomTransform;
 
+    private SortedList<uint, uiItem> _map;
+
     private DrawingVisual _backgroundVisual;
     public List<Visual> _visuals;
     //private bool move;
 
     public LogramView() {
-      _zoom = 1;
+      _zoom = 1.25;
       _visuals = new List<Visual>();
       _backgroundVisual = new DrawingVisual();
       _translateTransform = new TranslateTransform();
@@ -48,11 +50,14 @@ namespace X13.UI {
       _transformGroup.Children.Add(_translateTransform);
       RenderTransform = _transformGroup;
       AddVisualChild(_backgroundVisual);
+      _map = new SortedList<uint, uiItem>();
 
     }
 
     public void Attach(DTopic model) {
       this._model = model;
+      _map.Clear();
+
       _model.changed += ModelChanged;
       ModelChanged(DTopic.Art.type, _model);
 
@@ -140,6 +145,35 @@ namespace X13.UI {
       }
     }
 
+    private void MapRemove(uiItem val) {
+      lock(_map) {
+        foreach(var i in _map.Where(z => z.Value == val).ToArray()) {
+          _map.Remove(i.Key);
+          //Log.Debug("MapRemove({0}, {1}, {2}) = {3}", (i.Key&1)!=0?"V":"H", (i.Key>>1) & 0xFFFF, (i.Key>>17) & 0x7FFF, i.Value);
+        }
+      }
+    }
+    private void MapSet(bool vert, int x, int y, uiItem val) {
+      uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0xFFFF) << 1) | (vert ? 1 : 0));
+      lock(_map) {
+        if(val == null) {
+          _map.Remove(idx);
+        } else {
+          _map[idx] = val;
+        }
+      }
+      //RenderBackground();
+      //Log.Debug("MapSet({0}, {1}, {2}) = {3}", vert?"V":"H", x, y, val);
+    }
+    private uiItem MapGet(bool vert, int x, int y) {
+      uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0xFFFF) << 1) | (vert ? 1 : 0));
+      uiItem ret;
+      lock(_map) {
+        _map.TryGetValue(idx, out ret);
+      }
+      return ret;
+    }
+
     protected override void OnMouseWheel(MouseWheelEventArgs e) {
       if(Keyboard.IsKeyDown(Key.LeftCtrl)) {
         if(e.Delta < 0 ? _zoom > 0.4 : _zoom < 2.5) {
@@ -185,15 +219,15 @@ namespace X13.UI {
         //  move = true;
         //  if(selected != null) {
         //    SchemaElement el;
-        //    uiWire w;
+        //    loBinding w;
         //    uiPin pin;
         //    if((el = selected as SchemaElement) != null) {
         //      el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), false);
         //    } else if((pin = selected as uiPin) != null) {
-        //      w = new uiWire(selected as uiPin, this);
+        //      w = new loBinding(selected as uiPin, this);
         //      w.Update(ScreenStartPoint);
         //      selected = w;
-        //    } else if((w = selected as uiWire) != null && w.B == null) {
+        //    } else if((w = selected as loBinding) != null && w.B == null) {
         //      w.Update(cp);
         //    }
         //  } else if(_mSelected != null) {
@@ -314,7 +348,7 @@ namespace X13.UI {
           ReleaseMouseCapture();
           //} else if(selected != null) {
           //  SchemaElement el;
-          //  uiWire w;
+          //  loBinding w;
           //  var cp = e.GetPosition(this);
           //  if((el = selected as SchemaElement) != null && move) {
           //    el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), true);
@@ -324,7 +358,7 @@ namespace X13.UI {
           //    if(selected.Offset.X + selected.ContentBounds.Right + CELL_SIZE > this.Width) {
           //      model.Get<long>("_width").value = 1 + (int)(selected.Offset.X + selected.ContentBounds.Right) / CELL_SIZE;
           //    }
-          //  } else if((w = selected as uiWire) != null && w.GetModel() == null) {
+          //  } else if((w = selected as loBinding) != null && w.GetModel() == null) {
           //    uiPin finish = GetVisual(cp.X, cp.Y) as uiPin;
           //    if(finish != null && finish != w.A) {
           //      w.SetFinish(finish);
