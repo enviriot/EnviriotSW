@@ -250,7 +250,7 @@ namespace X13.UI {
       } else if(_manifest != null && (v1 = _manifest["Children"]).ValueType == JSC.JSValueType.String) {
         _owner.GetAsync(v1.Value as string).ContinueWith(tt=>FillContextMenuFromChildren(l, tt), TaskScheduler.FromCurrentSynchronizationContext());
       } else {
-        _owner.GetAsync("/$YS/TYPES/Core").ContinueWith(tt => FillContextMenuFromChildren(l, tt), TaskScheduler.FromCurrentSynchronizationContext());
+        _owner.Connection.CoreTypes.GetAsync(null).ContinueWith(tt => FillContextMenuFromChildren(l, tt), TaskScheduler.FromCurrentSynchronizationContext());
       }
       return l;
     }

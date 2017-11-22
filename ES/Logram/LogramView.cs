@@ -35,10 +35,10 @@ namespace X13.UI {
 
     private DrawingVisual _backgroundVisual;
     private List<Visual> _visuals;
-    private SortedList<uint, uiItem> _map;
+    private SortedList<uint, loItem> _map;
     private DrawingVisual _mSelectVisual;
-    private uiItem _selected;
-    private SchemaElement[] _mSelected;
+    private loItem _selected;
+    private loElement[] _mSelected;
     private bool _multipleSelection;
 
     private bool move;
@@ -56,7 +56,7 @@ namespace X13.UI {
       _transformGroup.Children.Add(_translateTransform);
       RenderTransform = _transformGroup;
       AddVisualChild(_backgroundVisual);
-      _map = new SortedList<uint, uiItem>();
+      _map = new SortedList<uint, loItem>();
 
     }
 
@@ -100,10 +100,12 @@ namespace X13.UI {
     private void ChildChanged(DTopic.Art a, DTopic t) {
       if(t.parent == _model) {
         if(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBlock"), null) != null) {
-          // LoBlock
+          if(a == DTopic.Art.addChild) {
+            var b = new loBlock(t, this);
+          }
         } else {
           if(a == DTopic.Art.addChild) {
-            var p = new uiAlias(t, this);
+            var p = new loVariable(t, this);
           }
         }
       }
@@ -151,7 +153,7 @@ namespace X13.UI {
       }
     }
 
-    private void MapRemove(uiItem val) {
+    private void MapRemove(loItem val) {
       lock(_map) {
         foreach(var i in _map.Where(z => z.Value == val).ToArray()) {
           _map.Remove(i.Key);
@@ -159,7 +161,7 @@ namespace X13.UI {
         }
       }
     }
-    private void MapSet(bool vert, int x, int y, uiItem val) {
+    private void MapSet(bool vert, int x, int y, loItem val) {
       uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0xFFFF) << 1) | (vert ? 1 : 0));
       lock(_map) {
         if(val == null) {
@@ -171,39 +173,39 @@ namespace X13.UI {
       //RenderBackground();
       //Log.Debug("MapSet({0}, {1}, {2}) = {3}", vert?"V":"H", x, y, val);
     }
-    private uiItem MapGet(bool vert, int x, int y) {
+    private loItem MapGet(bool vert, int x, int y) {
       uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0xFFFF) << 1) | (vert ? 1 : 0));
-      uiItem ret;
+      loItem ret;
       lock(_map) {
         _map.TryGetValue(idx, out ret);
       }
       return ret;
     }
-    private uiItem GetVisual(double x, double y) {
-      List<uiItem> objs = new List<uiItem>();
+    private loItem GetVisual(double x, double y) {
+      List<loItem> objs = new List<loItem>();
       GeometryHitTestParameters parameters = new GeometryHitTestParameters(new RectangleGeometry(new Rect(x - CELL_SIZE / 4, y - CELL_SIZE / 4, CELL_SIZE / 2, CELL_SIZE / 2)));
       VisualTreeHelper.HitTest(this, null, new HitTestResultCallback((hr) => {
         var rez = (GeometryHitTestResult)hr;
-        var vis = hr.VisualHit as uiItem;
+        var vis = hr.VisualHit as loItem;
         if(vis != null) {
           objs.Add(vis);
         }
         return HitTestResultBehavior.Continue;
       }), parameters);
-      uiItem ret = null;
+      loItem ret = null;
       if(objs.Count > 0) {
-        ret = objs.FirstOrDefault(z => z is uiPin);
+        ret = objs.FirstOrDefault(z => z is loPin);
         if(ret == null) {
           ret = objs.FirstOrDefault(z => z is loBinding);
           if(ret == null) {
-            ret = objs.FirstOrDefault(z => z is SchemaElement);
+            ret = objs.FirstOrDefault(z => z is loElement);
           }
         }
       }
       return ret;
     }
 
-    public uiItem selected {
+    public loItem selected {
       get { return _selected; }
       private set {
         if(_selected != null) {
@@ -280,13 +282,13 @@ namespace X13.UI {
       } else if(e.LeftButton == MouseButtonState.Pressed && (move || (Math.Abs(cp.X - ScreenStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance || Math.Abs(cp.Y - ScreenStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance))) {
         move = true;
         if(selected != null) {
-          SchemaElement el;
+          loElement el;
           loBinding w;
-          uiPin pin;
-          if((el = selected as SchemaElement) != null) {
+          loPin pin;
+          if((el = selected as loElement) != null) {
             el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), false);
-          } else if((pin = selected as uiPin) != null && (pin.IsFreeInput || !pin.IsInput) ) {
-            w = new loBinding(selected as uiPin, this);
+          } else if((pin = selected as loPin) != null && (pin.IsFreeInput || !pin.IsInput) ) {
+            w = new loBinding(selected as loPin, this);
             w.Update(ScreenStartPoint);
             selected = w;
           } else if((w = selected as loBinding) != null && (w.Input == null || w.Output==null)) {
@@ -409,10 +411,10 @@ namespace X13.UI {
             Cursor = Cursors.Arrow;
             ReleaseMouseCapture();
           } else if(selected != null) {
-            SchemaElement el;
+            loElement el;
             loBinding w;
             var cp = e.GetPosition(this);
-            if((el = selected as SchemaElement) != null && move) {
+            if((el = selected as loElement) != null && move) {
               el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), true);
               if(selected.Offset.Y + selected.ContentBounds.Bottom + CELL_SIZE > this.Height) {
                 _model.SetField("Logram.height", 1 + (int)(selected.Offset.Y + selected.ContentBounds.Bottom) / CELL_SIZE);
@@ -421,7 +423,7 @@ namespace X13.UI {
                 _model.SetField("Logram.width", 1 + (int)(selected.Offset.X + selected.ContentBounds.Right) / CELL_SIZE);
               }
             } else if((w = selected as loBinding) != null && (w.Output == null || w.Input == null)) {
-              uiPin finish = GetVisual(cp.X, cp.Y) as uiPin;
+              loPin finish = GetVisual(cp.X, cp.Y) as loPin;
               if(finish != null && ((w.Output==null && finish.GetModel() != w.Input.GetModel() && finish.IsFreeInput) || (w.Input==null && finish.GetModel()!=w.Output.GetModel() && !finish.IsInput))) {
                 w.SetFinish(finish);
               } else {
@@ -432,7 +434,7 @@ namespace X13.UI {
             var cp = e.GetPosition(this);
             _multipleSelection = false;
             base.RemoveVisualChild(_mSelectVisual);
-            var objs = new List<SchemaElement>();
+            var objs = new List<loElement>();
             GeometryHitTestParameters parameters;
             {
               double l, t, w, h;
@@ -455,7 +457,7 @@ namespace X13.UI {
 
             VisualTreeHelper.HitTest(this, null, new HitTestResultCallback((hr) => {
               var rez = (GeometryHitTestResult)hr;
-              var vis = hr.VisualHit as SchemaElement;
+              var vis = hr.VisualHit as loElement;
               if(vis != null && rez.IntersectionDetail == IntersectionDetail.FullyInside) {
                 objs.Add(vis);
               }
@@ -480,7 +482,7 @@ namespace X13.UI {
         }
     }
 
-    private void DeleteLI(uiItem el) {
+    private void DeleteLI(loItem el) {
       loBinding b = el as loBinding;
       DTopic t;
 

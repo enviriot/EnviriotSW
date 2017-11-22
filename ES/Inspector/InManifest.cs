@@ -248,9 +248,9 @@ namespace X13.UI {
             ma.Items.Add(mi);
           }
         } else {
-          if(_data.Connection.TypeManifest != null) {
-            foreach(var t in _data.Connection.TypeManifest.parent.children) {
-              if(t.name == "Manifest" || (v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null) {
+          if(_data.Connection.CoreTypes != null) {
+            foreach(var t in _data.Connection.CoreTypes.children) {
+              if((v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null) {
                 continue;
               }
               mi = new MenuItem() { Header = t.name, Tag = v1 };

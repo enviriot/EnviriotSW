@@ -36,6 +36,7 @@ namespace X13.Data {
     public string alias { get; set; }
     public DTopic root { get; private set; }
     public DTopic TypeManifest { get; private set; }
+    public DTopic CoreTypes { get; private set; }
 
     public Client(string server, int port, string userName, string password) {
       this.server = server;
@@ -222,13 +223,22 @@ namespace X13.Data {
     }
 
     private void HelloComplete(Task<DTopic> dt) {
-      if(dt.IsCompleted) {
+      if(!dt.IsFaulted && dt.IsCompleted && dt!=null) {
         this.TypeManifest = dt.Result;
       }
-      foreach(var t in this.TypeManifest.parent.children.Where(z=>z.name!="Manifest")){
-        t.GetAsync(null);
+      this.root.GetAsync("/$YS/TYPES/Core").ContinueWith(LoadCoreTypes);
+    }
+
+    private void LoadCoreTypes(Task<DTopic> tt) {
+      if(!tt.IsFaulted && tt.IsCompleted && tt != null) {
+        this.CoreTypes = tt.Result;
+        foreach(var t in CoreTypes.children) {
+          t.GetAsync(null);
+        }
       }
     }
+
+
 
     private class ClRequest : INotMsg {
       public int msgId;
