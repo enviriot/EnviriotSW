@@ -36,14 +36,12 @@ namespace X13.UI {
       /// <summary>feel DrawingVisual</summary>
       /// <param name="chLevel">0 - locale, 1 - local & child, 2 - drag, 3- set position</param>
       public abstract void Render(int chLevel);
-      public override string ToString() {
-        return GetModel() != null ? GetModel().name : "??";
-      }
     }
 
     internal class uiPin : uiItem {
       private static Brush _BABrush;
       private static Brush _DblBrush;
+      private static Pen _ExtInPen;
       static uiPin() {
         _DblBrush = new SolidColorBrush(Color.FromRgb(0, 40, 100));
         _BABrush = new LinearGradientBrush(new GradientStopCollection(
@@ -55,6 +53,7 @@ namespace X13.UI {
                                   new GradientStop(Colors.Black, 0.63), 
                                   new GradientStop(Colors.Black, 0.76), 
                                   new GradientStop(Colors.LightGreen, 0.77) }));
+        _ExtInPen = new Pen(Brushes.DarkMagenta, 1);
       }
 
       private SchemaElement _owner;
@@ -77,13 +76,25 @@ namespace X13.UI {
 
       public Brush brush { get; private set; }
       public bool IsInput { get { return _mode != 0; } }
+      public bool IsFreeInput { get { return _mode == 1 || _mode == 3; } }
 
       public void SetLocation(Vector center, int chLevel) {
         _ownerOffset = center;
         Render(chLevel);
       }
       public void AddBinding(loBinding w) {
-        _connections.Add(w);
+        if(w == null) {
+          return;
+        }
+        if(_mode == 0) {
+          _connections.Add(w);
+        } else {
+          if(_srcBinding != null) {
+            _srcBinding.Dispose();
+          }
+          _srcBinding = w;
+          _mode = 2;
+        }
         Render(3);
       }
       public void RemoveBinding(loBinding w) {
@@ -98,13 +109,15 @@ namespace X13.UI {
           if(src_s == null) {
             _mode = 1;
           } else if(_source==null || _source.path!=src_s) {
-            model.GetAsync(src_s).ContinueWith(SourceLoaded);
+            model.GetAsync(src_s).ContinueWith(SourceLoaded, TaskScheduler.FromCurrentSynchronizationContext());
             return;
           }
-          //TODO: check input wire
+          if(_mode != 2 && _srcBinding != null) {
+            _srcBinding.Dispose();
+            _srcBinding = null;
+          }
         }
         this.Offset = _owner.Offset + _ownerOffset;
-        if((_mode == 0 && _connections.Any()) || _mode == 2) {
           var tc = model.State.ValueType;
           switch(tc) {
           case JSC.JSValueType.Object:
@@ -133,11 +146,8 @@ namespace X13.UI {
             this.brush = Brushes.LightGray;
             break;
           }
-        } else {
-          this.brush = null;
-        }
         using(DrawingContext dc = this.RenderOpen()) {
-          dc.DrawEllipse(this.brush, _selected ? SelectionPen : null, new Point(0, 0), 3, 3);
+          dc.DrawEllipse(this.brush, _selected ? SelectionPen : (_mode==3?_ExtInPen:null), new Point(0, 0), 3, 3);
         }
         if(_mode != 0 && _srcBinding != null && chLevel > 1) {
           _srcBinding.Render(chLevel);
@@ -159,6 +169,9 @@ namespace X13.UI {
           _mode = 2;
           var src = lv._visuals.OfType<uiPin>().FirstOrDefault(z => z.model == _source && !z.IsInput);
           if(src != null) {
+            if(_srcBinding != null) {
+              _srcBinding.Dispose();
+            }
             _srcBinding = new loBinding(src, this, lv);
             src.AddBinding(_srcBinding);
           }
@@ -170,9 +183,13 @@ namespace X13.UI {
       public override DTopic GetModel() {
         return model;
       }
+
+      public override string ToString() {
+        return model.path+(_mode<2?(_mode==0?"Out":"InF"):(_mode==2?"InI":"InE"));
+      }
     }
 
-    internal class loBinding : uiItem {
+    internal class loBinding : uiItem, IDisposable {
       private Point _cur;
       private List<Point> _track = new List<Point>();
 
@@ -183,18 +200,20 @@ namespace X13.UI {
         this.Input = input;
         this.Output = output;
         lv.AddVisual(this);
+        Log.Info("{0}.ctor()", this.ToString());
       }
       public loBinding(uiPin start, LogramView lv)
         : base(lv) {
         if(start.IsInput) {
-          this.Input = start;
-          this.Output = null;
-        } else {
           this.Input = null;
           this.Output = start;
+        } else {
+          this.Input = start;
+          this.Output = null;
         }
         Render(3);
         lv.AddVisual(this);
+        Log.Info("{0}.ctor()", this.ToString());
       }
 
       public void Update(Point p) {
@@ -202,12 +221,13 @@ namespace X13.UI {
         Render(2);
       }
       public void SetFinish(uiPin finish) {
-        if(Input == null) {
+        if(Input == null && !finish.IsInput) {
           Input = finish;
-        } else if(Output==null) {
+        } else if(Output==null && finish.IsFreeInput) {
           Output = finish;
         }
-        Render(3);
+        Output.GetModel().SetField("cctor.LoBind", Input.GetModel().path);
+        this.Dispose();
       }
       public override void Render(int chLevel) {
         if(chLevel > 1 && _track.Count > 0) {
@@ -232,7 +252,7 @@ namespace X13.UI {
         }
 
         using(DrawingContext dc = this.RenderOpen()) {
-          Pen pn = _selected ? SelectionPen : new Pen(Input.brush, 2.0);
+          Pen pn = (_selected || Input==null) ? SelectionPen : new Pen(Input.brush, 2.0);
           for(int i = 0; i < _track.Count - 1; i++) {
             if(_track[i].X == _track[i + 1].X && _track[i].Y == _track[i + 1].Y) {
               dc.DrawEllipse(Input.brush, null, _track[i], 3, 3);
@@ -432,6 +452,16 @@ namespace X13.UI {
       public override DTopic GetModel() {
         return null;
       }
+      public override string ToString() {
+        return (Input!=null?Input.GetModel().path:"nc")+" => "+(Output!=null?Output.GetModel().path:"nc");
+      }
+
+      public void Dispose() {
+        Log.Info("{0}.Dispose()", this.ToString());
+        Input.RemoveBinding(this);
+        lv.MapRemove(this);
+        lv.DeleteVisual(this);
+      }
     }
 
 
@@ -549,7 +579,9 @@ namespace X13.UI {
       public override DTopic GetModel() {
         return model;
       }
+      public override string ToString() {
+        return model.path;
+      }
     }
-
   }
 }

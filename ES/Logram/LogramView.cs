@@ -32,16 +32,22 @@ namespace X13.UI {
     private TranslateTransform _translateTransform;
     private ScaleTransform _zoomTransform;
 
-    private SortedList<uint, uiItem> _map;
 
     private DrawingVisual _backgroundVisual;
-    public List<Visual> _visuals;
-    //private bool move;
+    private List<Visual> _visuals;
+    private SortedList<uint, uiItem> _map;
+    private DrawingVisual _mSelectVisual;
+    private uiItem _selected;
+    private SchemaElement[] _mSelected;
+    private bool _multipleSelection;
+
+    private bool move;
 
     public LogramView() {
       _zoom = 1.25;
       _visuals = new List<Visual>();
       _backgroundVisual = new DrawingVisual();
+      _mSelectVisual = new DrawingVisual();
       _translateTransform = new TranslateTransform();
       _zoomTransform = new ScaleTransform() { ScaleX = _zoom, ScaleY = _zoom };
       _transformGroup = new TransformGroup();
@@ -103,12 +109,12 @@ namespace X13.UI {
       }
     }
 
-    public void AddVisual(Visual item) {
+    private void AddVisual(Visual item) {
       _visuals.Add(item);
       base.AddVisualChild(item);
       base.AddLogicalChild(item);
     }
-    public void DeleteVisual(Visual item) {
+    private void DeleteVisual(Visual item) {
       _visuals.Remove(item);
       base.RemoveVisualChild(item);
       base.RemoveLogicalChild(item);
@@ -127,14 +133,14 @@ namespace X13.UI {
     }
     protected override int VisualChildrenCount {
       get {
-        return _visuals.Count + 1;   // _backgroundVisual, _mSelectVisual
+        return _visuals.Count + (_multipleSelection ? 2 : 1);   // _backgroundVisual, _mSelectVisual
       }
     }
     protected override Visual GetVisualChild(int index) {
       if(index == 0) {
         return _backgroundVisual;
-        //} else if(index == _visuals.Count + 1) {
-        //  return _mSelectVisual;
+      } else if(index == _visuals.Count + 1) {
+        return _mSelectVisual;
       }
       return _visuals[index - 1];
     }
@@ -173,7 +179,63 @@ namespace X13.UI {
       }
       return ret;
     }
+    private uiItem GetVisual(double x, double y) {
+      List<uiItem> objs = new List<uiItem>();
+      GeometryHitTestParameters parameters = new GeometryHitTestParameters(new RectangleGeometry(new Rect(x - CELL_SIZE / 4, y - CELL_SIZE / 4, CELL_SIZE / 2, CELL_SIZE / 2)));
+      VisualTreeHelper.HitTest(this, null, new HitTestResultCallback((hr) => {
+        var rez = (GeometryHitTestResult)hr;
+        var vis = hr.VisualHit as uiItem;
+        if(vis != null) {
+          objs.Add(vis);
+        }
+        return HitTestResultBehavior.Continue;
+      }), parameters);
+      uiItem ret = null;
+      if(objs.Count > 0) {
+        ret = objs.FirstOrDefault(z => z is uiPin);
+        if(ret == null) {
+          ret = objs.FirstOrDefault(z => z is loBinding);
+          if(ret == null) {
+            ret = objs.FirstOrDefault(z => z is SchemaElement);
+          }
+        }
+      }
+      return ret;
+    }
 
+    public uiItem selected {
+      get { return _selected; }
+      private set {
+        if(_selected != null) {
+          _selected.Select(false);
+        }
+        _selected = value;
+        if(_selected != null) {
+          _selected.Select(true);
+        }
+        this.Focus();
+      }
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e) {
+      if(e.Key == Key.Delete) {
+        if(_mSelected != null) {
+          foreach(var el in _mSelected) {
+            el.Select(false);
+            DeleteLI(el);
+          }
+          _mSelected = null;
+        } else if(selected != null) {
+          DeleteLI(selected);
+          selected = null;
+        }
+      //} else if(e.Key == Key.C && Keyboard.IsKeyDown(Key.LeftCtrl)) {
+      //  mi_Copy(null, null);
+      //} else if(e.Key == Key.V && Keyboard.IsKeyDown(Key.LeftCtrl)) {
+      //  mi_Paste(null, null);
+      }
+      base.OnKeyUp(e);
+    }
     protected override void OnMouseWheel(MouseWheelEventArgs e) {
       if(Keyboard.IsKeyDown(Key.LeftCtrl)) {
         if(e.Delta < 0 ? _zoom > 0.4 : _zoom < 2.5) {
@@ -198,12 +260,12 @@ namespace X13.UI {
         e.Handled = true;
       } else {
         ScreenStartPoint = e.GetPosition(this);
-        //if(_mSelected == null) {
-        //  selected = GetVisual(ScreenStartPoint.X, ScreenStartPoint.Y);
-        //  if(selected == null) {
-        //    base.OnMouseDown(e);
-        //  }
-        //}
+        if(_mSelected == null) {
+          selected = GetVisual(ScreenStartPoint.X, ScreenStartPoint.Y);
+          if(selected == null) {
+            base.OnMouseDown(e);
+          }
+        }
       }
     }
     protected override void OnMouseMove(MouseEventArgs e) {
@@ -215,208 +277,218 @@ namespace X13.UI {
         double toY = startOffset.Y + p.Y - ScreenStartPoint.Y;
         _translateTransform.X = toX;
         _translateTransform.Y = toY;
-        //} else if(e.LeftButton == MouseButtonState.Pressed && (move || (Math.Abs(cp.X - ScreenStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance || Math.Abs(cp.Y - ScreenStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance))) {
-        //  move = true;
-        //  if(selected != null) {
-        //    SchemaElement el;
-        //    loBinding w;
-        //    uiPin pin;
-        //    if((el = selected as SchemaElement) != null) {
-        //      el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), false);
-        //    } else if((pin = selected as uiPin) != null) {
-        //      w = new loBinding(selected as uiPin, this);
-        //      w.Update(ScreenStartPoint);
-        //      selected = w;
-        //    } else if((w = selected as loBinding) != null && w.B == null) {
-        //      w.Update(cp);
-        //    }
-        //  } else if(_mSelected != null) {
-        //    foreach(var el in _mSelected.Where(z => !(z is uiTracer))) {
-        //      el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), false);
-        //    }
-        //  } else {
-        //    if(!_multipleSelection) {
-        //      _multipleSelection = true;
-        //      base.AddVisualChild(_mSelectVisual);
-        //    }
-        //    using(DrawingContext dc = _mSelectVisual.RenderOpen()) {
-        //      dc.DrawRectangle(null, Schema.SelectionPen, new Rect(ScreenStartPoint, cp));
-        //    }
-        //  }
+      } else if(e.LeftButton == MouseButtonState.Pressed && (move || (Math.Abs(cp.X - ScreenStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance || Math.Abs(cp.Y - ScreenStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance))) {
+        move = true;
+        if(selected != null) {
+          SchemaElement el;
+          loBinding w;
+          uiPin pin;
+          if((el = selected as SchemaElement) != null) {
+            el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), false);
+          } else if((pin = selected as uiPin) != null && (pin.IsFreeInput || !pin.IsInput) ) {
+            w = new loBinding(selected as uiPin, this);
+            w.Update(ScreenStartPoint);
+            selected = w;
+          } else if((w = selected as loBinding) != null && (w.Input == null || w.Output==null)) {
+            w.Update(cp);
+          }
+        } else if(_mSelected != null) {
+          foreach(var el in _mSelected) {
+            el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), false);
+          }
+        } else {
+          if(!_multipleSelection) {
+            _multipleSelection = true;
+            base.AddVisualChild(_mSelectVisual);
+          }
+          using(DrawingContext dc = _mSelectVisual.RenderOpen()) {
+            dc.DrawRectangle(null, SelectionPen, new Rect(ScreenStartPoint, cp));
+          }
+        }
       } else {
         base.OnMouseMove(e);
       }
     }
     protected override void OnMouseUp(MouseButtonEventArgs e) {
-      //if(e.ChangedButton == MouseButton.Right && e.RightButton == MouseButtonState.Released) {
-      //  Topic cur;
-      //  TopicView tv;
-      //  if(_mSelected != null) {
-      //    var cm = (this.Parent as Grid).ContextMenu;
-      //    cm.Items.Clear();
-      //    MenuItem mi = new MenuItem();
-      //    mi.Header = "Copy";
-      //    mi.Click += new RoutedEventHandler(mi_Copy);
-      //    cm.Items.Add(mi);
-      //    cm.IsOpen = true;
-      //  } else if(selected != null && (cur = selected.GetModel()) != null && (tv = TopicView.root.Get(cur, true)) != null) {
-      //    var cm = (this.Parent as Grid).ContextMenu;
-      //    var actions = tv.GetActions();
-      //    cm.Items.Clear();
+      if(e.ChangedButton == MouseButton.Right && e.RightButton == MouseButtonState.Released) {/*
+        Topic cur;
+        TopicView tv;
+        if(_mSelected != null) {
+          var cm = (this.Parent as Grid).ContextMenu;
+          cm.Items.Clear();
+          MenuItem mi = new MenuItem();
+          mi.Header = "Copy";
+          mi.Click += new RoutedEventHandler(mi_Copy);
+          cm.Items.Add(mi);
+          cm.IsOpen = true;
+        } else if(selected != null && (cur = selected.GetModel()) != null && (tv = TopicView.root.Get(cur, true)) != null) {
+          var cm = (this.Parent as Grid).ContextMenu;
+          var actions = tv.GetActions();
+          cm.Items.Clear();
 
-      //    ItemCollection items;
-      //    for(int i = 0; i < actions.Count; i++) {
-      //      switch(actions[i].action) {
-      //      case ItemAction.addToLogram:
-      //      case ItemAction.createBoolMask:
-      //      case ItemAction.createDoubleMask:
-      //      case ItemAction.createLongMask:
-      //      case ItemAction.createNodeMask:
-      //      case ItemAction.createStringMask:
-      //      case ItemAction.createByteArrMask:
-      //      case ItemAction.open:
-      //        continue;
-      //      }
-      //      items = cm.Items;
-      //      string[] lvls = actions[i].menuItem.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-      //      for(int j = 0; j < lvls.Length; j++) {
-      //        MenuItem mi = DataStorageView.FindMenuItem(items, lvls[j]);
-      //        if(mi == null) {
-      //          mi = new MenuItem();
-      //          mi.Header = lvls[j];
-      //          mi.DataContext = tv;
-      //          items.Add(mi);
-      //        }
+          ItemCollection items;
+          for(int i = 0; i < actions.Count; i++) {
+            switch(actions[i].action) {
+            case ItemAction.addToLogram:
+            case ItemAction.createBoolMask:
+            case ItemAction.createDoubleMask:
+            case ItemAction.createLongMask:
+            case ItemAction.createNodeMask:
+            case ItemAction.createStringMask:
+            case ItemAction.createByteArrMask:
+            case ItemAction.open:
+              continue;
+            }
+            items = cm.Items;
+            string[] lvls = actions[i].menuItem.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            for(int j = 0; j < lvls.Length; j++) {
+              MenuItem mi = DataStorageView.FindMenuItem(items, lvls[j]);
+              if(mi == null) {
+                mi = new MenuItem();
+                mi.Header = lvls[j];
+                mi.DataContext = tv;
+                items.Add(mi);
+              }
 
-      //        if(j == lvls.Length - 1) {
-      //          mi.Tag = actions[i];
-      //          mi.Click += new RoutedEventHandler(mi_Click);
-      //          mi.ToolTip = actions[i].description;
-      //        }
-      //        items = mi.Items;
-      //      }
-      //    }
-      //    if(cur.valueType == typeof(PiStatement)) {
-      //      MenuItem mi = new MenuItem();
-      //      mi.Header = "Copy";
-      //      mi.Click += new RoutedEventHandler(mi_Copy);
-      //      cm.Items.Add(mi);
-      //    } else if(selected is uiPin) {
-      //      MenuItem mi = new MenuItem();
-      //      mi.Header = "Trace";
-      //      mi.Click += new RoutedEventHandler(mi_Trace);
-      //      cm.Items.Add(mi);
-      //    }
-      //    if(cm.Items.Count > 0) {
-      //      cm.IsOpen = true;
-      //    }
-      //  } else if(Clipboard.ContainsText()) {
-      //    var cm = (this.Parent as Grid).ContextMenu;
-      //    cm.Items.Clear();
-      //    MenuItem mi = new MenuItem();
-      //    mi.Header = "Paste";
-      //    mi.Click += new RoutedEventHandler(mi_Paste);
-      //    cm.Items.Add(mi);
-      //    cm.IsOpen = true;
-      //  }
-      //  return;
-      //} else 
-      if(e.ChangedButton == MouseButton.Left && e.LeftButton == MouseButtonState.Released) {
-        //if(_mSelected != null && _mSelected.Length > 0) {
-        //  var cp = e.GetPosition(this);
-        //  double r = 0, d = 0;
-        //  foreach(var el in _mSelected.Where(z => !(z is uiTracer))) {
-        //    if(move) {
-        //      el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), true);
-        //      d = Math.Max(d, el.Offset.Y + el.ContentBounds.Bottom);
-        //      r = Math.Max(r, el.Offset.X + el.ContentBounds.Right);
-        //    }
-        //    el.Select(false);
-        //  }
-        //  _mSelected = null;
-        //  if(move) {
-        //    if(d + CELL_SIZE > this.Height) {
-        //      model.Get<long>("_height").value = 1 + (int)(d) / CELL_SIZE;
-        //    }
-        //    if(r + CELL_SIZE > this.Width) {
-        //      model.Get<long>("_width").value = 1 + (int)(r) / CELL_SIZE;
-        //    }
-        //  }
-        //}
-        if(IsMouseCaptured) {
-          Cursor = Cursors.Arrow;
-          ReleaseMouseCapture();
-          //} else if(selected != null) {
-          //  SchemaElement el;
-          //  loBinding w;
-          //  var cp = e.GetPosition(this);
-          //  if((el = selected as SchemaElement) != null && move) {
-          //    el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), true);
-          //    if(selected.Offset.Y + selected.ContentBounds.Bottom + CELL_SIZE > this.Height) {
-          //      model.Get<long>("_height").value = 1 + (int)(selected.Offset.Y + selected.ContentBounds.Bottom) / CELL_SIZE;
-          //    }
-          //    if(selected.Offset.X + selected.ContentBounds.Right + CELL_SIZE > this.Width) {
-          //      model.Get<long>("_width").value = 1 + (int)(selected.Offset.X + selected.ContentBounds.Right) / CELL_SIZE;
-          //    }
-          //  } else if((w = selected as loBinding) != null && w.GetModel() == null) {
-          //    uiPin finish = GetVisual(cp.X, cp.Y) as uiPin;
-          //    if(finish != null && finish != w.A) {
-          //      w.SetFinish(finish);
-          //    } else {
-          //      this.DeleteVisual(w);
-          //    }
-          //  }
-          //} else if(_multipleSelection) {
-          //  var cp = e.GetPosition(this);
-          //  _multipleSelection = false;
-          //  base.RemoveVisualChild(_mSelectVisual);
-          //  var objs = new List<SchemaElement>();
-          //  GeometryHitTestParameters parameters;
-          //  {
-          //    double l, t, w, h;
-          //    if(cp.X - ScreenStartPoint.X < 0) {
-          //      l = cp.X;
-          //      w = ScreenStartPoint.X - cp.X;
-          //    } else {
-          //      l = ScreenStartPoint.X;
-          //      w = cp.X - ScreenStartPoint.X;
-          //    }
-          //    if(cp.Y - ScreenStartPoint.Y < 0) {
-          //      t = cp.Y;
-          //      h = ScreenStartPoint.Y - cp.Y;
-          //    } else {
-          //      t = ScreenStartPoint.Y;
-          //      h = cp.Y - ScreenStartPoint.Y;
-          //    }
-          //    parameters = new GeometryHitTestParameters(new RectangleGeometry(new Rect(l, t, w, h)));
-          //  }
+              if(j == lvls.Length - 1) {
+                mi.Tag = actions[i];
+                mi.Click += new RoutedEventHandler(mi_Click);
+                mi.ToolTip = actions[i].description;
+              }
+              items = mi.Items;
+            }
+          }
+          if(cur.valueType == typeof(PiStatement)) {
+            MenuItem mi = new MenuItem();
+            mi.Header = "Copy";
+            mi.Click += new RoutedEventHandler(mi_Copy);
+            cm.Items.Add(mi);
+          } else if(selected is uiPin) {
+            MenuItem mi = new MenuItem();
+            mi.Header = "Trace";
+            mi.Click += new RoutedEventHandler(mi_Trace);
+            cm.Items.Add(mi);
+          }
+          if(cm.Items.Count > 0) {
+            cm.IsOpen = true;
+          }
+        } else if(Clipboard.ContainsText()) {
+          var cm = (this.Parent as Grid).ContextMenu;
+          cm.Items.Clear();
+          MenuItem mi = new MenuItem();
+          mi.Header = "Paste";
+          mi.Click += new RoutedEventHandler(mi_Paste);
+          cm.Items.Add(mi);
+          cm.IsOpen = true;
+        }
+        return;*/
+      } else
+        if(e.ChangedButton == MouseButton.Left && e.LeftButton == MouseButtonState.Released) {
+          if(_mSelected != null && _mSelected.Length > 0) {
+            var cp = e.GetPosition(this);
+            double r = 0, d = 0;
+            foreach(var el in _mSelected) {
+              if(move) {
+                el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), true);
+                d = Math.Max(d, el.Offset.Y + el.ContentBounds.Bottom);
+                r = Math.Max(r, el.Offset.X + el.ContentBounds.Right);
+              }
+              el.Select(false);
+            }
+            _mSelected = null;
+            if(move) {
+              if(d + CELL_SIZE > this.Height) {
+                _model.SetField("Logram.height", 1 + (int)(d) / CELL_SIZE);
+              }
+              if(r + CELL_SIZE > this.Width) {
+                _model.SetField("Logram.width", 1 + (int)(r) / CELL_SIZE);
+              }
+            }
+          }
+          if(IsMouseCaptured) {
+            Cursor = Cursors.Arrow;
+            ReleaseMouseCapture();
+          } else if(selected != null) {
+            SchemaElement el;
+            loBinding w;
+            var cp = e.GetPosition(this);
+            if((el = selected as SchemaElement) != null && move) {
+              el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), true);
+              if(selected.Offset.Y + selected.ContentBounds.Bottom + CELL_SIZE > this.Height) {
+                _model.SetField("Logram.height", 1 + (int)(selected.Offset.Y + selected.ContentBounds.Bottom) / CELL_SIZE);
+              }
+              if(selected.Offset.X + selected.ContentBounds.Right + CELL_SIZE > this.Width) {
+                _model.SetField("Logram.width", 1 + (int)(selected.Offset.X + selected.ContentBounds.Right) / CELL_SIZE);
+              }
+            } else if((w = selected as loBinding) != null && (w.Output == null || w.Input == null)) {
+              uiPin finish = GetVisual(cp.X, cp.Y) as uiPin;
+              if(finish != null && ((w.Output==null && finish.GetModel() != w.Input.GetModel() && finish.IsFreeInput) || (w.Input==null && finish.GetModel()!=w.Output.GetModel() && !finish.IsInput))) {
+                w.SetFinish(finish);
+              } else {
+                this.DeleteVisual(w);
+              }
+            }
+          } else if(_multipleSelection) {
+            var cp = e.GetPosition(this);
+            _multipleSelection = false;
+            base.RemoveVisualChild(_mSelectVisual);
+            var objs = new List<SchemaElement>();
+            GeometryHitTestParameters parameters;
+            {
+              double l, t, w, h;
+              if(cp.X - ScreenStartPoint.X < 0) {
+                l = cp.X;
+                w = ScreenStartPoint.X - cp.X;
+              } else {
+                l = ScreenStartPoint.X;
+                w = cp.X - ScreenStartPoint.X;
+              }
+              if(cp.Y - ScreenStartPoint.Y < 0) {
+                t = cp.Y;
+                h = ScreenStartPoint.Y - cp.Y;
+              } else {
+                t = ScreenStartPoint.Y;
+                h = cp.Y - ScreenStartPoint.Y;
+              }
+              parameters = new GeometryHitTestParameters(new RectangleGeometry(new Rect(l, t, w, h)));
+            }
 
-          //  VisualTreeHelper.HitTest(this, null, new HitTestResultCallback((hr) => {
-          //    var rez = (GeometryHitTestResult)hr;
-          //    var vis = hr.VisualHit as SchemaElement;
-          //    if(vis != null && rez.IntersectionDetail == IntersectionDetail.FullyInside) {
-          //      objs.Add(vis);
-          //    }
-          //    return HitTestResultBehavior.Continue;
-          //  }), parameters);
-          //  if(objs.Count > 0) {
-          //    if(objs.Count == 1) {
-          //      selected = objs[0];
-          //    } else {
-          //      _mSelected = objs.ToArray();
-          //      foreach(var el in _mSelected) {
-          //        el.Select(true);
-          //      }
-          //    }
-          //  }
+            VisualTreeHelper.HitTest(this, null, new HitTestResultCallback((hr) => {
+              var rez = (GeometryHitTestResult)hr;
+              var vis = hr.VisualHit as SchemaElement;
+              if(vis != null && rez.IntersectionDetail == IntersectionDetail.FullyInside) {
+                objs.Add(vis);
+              }
+              return HitTestResultBehavior.Continue;
+            }), parameters);
+            if(objs.Count > 0) {
+              if(objs.Count == 1) {
+                selected = objs[0];
+              } else {
+                _mSelected = objs.ToArray();
+                foreach(var el in _mSelected) {
+                  el.Select(true);
+                }
+              }
+            }
+          } else {
+            base.OnMouseUp(e);
+          }
+          move = false;
         } else {
           base.OnMouseUp(e);
         }
-        //move = false;
-      } else {
-        base.OnMouseUp(e);
+    }
+
+    private void DeleteLI(uiItem el) {
+      loBinding b = el as loBinding;
+      DTopic t;
+
+      if(b != null && (t = b.Output.GetModel())!=null) {
+        t.SetField("cctor.LoBind", null);
+      } else if((t = el.GetModel()) != null) {
+        t.Delete();
       }
     }
   }
-
 }
