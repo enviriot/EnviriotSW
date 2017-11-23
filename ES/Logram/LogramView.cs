@@ -17,12 +17,6 @@ using X13.Data;
 
 namespace X13.UI {
   internal partial class LogramView : Canvas {
-    #region Settings
-    public const int CELL_SIZE = 16;
-    public static readonly Typeface LFont = new Typeface("Times New Roman");
-    public static readonly Pen SelectionPen = new Pen(Brushes.Orange, 1);
-    #endregion Settings
-
     private DTopic _model;
 
     private double _zoom;
@@ -42,6 +36,9 @@ namespace X13.UI {
     private bool _multipleSelection;
 
     private bool move;
+
+    private System.Threading.Timer _loadTimer;
+
 
     public LogramView() {
       _zoom = 1.25;
@@ -68,9 +65,20 @@ namespace X13.UI {
       ModelChanged(DTopic.Art.type, _model);
 
       if(_model.children != null) {
+        _loadTimer = new System.Threading.Timer(LoadComplet, null, 250, -1);
         foreach(var ch in _model.children) {
           ch.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
         }
+      }
+    }
+
+    private void LoadComplet(object state) {
+      _loadTimer = null;
+      this.Dispatcher.BeginInvoke(new Action(LoadComplet2));
+    }
+    private void LoadComplet2() {
+      foreach(var p in _visuals.OfType<loPin>().Where(z => z.IsInput).ToArray()) {
+        p.Render(3);  // create loBinding's
       }
     }
     private void MChildrenLoad(Task<DTopic> tt) {
@@ -80,6 +88,10 @@ namespace X13.UI {
       }
       t.changed+=ChildChanged;
       ChildChanged(DTopic.Art.addChild, t);
+      var lt = _loadTimer;
+      if(lt != null) {
+        lt.Change(100, -1);
+      }
     }
     private void ModelChanged(DTopic.Art a, DTopic t) {
       if(t == _model) {

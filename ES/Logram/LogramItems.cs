@@ -19,6 +19,27 @@ using System.Windows.Media.Imaging;
 
 namespace X13.UI {
   internal partial class LogramView : Canvas {
+    #region Settings
+    private const int CELL_SIZE = 16;
+    private static readonly Typeface LFont = new Typeface("Times New Roman");
+
+    private static readonly Brush ElementBody = Brushes.SteelBlue;
+    private static readonly Brush ElementBodySelected = Brushes.Tomato;
+    private static readonly Brush _BABrush = new LinearGradientBrush(new GradientStopCollection(
+              new GradientStop[] {  new GradientStop(Colors.LightGreen, 0.22), 
+                                  new GradientStop(Colors.Black, 0.23), 
+                                  new GradientStop(Colors.Black, 0.36), 
+                                  new GradientStop(Colors.LightGreen, 0.37), 
+                                  new GradientStop(Colors.LightGreen, 0.62), 
+                                  new GradientStop(Colors.Black, 0.63), 
+                                  new GradientStop(Colors.Black, 0.76), 
+                                  new GradientStop(Colors.LightGreen, 0.77) }));
+    private static readonly Brush ValueFalse = new SolidColorBrush(Color.FromRgb(192, 200, 192));
+
+    private static readonly Pen SelectionPen = new Pen(ElementBodySelected, 1);
+
+    #endregion Settings
+
 
     internal abstract class loItem : DrawingVisual {
 
@@ -40,23 +61,6 @@ namespace X13.UI {
     }
 
     internal class loPin : loItem {
-      private static Brush _BABrush;
-      private static Brush _DblBrush;
-      private static Pen _ExtInPen;
-      static loPin() {
-        _DblBrush = new SolidColorBrush(Color.FromRgb(0, 40, 100));
-        _BABrush = new LinearGradientBrush(new GradientStopCollection(
-              new GradientStop[] {  new GradientStop(Colors.LightGreen, 0.22), 
-                                  new GradientStop(Colors.Black, 0.23), 
-                                  new GradientStop(Colors.Black, 0.36), 
-                                  new GradientStop(Colors.LightGreen, 0.37), 
-                                  new GradientStop(Colors.LightGreen, 0.62), 
-                                  new GradientStop(Colors.Black, 0.63), 
-                                  new GradientStop(Colors.Black, 0.76), 
-                                  new GradientStop(Colors.LightGreen, 0.77) }));
-        _ExtInPen = new Pen(Brushes.DarkMagenta, 1);
-      }
-
       private loElement _owner;
       private Vector _ownerOffset;
       private List<loBinding> _connections;
@@ -109,7 +113,7 @@ namespace X13.UI {
           var src_s = JsLib.OfString(JsLib.GetField(model.Manifest, "cctor.LoBind"), null);
           if(src_s == null) {
             _mode = 1;
-          } else if(_source == null || _source.path != src_s) {
+          } else if(_source == null || _source.path != src_s || (_mode == 2 && _srcBinding == null)) {
             model.GetAsync(src_s).ContinueWith(SourceLoaded, TaskScheduler.FromCurrentSynchronizationContext());
             return;
           }
@@ -122,33 +126,34 @@ namespace X13.UI {
         var tc = model.State.ValueType;
         switch(tc) {
         case JSC.JSValueType.Object:
-          //if(model.valueType == typeof(ByteArray)) {
-          //  this.brush = _BABrush;
-          //} else {
-          this.brush = Brushes.Magenta;
-          //}
-          break;
-        case JSC.JSValueType.Date:
-          this.brush = Brushes.LightSeaGreen;
+          if(model.State is ByteArray || model.State.Value is ByteArray) {
+            this.brush = _BABrush;
+          } else {
+            this.brush = Brushes.MediumOrchid;
+          }
           break;
         case JSC.JSValueType.String:
-          this.brush = Brushes.Khaki;
+          this.brush = Brushes.Gold;
           break;
         case JSC.JSValueType.Double:
-          this.brush = _DblBrush;
-          break;
-        case JSC.JSValueType.Integer:
-          this.brush = Brushes.Green;
+        case JSC.JSValueType.Integer: {
+            double val = (double)model.State;
+            this.brush = val > 0 ? (val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen) : (val == 0 ? ValueFalse : Brushes.DodgerBlue);
+          }
           break;
         case JSC.JSValueType.Boolean:
-          this.brush = (bool)model.State.Value ? Brushes.Lime : Brushes.DarkGray;
+          this.brush = (bool)model.State.Value ? Brushes.LawnGreen : ValueFalse;
           break;
         default:
-          this.brush = Brushes.LightGray;
+          this.brush = Brushes.MediumOrchid;
           break;
         }
         using(DrawingContext dc = this.RenderOpen()) {
-          dc.DrawEllipse(this.brush, _selected ? SelectionPen : (_mode == 3 ? _ExtInPen : null), new Point(0, 0), 3, 3);
+          if(_mode == 3) {
+            dc.DrawRectangle(this.brush, _selected ? SelectionPen : null, new Rect(-4, -4, 8, 8));
+          } else {
+            dc.DrawEllipse(this.brush, _selected ? SelectionPen : null, new Point(0, 0), 3, 3);
+          }
         }
         if(_mode != 0 && _srcBinding != null && chLevel > 1) {
           _srcBinding.Render(chLevel);
@@ -172,13 +177,15 @@ namespace X13.UI {
         }
         if(tt.Result.parent == lo || (tt.Result.parent != null && tt.Result.parent.parent == lo)) {
           _mode = 2;
-          var src = lv._visuals.OfType<loPin>().FirstOrDefault(z => z.model == _source && !z.IsInput);
-          if(src != null) {
-            if(_srcBinding != null) {
-              _srcBinding.Dispose();
+          if(lv._loadTimer == null) {
+            var src = lv._visuals.OfType<loPin>().FirstOrDefault(z => z.model == _source && !z.IsInput);
+            if(src != null) {
+              if(_srcBinding != null) {
+                _srcBinding.Dispose();
+              }
+              _srcBinding = new loBinding(src, this, lv);
+              src.AddBinding(_srcBinding);
             }
-            _srcBinding = new loBinding(src, this, lv);
-            src.AddBinding(_srcBinding);
           }
         } else {
           _mode = 3;
@@ -533,7 +540,7 @@ namespace X13.UI {
         using(DrawingContext dc = this.RenderOpen()) {
           FormattedText ft = new FormattedText(model.name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LFont, CELL_SIZE * 0.7, Brushes.White);
           width = Math.Round((ft.WidthIncludingTrailingWhitespace + CELL_SIZE * 1.5) / CELL_SIZE, 0) * CELL_SIZE;
-          dc.DrawRoundedRectangle(_selected ? Brushes.DarkOrange : Brushes.DarkSlateGray, null, new Rect(0, 1, width - 1, CELL_SIZE - 3), CELL_SIZE / 4, CELL_SIZE / 4);
+          dc.DrawRoundedRectangle(_selected ? ElementBodySelected : ElementBody, null, new Rect(0, 1, width - 1, CELL_SIZE - 3), CELL_SIZE / 4, CELL_SIZE / 4);
           ft.MaxTextHeight = CELL_SIZE - 3;
           ft.MaxTextWidth = width - CELL_SIZE / 2 - 5;
           dc.DrawText(ft, new Point(5, 1));
@@ -658,7 +665,7 @@ namespace X13.UI {
         if(p == null) {
           return;
         }
-        p.Render(a==DTopic.Art.value?1:3);
+        p.Render(a == DTopic.Art.value ? 1 : 3);
       }
 
       public override void Render(int chLevel) {
@@ -699,7 +706,7 @@ namespace X13.UI {
               cntIp = pos + 1;
             }
             pinIp[pos] = p;
-            textIp[pos] = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black);
+            textIp[pos] = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White);
             cw = 4 + textIp[pos].WidthIncludingTrailingWhitespace;
             if(pos == 0) {
               cw += 9;
@@ -711,7 +718,7 @@ namespace X13.UI {
               cntOp = pos + 1;
             }
             pinOp[pos] = p;
-            textOp[pos] = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black);
+            textOp[pos] = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White);
             cw = 4 + textOp[pos].WidthIncludingTrailingWhitespace;
             if(pos == 0) {
               cw += 9;
@@ -744,9 +751,9 @@ namespace X13.UI {
         using(DrawingContext dc = this.RenderOpen()) {
           Pen border = _selected ? SelectionPen : new Pen(Brushes.Black, 1);
           dc.DrawRectangle(Brushes.White, null, new Rect(-1, 2, width + 4, height + CELL_SIZE - 2));
-          dc.DrawRectangle(Brushes.AliceBlue, border, new Rect(3, CELL_SIZE - 0.5, wo > 0 ? width - 6 : width - 2, height + 1));
+          dc.DrawRectangle(_selected ? ElementBodySelected : ElementBody, null, new Rect(3, CELL_SIZE - 0.5, wo > 0 ? width - 6 : width - 2, height + 1));
           dc.DrawText(head, new Point((width - head.WidthIncludingTrailingWhitespace) / 2, 1));
-          dc.DrawRectangle(null, border, new Rect(wi, CELL_SIZE - 0.5, CELL_SIZE + 1, CELL_SIZE + 1));
+          //dc.DrawRectangle(null, border, new Rect(wi, CELL_SIZE - 0.5, CELL_SIZE + 1, CELL_SIZE + 1));
           dc.DrawImage(App.GetIcon(JsLib.OfString(model.Manifest["icon"], null)), new Rect(wi + 0.5, CELL_SIZE, CELL_SIZE, CELL_SIZE));
           int i;
           for(i = 0; i < cntIp; i++) {
@@ -828,6 +835,9 @@ namespace X13.UI {
 
       public override DTopic GetModel() {
         return model;
+      }
+      public override string ToString() {
+        return model.path;
       }
     }
 
