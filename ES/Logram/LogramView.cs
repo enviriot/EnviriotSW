@@ -18,6 +18,7 @@ using X13.Data;
 namespace X13.UI {
   internal partial class LogramView : Canvas {
     private DTopic _model;
+    private System.Threading.Timer _loadTimer;
 
     private double _zoom;
     private Point ScreenStartPoint;
@@ -26,7 +27,6 @@ namespace X13.UI {
     private TranslateTransform _translateTransform;
     private ScaleTransform _zoomTransform;
 
-
     private DrawingVisual _backgroundVisual;
     private List<Visual> _visuals;
     private SortedList<uint, loItem> _map;
@@ -34,11 +34,7 @@ namespace X13.UI {
     private loItem _selected;
     private loElement[] _mSelected;
     private bool _multipleSelection;
-
     private bool move;
-
-    private System.Threading.Timer _loadTimer;
-
 
     public LogramView() {
       _zoom = 1.25;
@@ -100,11 +96,11 @@ namespace X13.UI {
           this.Height = JsLib.OfInt(JsLib.GetField(_model.Manifest, "Logram.height"), 18 * CELL_SIZE);
         }
       } else if(t.parent == _model) {
-        if(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBlock"), null) != null) {
-          // LoBlock
-        } else {
-          if(a == DTopic.Art.addChild) {
-            t.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
+        if(a == DTopic.Art.addChild) {
+          t.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
+        } else if(a == DTopic.Art.RemoveChild) {
+          foreach(var it in _visuals.OfType<loElement>().Where(z => z.GetModel()==t).ToArray()) {
+            it.Dispose();
           }
         }
       }
@@ -113,11 +109,17 @@ namespace X13.UI {
       if(t.parent == _model) {
         if(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBlock"), null) != null) {
           if(a == DTopic.Art.addChild) {
-            var b = new loBlock(t, this);
+            var b = _visuals.OfType<loBlock>().FirstOrDefault(z => z.GetModel()==t);
+            if(b==null) {
+              b = new loBlock(t, this);
+            }
           }
         } else {
           if(a == DTopic.Art.addChild) {
-            var p = new loVariable(t, this);
+            var p = _visuals.OfType<loVariable>().FirstOrDefault(z => z.GetModel() == t);
+            if(p==null) {
+              p = new loVariable(t, this);
+            }
           }
         }
       }
@@ -230,6 +232,7 @@ namespace X13.UI {
         this.Focus();
       }
     }
+    public DTopic Model { get { return _model; } }
 
     protected override void OnKeyUp(KeyEventArgs e) {
       if(e.Key == Key.Delete) {
@@ -325,8 +328,8 @@ namespace X13.UI {
     }
     protected override void OnMouseUp(MouseButtonEventArgs e) {
       if(e.ChangedButton == MouseButton.Right && e.RightButton == MouseButtonState.Released) {/*
-        Topic cur;
-        TopicView tv;
+        DTopic cur;
+        //TopicView tv;
         if(_mSelected != null) {
           var cm = (this.Parent as Grid).ContextMenu;
           cm.Items.Clear();

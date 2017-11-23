@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using X13.Data;
 using System.Collections.ObjectModel;
+using System.Windows;
 
 namespace X13.UI {
   public partial class LogramForm : UserControl, IBaseForm {
@@ -61,11 +62,40 @@ namespace X13.UI {
 
     }
 
+    private Image _selectedImage;
+    private Point _MouseDownPoint;
+    private bool _readyToDrag;
     private void WrapPanel_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e) {
+      if(( _selectedImage=e.OriginalSource as Image )!=null) {
+        _MouseDownPoint=e.GetPosition(this);
+        _readyToDrag=true;
+      }
     }
     private void WrapPanel_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
+      LBDesc tag;
+      Point pos=e.GetPosition(this);
+      if(_readyToDrag && _selectedImage!=null && ( System.Math.Abs(_MouseDownPoint.X-pos.X)>SystemParameters.MinimumHorizontalDragDistance || System.Math.Abs(_MouseDownPoint.Y-pos.Y)>SystemParameters.MinimumVerticalDragDistance ) && (tag=_selectedImage.Tag as LBDesc)!=null) {
+        _readyToDrag=false;
+        DragDrop.DoDragDrop(_selectedImage, tag.owner, DragDropEffects.Copy);
+      }
+
     }
     private void WrapPanel_PreviewMouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e) {
+      LBDesc tag;
+      if(_selectedImage!=null && ( tag=_selectedImage.Tag as LBDesc )!=null) {
+        _readyToDrag=false;
+        if(uiLogram.Model!=null) {
+          int i=1;
+          string name;
+          do {
+            name=string.Format("A{0:D02}", i);
+            i++;
+          } while(uiLogram.Model.children.Any(z=>z.name == name) );
+          uiLogram.Model.CreateAsync(name, tag.owner.State["default"], tag.owner.State["manifest"]);
+        }
+        _selectedImage=null;
+      }
+
     }
 
     internal class LBDesc {
