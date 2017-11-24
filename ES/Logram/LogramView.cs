@@ -51,6 +51,9 @@ namespace X13.UI {
       AddVisualChild(_backgroundVisual);
       _map = new SortedList<uint, loItem>();
 
+      this.AllowDrop = true;
+      this.Drop += LogramView_Drop;
+
     }
 
     public void Attach(DTopic model) {
@@ -82,7 +85,7 @@ namespace X13.UI {
       if(tt.IsFaulted || !tt.IsCompleted || (t = tt.Result) == null) {
         return;
       }
-      t.changed+=ChildChanged;
+      t.changed += ChildChanged;
       ChildChanged(DTopic.Art.addChild, t);
       var lt = _loadTimer;
       if(lt != null) {
@@ -99,7 +102,7 @@ namespace X13.UI {
         if(a == DTopic.Art.addChild) {
           t.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
         } else if(a == DTopic.Art.RemoveChild) {
-          foreach(var it in _visuals.OfType<loElement>().Where(z => z.GetModel()==t).ToArray()) {
+          foreach(var it in _visuals.OfType<loElement>().Where(z => z.GetModel() == t).ToArray()) {
             it.Dispose();
           }
         }
@@ -109,15 +112,15 @@ namespace X13.UI {
       if(t.parent == _model) {
         if(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBlock"), null) != null) {
           if(a == DTopic.Art.addChild) {
-            var b = _visuals.OfType<loBlock>().FirstOrDefault(z => z.GetModel()==t);
-            if(b==null) {
+            var b = _visuals.OfType<loBlock>().FirstOrDefault(z => z.GetModel() == t);
+            if(b == null) {
               b = new loBlock(t, this);
             }
           }
         } else {
           if(a == DTopic.Art.addChild) {
             var p = _visuals.OfType<loVariable>().FirstOrDefault(z => z.GetModel() == t);
-            if(p==null) {
+            if(p == null) {
               p = new loVariable(t, this);
             }
           }
@@ -246,10 +249,10 @@ namespace X13.UI {
           DeleteLI(selected);
           selected = null;
         }
-      //} else if(e.Key == Key.C && Keyboard.IsKeyDown(Key.LeftCtrl)) {
-      //  mi_Copy(null, null);
-      //} else if(e.Key == Key.V && Keyboard.IsKeyDown(Key.LeftCtrl)) {
-      //  mi_Paste(null, null);
+        //} else if(e.Key == Key.C && Keyboard.IsKeyDown(Key.LeftCtrl)) {
+        //  mi_Copy(null, null);
+        //} else if(e.Key == Key.V && Keyboard.IsKeyDown(Key.LeftCtrl)) {
+        //  mi_Paste(null, null);
       }
       base.OnKeyUp(e);
     }
@@ -302,11 +305,11 @@ namespace X13.UI {
           loPin pin;
           if((el = selected as loElement) != null) {
             el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), false);
-          } else if((pin = selected as loPin) != null && (pin.IsFreeInput || !pin.IsInput) ) {
+          } else if((pin = selected as loPin) != null && (pin.IsFreeInput || !pin.IsInput)) {
             w = new loBinding(selected as loPin, this);
             w.Update(ScreenStartPoint);
             selected = w;
-          } else if((w = selected as loBinding) != null && (w.Input == null || w.Output==null)) {
+          } else if((w = selected as loBinding) != null && (w.Input == null || w.Output == null)) {
             w.Update(cp);
           }
         } else if(_mSelected != null) {
@@ -439,7 +442,7 @@ namespace X13.UI {
               }
             } else if((w = selected as loBinding) != null && (w.Output == null || w.Input == null)) {
               loPin finish = GetVisual(cp.X, cp.Y) as loPin;
-              if(finish != null && ((w.Output==null && finish.GetModel() != w.Input.GetModel() && finish.IsFreeInput) || (w.Input==null && finish.GetModel()!=w.Output.GetModel() && !finish.IsInput))) {
+              if(finish != null && ((w.Output == null && finish.GetModel() != w.Input.GetModel() && finish.IsFreeInput) || (w.Input == null && finish.GetModel() != w.Output.GetModel() && !finish.IsInput))) {
                 w.SetFinish(finish);
               } else {
                 this.DeleteVisual(w);
@@ -497,11 +500,60 @@ namespace X13.UI {
         }
     }
 
+    private void LogramView_Drop(object sender, DragEventArgs e) {
+      var pos = e.GetPosition(this);
+      int y = ((int)(pos.Y / CELL_SIZE) - 1) * CELL_SIZE;
+      if(y < 0) {
+        y = 0;
+      }
+      int x = ((int)(pos.X / CELL_SIZE) - 1) * CELL_SIZE;
+      if(x < 0) {
+        x = 0;
+      }
+      DTopic t;
+      if(e.Data.GetDataPresent(typeof(DTopic)) && (t = e.Data.GetData(typeof(DTopic)) as DTopic) != null) {
+        if(JsLib.OfString(JsLib.GetField(t.Manifest, "type"), null) == "Ext/LBDescr") {
+          int i = 1;
+          string name;
+          do {
+            name = string.Format("A{0:D02}", i);
+            i++;
+          } while(Model.children.Any(z => z.name == name));
+
+          Model.CreateAsync(name, t.State["default"], JsLib.SetField(JsLib.SetField(t.State["manifest"], "Logram.top", y), "Logram.left", x));
+        } else if((e.AllowedEffects & DragDropEffects.Link) == DragDropEffects.Link) {
+          string name = t.name;
+          if(Model.children.Any(z => z.name == name)) {
+            if(t.parent == null || (name = t.parent.name + "_" + t.name) == null || Model.children.Any(z => z.name == name)) {
+              int i = 1;
+              do {
+                name = string.Format("{0}_{1}", t.name, i);
+                i++;
+              } while(Model.children.Any(z => z.name == name));
+            }
+          }
+          var m = JSC.JSObject.CreateObject();
+          var ml = JSC.JSObject.CreateObject();
+          ml["top"] = y;
+          ml["left"] = x;
+          m["Logram"] = ml;
+          var mc = JSC.JSObject.CreateObject();
+          mc["LoBind"] = t.path;
+          m["cctor"] = mc;
+          m["attr"] = 0;
+          Model.CreateAsync(name, t.State, m);
+          if(string.IsNullOrEmpty(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBind"), null))) {
+            t.SetField("cctor.LoBind", Model.path+"/"+name);
+          }
+        }
+      }
+    }
+
     private void DeleteLI(loItem el) {
       loBinding b = el as loBinding;
       DTopic t;
 
-      if(b != null && (t = b.Output.GetModel())!=null) {
+      if(b != null && (t = b.Output.GetModel()) != null) {
         t.SetField("cctor.LoBind", null);
       } else if((t = el.GetModel()) != null) {
         t.Delete();

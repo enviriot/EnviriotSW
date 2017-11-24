@@ -148,6 +148,14 @@ namespace X13.UI {
         }
       }
     }
+    private void ListViewItem_MouseLeave(object sender, MouseEventArgs e) {
+      ListViewItem gr;
+      InTopic it;
+      if(e.LeftButton == MouseButtonState.Pressed && (gr = sender as ListViewItem) != null && (it = gr.DataContext as InTopic) != null) {
+        DragDrop.DoDragDrop(gr, it.Owner, DragDropEffects.Link);
+      }
+    }
+
     private void tbItemName_Loaded(object sender, RoutedEventArgs e) {
       (sender as TextBox).SelectAll();
       (sender as TextBox).Focus();

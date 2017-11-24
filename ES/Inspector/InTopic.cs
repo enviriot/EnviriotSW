@@ -77,6 +77,7 @@ namespace X13.UI {
     public override DTopic Root {
       get { return _owner.Connection.root; }
     }
+    public DTopic Owner { get { return _owner; } }
     public override void FinishNameEdit(string name) {
       if(_owner == null) {
         _parent._items.Remove(this);

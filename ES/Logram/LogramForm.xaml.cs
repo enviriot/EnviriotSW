@@ -36,7 +36,7 @@ namespace X13.UI {
     }
 
     private void LBDescrChanged(DTopic.Art a, DTopic t) {
-      if(t.Manifest == null || t.Manifest.ValueType != JSC.JSValueType.Object || t.Manifest.Value == null || (t.Manifest["type"].Value as string) != "Ext/TLBDescr") {
+      if(t.Manifest == null || t.Manifest.ValueType != JSC.JSValueType.Object || t.Manifest.Value == null || (t.Manifest["type"].Value as string) != "Ext/LBDescr") {
         return;
       }
       LBDesc bl;
@@ -66,19 +66,18 @@ namespace X13.UI {
     private Point _MouseDownPoint;
     private bool _readyToDrag;
     private void WrapPanel_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e) {
-      if(( _selectedImage=e.OriginalSource as Image )!=null) {
-        _MouseDownPoint=e.GetPosition(this);
-        _readyToDrag=true;
+      LBDesc tag;
+      Point pos = e.GetPosition(this);
+      if(_readyToDrag && _selectedImage != null && (System.Math.Abs(_MouseDownPoint.X - pos.X) > SystemParameters.MinimumHorizontalDragDistance || System.Math.Abs(_MouseDownPoint.Y - pos.Y) > SystemParameters.MinimumVerticalDragDistance) && (tag = _selectedImage.Tag as LBDesc) != null) {
+        _readyToDrag = false;
+        DragDrop.DoDragDrop(_selectedImage, tag.owner, DragDropEffects.Copy);
       }
     }
     private void WrapPanel_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e) {
-      LBDesc tag;
-      Point pos=e.GetPosition(this);
-      if(_readyToDrag && _selectedImage!=null && ( System.Math.Abs(_MouseDownPoint.X-pos.X)>SystemParameters.MinimumHorizontalDragDistance || System.Math.Abs(_MouseDownPoint.Y-pos.Y)>SystemParameters.MinimumVerticalDragDistance ) && (tag=_selectedImage.Tag as LBDesc)!=null) {
-        _readyToDrag=false;
-        DragDrop.DoDragDrop(_selectedImage, tag.owner, DragDropEffects.Copy);
+      if((_selectedImage = e.OriginalSource as Image) != null) {
+        _MouseDownPoint = e.GetPosition(this);
+        _readyToDrag = true;
       }
-
     }
     private void WrapPanel_PreviewMouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e) {
       LBDesc tag;

@@ -765,12 +765,10 @@ namespace X13.UI {
         }
         base.VisualBitmapScalingMode = BitmapScalingMode.HighQuality;
         using(DrawingContext dc = this.RenderOpen()) {
-          Pen border = _selected ? SelectionPen : new Pen(Brushes.Black, 1);
           dc.DrawRectangle(Brushes.White, null, new Rect(-1, 2, width + 4, height + CELL_SIZE - 2));
-          dc.DrawRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(3, CELL_SIZE - 0.5, wo > 0 ? width - 6 : width - 2, height + 1));
+          dc.DrawRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(3, CELL_SIZE, wo > 0 ? width - 6 : width - 2, height + 1));
           dc.DrawText(head, new Point(( width - head.WidthIncludingTrailingWhitespace ) / 2, 1));
-          //dc.DrawRectangle(null, border, new Rect(wi, CELL_SIZE - 0.5, CELL_SIZE + 1, CELL_SIZE + 1));
-          dc.DrawImage(App.GetIcon(JsLib.OfString(model.Manifest["icon"], null)), new Rect(wi + 0.5, CELL_SIZE, CELL_SIZE, CELL_SIZE));
+          dc.DrawImage(App.GetIcon(JsLib.OfString(model.Manifest["icon"], null)), new Rect(wi, CELL_SIZE, CELL_SIZE, CELL_SIZE));
           int i;
           for(i = 0; i < cntIp; i++) {
             if(textIp[i] != null && pinIp[i] != null) {
