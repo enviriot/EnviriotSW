@@ -367,7 +367,6 @@ namespace X13.UI {
         mi = new MenuItem() { Header = "Paste", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Paste.png"), Width = 16, Height = 16 } };
         mi.Click += miPaste_Click;
         l.Add(mi);
-
       }
       mi = new MenuItem() { Header = "Cut", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Cut.png"), Width = 16, Height = 16 } };
       mi.IsEnabled = !IsGroupHeader && !IsRequired;
@@ -433,10 +432,6 @@ namespace X13.UI {
       if(mi == null) {
         return;
       }
-      if(!IsExpanded && HasChildren) {
-        IsExpanded = true;
-        base.PropertyChangedReise("IsExpanded");
-      }
       bool pc_items = false;
       var tag = mi.Tag as JSC.JSValue;
       if(tag != null) {
@@ -448,6 +443,10 @@ namespace X13.UI {
                 pc_items = true;
               }
             }
+          }
+          if(!IsExpanded && HasChildren) {
+            IsExpanded = true;
+            base.PropertyChangedReise("IsExpanded");
           }
           var ni = new InTopic(tag, this);
           _items.Insert(0, ni);

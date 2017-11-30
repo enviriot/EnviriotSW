@@ -84,12 +84,16 @@ namespace X13.UI {
       if(_selectedImage!=null && ( tag=_selectedImage.Tag as LBDesc )!=null) {
         _readyToDrag=false;
         if(uiLogram.Model!=null) {
-          int i=1;
           string name;
-          do {
-            name=string.Format("A{0:D02}", i);
-            i++;
-          } while(uiLogram.Model.children.Any(z=>z.name == name) );
+          if(uiLogram.Model != null) {
+            int i = 1;
+            do {
+              name = string.Format("A{0:D02}", i);
+              i++;
+            } while(uiLogram.Model.children.Any(z => z.name == name));
+          } else {
+            name = "A01";
+          }
           uiLogram.Model.CreateAsync(name, tag.owner.State["default"], tag.owner.State["manifest"]);
         }
         _selectedImage=null;

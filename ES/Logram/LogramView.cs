@@ -50,7 +50,7 @@ namespace X13.UI {
       RenderTransform = _transformGroup;
       AddVisualChild(_backgroundVisual);
       _map = new SortedList<uint, loItem>();
-
+      this.ContextMenu = new ContextMenu();
       this.AllowDrop = true;
       this.Drop += LogramView_Drop;
 
@@ -330,8 +330,14 @@ namespace X13.UI {
       }
     }
     protected override void OnMouseUp(MouseButtonEventArgs e) {
-      if(e.ChangedButton == MouseButton.Right && e.RightButton == MouseButtonState.Released) {/*
+      if(e.ChangedButton == MouseButton.Right && e.RightButton == MouseButtonState.Released) {
         DTopic cur;
+        if(selected != null && (cur = selected.GetModel()) != null) {
+          var cm = (this as Canvas).ContextMenu;
+          cm.ItemsSource = MenuItems(cur);
+          cm.IsOpen = true;
+        }
+        /*
         //TopicView tv;
         if(_mSelected != null) {
           var cm = (this.Parent as Grid).ContextMenu;
@@ -341,49 +347,8 @@ namespace X13.UI {
           mi.Click += new RoutedEventHandler(mi_Copy);
           cm.Items.Add(mi);
           cm.IsOpen = true;
-        } else if(selected != null && (cur = selected.GetModel()) != null && (tv = TopicView.root.Get(cur, true)) != null) {
-          var cm = (this.Parent as Grid).ContextMenu;
-          var actions = tv.GetActions();
-          cm.Items.Clear();
-
-          ItemCollection items;
-          for(int i = 0; i < actions.Count; i++) {
-            switch(actions[i].action) {
-            case ItemAction.addToLogram:
-            case ItemAction.createBoolMask:
-            case ItemAction.createDoubleMask:
-            case ItemAction.createLongMask:
-            case ItemAction.createNodeMask:
-            case ItemAction.createStringMask:
-            case ItemAction.createByteArrMask:
-            case ItemAction.open:
-              continue;
-            }
-            items = cm.Items;
-            string[] lvls = actions[i].menuItem.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-            for(int j = 0; j < lvls.Length; j++) {
-              MenuItem mi = DataStorageView.FindMenuItem(items, lvls[j]);
-              if(mi == null) {
-                mi = new MenuItem();
-                mi.Header = lvls[j];
-                mi.DataContext = tv;
-                items.Add(mi);
-              }
-
-              if(j == lvls.Length - 1) {
-                mi.Tag = actions[i];
-                mi.Click += new RoutedEventHandler(mi_Click);
-                mi.ToolTip = actions[i].description;
-              }
-              items = mi.Items;
-            }
-          }
-          if(cur.valueType == typeof(PiStatement)) {
-            MenuItem mi = new MenuItem();
-            mi.Header = "Copy";
-            mi.Click += new RoutedEventHandler(mi_Copy);
-            cm.Items.Add(mi);
-          } else if(selected is uiPin) {
+        } else if() {
+          if(selected is uiPin) {
             MenuItem mi = new MenuItem();
             mi.Header = "Trace";
             mi.Click += new RoutedEventHandler(mi_Trace);
@@ -401,7 +366,9 @@ namespace X13.UI {
           cm.Items.Add(mi);
           cm.IsOpen = true;
         }
-        return;*/
+        */
+        e.Handled = true;
+        return;
       } else
         if(e.ChangedButton == MouseButton.Left && e.LeftButton == MouseButtonState.Released) {
           if(_mSelected != null && _mSelected.Length > 0) {
@@ -515,11 +482,14 @@ namespace X13.UI {
         if(JsLib.OfString(JsLib.GetField(t.Manifest, "type"), null) == "Ext/LBDescr") {
           int i = 1;
           string name;
-          do {
-            name = string.Format("A{0:D02}", i);
-            i++;
-          } while(Model.children.Any(z => z.name == name));
-
+          if(Model.children != null) {
+            do {
+              name = string.Format("A{0:D02}", i);
+              i++;
+            } while(Model.children.Any(z => z.name == name));
+          } else {
+            name = "A01";
+          }
           Model.CreateAsync(name, t.State["default"], JsLib.SetField(JsLib.SetField(t.State["manifest"], "Logram.top", y), "Logram.left", x));
         } else if((e.AllowedEffects & DragDropEffects.Link) == DragDropEffects.Link) {
           string name = t.name;
@@ -559,5 +529,267 @@ namespace X13.UI {
         t.Delete();
       }
     }
+
+    #region ContextMenu
+    public ObservableCollection<Control> MenuItems(DTopic t) {
+      var l = new ObservableCollection<Control>();
+      JSC.JSValue v1;
+      MenuItem mi;
+
+      mi = new MenuItem() { Header = "Open in new tab", Tag = t };
+      mi.Click += miOpen_Click;
+      l.Add(mi);
+      l.Add(new Separator());
+      
+      if(t.Manifest != null && (v1 = t.Manifest["Children"]).ValueType == JSC.JSValueType.Object) {
+        var ad = new Dictionary<string, JSC.JSValue>();
+        Jso2Acts(v1, ad);
+        FillContextMenu(t, l, ad);
+      } else if(t.Manifest != null && (v1 = t.Manifest["Children"]).ValueType == JSC.JSValueType.String) {
+        t.GetAsync(v1.Value as string).ContinueWith(tt=>FillContextMenuFromChildren(t, l, tt), TaskScheduler.FromCurrentSynchronizationContext());
+      } else {
+        t.Connection.CoreTypes.GetAsync(null).ContinueWith(tt => FillContextMenuFromChildren(t, l, tt), TaskScheduler.FromCurrentSynchronizationContext());
+      }
+      return l;
+    }
+    private void Jso2Acts(JSC.JSValue obj, Dictionary<string, JSC.JSValue> act) {
+      foreach(var kv in obj.Where(z => z.Value != null && z.Value.ValueType == JSC.JSValueType.Object && z.Value["default"].Defined)) {
+        if(!act.ContainsKey(kv.Key)) {
+          act.Add(kv.Key, kv.Value);
+        }
+      }
+      if(obj.__proto__ != null && !obj.__proto__.IsNull && obj.Defined && obj.__proto__.ValueType == JSC.JSValueType.Object) {
+        Jso2Acts(obj.__proto__, act);
+      }
+    }
+    private async void FillContextMenuFromChildren(DTopic owner, ObservableCollection<Control> l, Task<DTopic> tt) {
+      var acts = new Dictionary<string, JSC.JSValue>();
+      if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
+        foreach(var t in tt.Result.children) {
+          var z = await t.GetAsync(null);
+          if(z.State.ValueType == JSC.JSValueType.Object && z.State.Value != null && z.State["default"].Defined) {
+            acts.Add(z.name, z.State);
+          }
+        }
+      }
+      FillContextMenu(owner, l, acts);
+    }
+    private void FillContextMenu(DTopic owner, ObservableCollection<Control> l, Dictionary<string, JSC.JSValue> _acts) {
+      JSC.JSValue v2;
+      MenuItem mi;
+      MenuItem ma = new MenuItem() { Header = "Add" };
+
+      if(_acts != null) {
+        List<RcUse> resource = new List<RcUse>();
+        string rName;
+        JSC.JSValue tmp1;
+        KeyValuePair<string, JSC.JSValue> rca;
+        string rcs;
+        // fill used resources
+        if(owner.children != null) {
+          foreach(var ch in owner.children) {
+            if((tmp1 = JsLib.GetField(ch.Manifest, "MQTT-SN.tag")).ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(rName = tmp1.Value as string)) {
+              rName = ch.name;
+            }
+            rca = _acts.FirstOrDefault(z => z.Key == rName);
+            if(rca.Value == null || (tmp1 = rca.Value["rc"]).ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(rcs = tmp1.Value as string)) {
+              continue;
+            }
+            foreach(string curRC in rcs.Split(',').Where(z => !string.IsNullOrWhiteSpace(z) && z.Length > 1)) {
+              int pos;
+              if(!int.TryParse(curRC.Substring(1), out pos)) {
+                continue;
+              }
+              for(int i = pos - resource.Count; i >= 0; i--) {
+                resource.Add(RcUse.None);
+              }
+              if(curRC[0] != (char)RcUse.None && (curRC[0] != (char)RcUse.Shared || resource[pos] != RcUse.None)) {
+                resource[pos] = (RcUse)curRC[0];
+              }
+            }
+          }
+        }
+        // Add menuitems
+        foreach(var kv in _acts) {
+          if((bool)kv.Value["willful"]) {
+            continue;
+          }
+          bool busy = false;
+          if((tmp1 = kv.Value["rc"]).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(rcs = tmp1.Value as string)) { // check used resources
+            foreach(string curRC in rcs.Split(',').Where(z => !string.IsNullOrWhiteSpace(z) && z.Length > 1)) {
+              int pos;
+              if(!int.TryParse(curRC.Substring(1), out pos)) {
+                continue;
+              }
+              if(pos < resource.Count && ((curRC[0] == (char)RcUse.Exclusive && resource[pos] != RcUse.None) || (curRC[0] == (char)RcUse.Shared && resource[pos] != RcUse.None && resource[pos] != RcUse.Shared))) {
+                busy = true;
+                break;
+              }
+            }
+          }
+          if(busy) {
+            continue;
+          }
+          mi = new MenuItem() { Header = kv.Key.Replace("_", "__"), Tag = JsLib.SetField(kv.Value, "mi_path", owner.name+"/"+kv.Key) };
+          if((v2 = kv.Value["icon"]).ValueType == JSC.JSValueType.String) {
+            mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
+          } else {
+            mi.Icon = new Image() { Source = App.GetIcon(kv.Key), Height = 16, Width = 16 };
+          }
+          if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
+            mi.ToolTip = v2.Value;
+          }
+          mi.Click += miAdd_Click;
+          if((v2 = kv.Value["menu"]).ValueType == JSC.JSValueType.String && kv.Value.Value != null) {
+            AddSubMenu(ma, v2.Value as string, mi);
+          } else {
+            ma.Items.Add(mi);
+          }
+        }
+      }
+      if(ma.HasItems) {
+        if(ma.Items.Count < 5) {
+          foreach(var sm in ma.Items.OfType<System.Windows.Controls.Control>()) {
+            l.Add(sm);
+          }
+        } else {
+          l.Add(ma);
+        }
+        l.Add(new Separator());
+      }
+      //if((v2 = owner.Manifest["Action"]).ValueType == JSC.JSValueType.Object) {
+      //  FillActions(l, v2);
+      //}
+      //Uri uri;
+      //if(System.Windows.Clipboard.ContainsText(System.Windows.TextDataFormat.Text)
+      //  && Uri.TryCreate(System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.Text), UriKind.Absolute, out uri)
+      //  && _owner.Connection.server == uri.DnsSafeHost) {
+      //  mi = new MenuItem() { Header = "Paste", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Paste.png"), Width = 16, Height = 16 } };
+      //  mi.Click += miPaste_Click;
+      //  l.Add(mi);
+      //}
+      //mi = new MenuItem() { Header = "Cut", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Cut.png"), Width = 16, Height = 16 } };
+      //mi.IsEnabled = !IsGroupHeader && !IsRequired;
+      //mi.Click += miCut_Click;
+      //l.Add(mi);
+      mi = new MenuItem() { Header = "Delete", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Delete.png"), Width = 16, Height = 16 }, Tag = owner };
+      mi.Click += miDelete_Click;
+      l.Add(mi);
+    }
+    //private void FillActions(ObservableCollection<Control> l, JSC.JSValue lst){
+    //  JSC.JSValue v2;
+    //  MenuItem mi;
+    //  MenuItem ma = new MenuItem() { Header = "Action" };
+
+    //  foreach(var kv in lst) {
+    //    mi = new MenuItem() { Header = kv.Value["text"].Value as string, Tag = kv.Value["name"].Value as string };
+
+    //    if((v2 = kv.Value["icon"]).ValueType == JSC.JSValueType.String) {
+    //      mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
+    //    }
+    //    if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
+    //      mi.ToolTip = v2.Value;
+    //    }
+    //    mi.Click += miAktion_Click;
+    //    ma.Items.Add(mi);
+    //  }
+      
+    //  if(ma.HasItems) {
+    //    if(ma.Items.Count < 5) {
+    //      foreach(var sm in ma.Items.OfType<System.Windows.Controls.Control>()) {
+    //        l.Add(sm);
+    //      }
+    //    } else {
+    //      l.Add(ma);
+    //    }
+    //    l.Add(new Separator());
+    //  }
+
+    //}
+    private void AddSubMenu(MenuItem ma, string prefix, MenuItem mi) {
+      MenuItem mm = ma, mn;
+      string[] lvls = prefix.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+      for(int j = 0; j < lvls.Length; j++) {
+        mn = mm.Items.OfType<MenuItem>().FirstOrDefault(z => z.Header as string == lvls[j]);
+        if(mn == null) {
+          mn = new MenuItem();
+          mn.Header = lvls[j];
+          mm.Items.Add(mn);
+        }
+        mm = mn;
+      }
+      mm.Items.Add(mi);
+    }
+    
+    private void miOpen_Click(object sender, System.Windows.RoutedEventArgs e) {
+      DTopic t;
+      var mi = sender as MenuItem;
+      if(mi == null || (t = mi.Tag as DTopic)==null) {
+        return;
+      }
+
+      App.Workspace.Open(t.fullPath);
+    }
+    
+    private void miAdd_Click(object sender, System.Windows.RoutedEventArgs e) {
+      var mi = sender as MenuItem;
+      if(mi == null) {
+        return;
+      }
+      var tag = mi.Tag as JSC.JSValue;
+      if(tag != null) {
+        _model.CreateAsync(tag["mi_path"].Value as string, tag["default"], tag["manifest"]);
+      }
+    }
+    //private void miAktion_Click(object sender, System.Windows.RoutedEventArgs e) {
+    //  var mi = sender as MenuItem;
+    //  if(mi == null) {
+    //    return;
+    //  }
+    //  var tag = mi.Tag as string;
+    //  if(tag != null) {
+    //    _owner.Call(tag, _owner.path);
+    //  }
+    //}
+    //private void miCut_Click(object sender, System.Windows.RoutedEventArgs e) {
+    //  System.Windows.Clipboard.SetText(_owner.fullPath, System.Windows.TextDataFormat.Text);
+    //}
+    //private void miPaste_Click(object sender, System.Windows.RoutedEventArgs e) {
+    //  Uri uri;
+    //  if(System.Windows.Clipboard.ContainsText(System.Windows.TextDataFormat.Text)
+    //    && Uri.TryCreate(System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.Text), UriKind.Absolute, out uri)
+    //    && _owner.Connection.server==uri.DnsSafeHost) {
+    //      System.Windows.Clipboard.Clear();
+    //      App.Workspace.GetAsync(uri).ContinueWith(td => {
+    //        if(td.IsCompleted && !td.IsFaulted && td.Result != null) {
+    //          td.Result.Move(_owner, td.Result.name);
+    //        }
+    //      }, TaskScheduler.FromCurrentSynchronizationContext());
+    //  }
+    //}
+
+    private void miDelete_Click(object sender, System.Windows.RoutedEventArgs e) {
+      DTopic t;
+      var mi = sender as MenuItem;
+      if(mi == null || (t = mi.Tag as DTopic) == null) {
+        return;
+      }
+      t.Delete();
+    }
+
+    private void IconFromTypeLoaded(Task<DTopic> td, object o) {
+      var img = o as Image;
+      if(img != null && td.IsCompleted && td.Result != null) {
+        //img.Source = App.GetIcon(td.Result.GetField<string>("icon"));
+      }
+    }
+    private enum RcUse : ushort {
+      None = '0',
+      Baned = 'B',
+      Shared = 'S',
+      Exclusive = 'X',
+    }
+    
+    #endregion ContextMenu  
   }
 }
