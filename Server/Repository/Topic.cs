@@ -374,7 +374,7 @@ namespace X13.Repository {
       }
       public static void SetField2(Topic t) {
         var p = System.Threading.Interlocked.Exchange(ref t._mfst_pu, null);
-        t._manifest = p.f_v;
+        p.old_o = System.Threading.Interlocked.Exchange(ref t._manifest, p.f_v);
       }
 
       public static void UpdatePath(Topic t) {
@@ -409,7 +409,7 @@ namespace X13.Repository {
               sb = t._subRecords[i];
               if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
                   && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
-                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
+                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.old_o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
                   ) {
                 try {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());

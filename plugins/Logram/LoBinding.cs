@@ -8,7 +8,7 @@ using System.Text;
 using X13.Repository;
 
 namespace X13.Logram {
-  internal class LoBinding : ILoItem {
+  internal class LoBinding : ILoItem, IDisposable {
     private Topic _owner;
     private LogramPl _pl;
     private Topic _src;
@@ -22,6 +22,8 @@ namespace X13.Logram {
     private void SourceChanged(Perform p, SubRec sr) {
       if(p.prim != _owner && (p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe)) {
         _owner.SetState(_src.GetState(), _src);
+      } else if(p.art == Perform.Art.remove) {
+        this._owner.SetField("cctor.LoBind", null, _src);
       }
     }
 
@@ -44,8 +46,18 @@ namespace X13.Logram {
           }
           _srcSR = _src.Subscribe(SubRec.SubMask.Value | SubRec.SubMask.Once, SourceChanged);
         }
+      } else {
+        this.Dispose();
       }
     }
     #endregion IloItem Members
+
+    public void Dispose() {
+      var st = System.Threading.Interlocked.Exchange(ref _src, null);
+      if(st != null) {
+        _srcSR.Dispose();
+      }
+    }
+    public bool Disposed { get { return _src == null; } }
   }
 }

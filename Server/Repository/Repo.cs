@@ -136,8 +136,8 @@ namespace X13.Repository {
       SortedList<string, JSValue> lo = null, ln = null, lc = null;
       JSValue to = null, tn = p.src.GetField("type"), vn;
       if(p.art == Perform.Art.changedField) {
-        JSValue o = JsLib.GetField(p.o as JSValue, "cctor"), n = p.src.GetField("cctor");
-        to = JsLib.GetField(p.o as JSValue, "type");
+        JSValue o = JsLib.GetField(p.old_o as JSValue, "cctor"), n = p.src.GetField("cctor");
+        to = JsLib.GetField(p.old_o as JSValue, "type");
         if(!object.ReferenceEquals(o, n)) {
           JsLib.Propertys(ref lo, o);
           JsLib.Propertys(ref ln, n);
