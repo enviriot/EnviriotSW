@@ -75,7 +75,7 @@ namespace X13.UI {
           int min = 0, mid = -1, max = _valueVC.Count - 1, cr;
 
           while(min <= max) {
-            mid = (min + max) / 2;
+            mid = ( min + max ) / 2;
             cr = item.CompareTo(_valueVC[mid]);
             if(cr > 0) {
               min = mid + 1;
@@ -124,7 +124,7 @@ namespace X13.UI {
     private void ListViewItem_ContextMenuOpening(object sender, ContextMenuEventArgs e) {
       FrameworkElement gr;
       InBase d;
-      if((gr = sender as FrameworkElement) != null && (d = gr.DataContext as InBase) != null) {
+      if(( gr = sender as FrameworkElement ) != null && ( d = gr.DataContext as InBase ) != null) {
         gr.ContextMenu.ItemsSource = d.MenuItems(gr);
         return;
       }
@@ -137,33 +137,33 @@ namespace X13.UI {
         gr.ContextMenu.Items.Clear();
       }
     }
-    private void ListViewItem_DoubleClick(object sender, MouseButtonEventArgs e) {
-      ListViewItem gr;
-      InBase it;
-      if((gr = sender as ListViewItem) != null && (it = gr.DataContext as InBase) != null) {
-        var mis = it.MenuItems(gr);
-        MenuItem mi;
-        if(mis != null && (mi = mis.OfType<MenuItem>().FirstOrDefault(z => z.Header as string == "Open in new tab")) != null) {
-          mi.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+    private void RecordMLBD(object sender, MouseButtonEventArgs e) {
+      if(e.ClickCount==2) {
+        FrameworkElement gr;
+        InTopic it;
+        if(( gr = sender as FrameworkElement ) != null && ( it = gr.DataContext as InTopic ) != null && it.Owner!=null && it.Owner!=_data) {
+          App.Workspace.Open(it.Owner.fullPath);
+          e.Handled = true;
         }
       }
     }
+
     private void ListViewItem_MouseLeave(object sender, MouseEventArgs e) {
       ListViewItem gr;
       InTopic it;
-      if(e.LeftButton == MouseButtonState.Pressed && (gr = sender as ListViewItem) != null && (it = gr.DataContext as InTopic) != null) {
+      if(e.LeftButton == MouseButtonState.Pressed && ( gr = sender as ListViewItem ) != null && ( it = gr.DataContext as InTopic ) != null) {
         DragDrop.DoDragDrop(gr, it.Owner, DragDropEffects.Link);
       }
     }
 
     private void tbItemName_Loaded(object sender, RoutedEventArgs e) {
-      (sender as TextBox).SelectAll();
-      (sender as TextBox).Focus();
+      ( sender as TextBox ).SelectAll();
+      ( sender as TextBox ).Focus();
     }
     private void tbItemName_PreviewKeyDown(object sender, KeyEventArgs e) {
       TextBox tb;
       InBase tv;
-      if((tb = sender as TextBox) == null || (tv = tb.DataContext as InBase) == null) {
+      if(( tb = sender as TextBox ) == null || ( tv = tb.DataContext as InBase ) == null) {
         return;
       }
       if(e.Key == Key.Escape) {
@@ -177,7 +177,7 @@ namespace X13.UI {
     private void tbItemName_LostFocus(object sender, RoutedEventArgs e) {
       TextBox tb;
       InTopic tv;
-      if((tb = sender as TextBox) == null || (tv = tb.DataContext as InTopic) == null) {
+      if(( tb = sender as TextBox ) == null || ( tv = tb.DataContext as InTopic ) == null) {
         return;
       }
       tv.FinishNameEdit(tb.Text);
@@ -192,6 +192,7 @@ namespace X13.UI {
       _valueVC.Clear();
     }
     #endregion IDisposable Member
+
   }
   internal class GridColumnSpringConverter : IMultiValueConverter {
     public object Convert(object[] values, System.Type targetType, object parameter, System.Globalization.CultureInfo culture) {

@@ -29,7 +29,6 @@
         <EventSetter Event="KeyUp" Handler="ListViewItem_KeyUp" />
         <EventSetter Event="ContextMenuOpening" Handler="ListViewItem_ContextMenuOpening" />
         <EventSetter Event="ContextMenuClosing" Handler="ListViewItem_ContextMenuClosing" />
-        <!-- EventSetter Event="MouseDoubleClick" Handler="ListViewItem_DoubleClick" /-->
         <EventSetter Event="MouseLeave" Handler="ListViewItem_MouseLeave" />
         <Setter Property="ContextMenu">
           <Setter.Value>
@@ -115,14 +114,14 @@
                     </ControlTemplate>
                   </ToggleButton.Template>
                 </ToggleButton>
-                <Image Grid.Column="2" Source="{Binding icon, TargetNullValue={StaticResource NullImage}}" Focusable="False" Width="16" Height="16" Margin="0,1" VerticalAlignment="Center" />
+                <Image Grid.Column="2" Source="{Binding icon, TargetNullValue={StaticResource NullImage}}" Focusable="False" Width="16" Height="16" Margin="0,1" VerticalAlignment="Center" MouseLeftButtonDown="RecordMLBD" />
                 <ContentPresenter Grid.Column="3" Content="{Binding}">
                   <ContentPresenter.Style>
                     <Style TargetType="{x:Type ContentPresenter}">
                       <Setter Property="ContentTemplate">
                         <Setter.Value>
                           <DataTemplate>
-                            <TextBlock Text="{Binding name}" Margin="3,5,5,3" VerticalAlignment="Top" Foreground="Black" />
+                            <TextBlock Text="{Binding name}" Margin="3,5,5,3" VerticalAlignment="Top" Foreground="Black" MouseLeftButtonDown="RecordMLBD" />
                           </DataTemplate>
                         </Setter.Value>
                       </Setter>

@@ -295,11 +295,20 @@ namespace X13.UI {
       } else {
         ScreenStartPoint = e.GetPosition(this);
         if(_mSelected == null) {
-          selected = GetVisual(ScreenStartPoint.X, ScreenStartPoint.Y);
-          if(selected == null) {
-            base.OnMouseDown(e);
-          } else {
+          var sel = GetVisual(ScreenStartPoint.X, ScreenStartPoint.Y);
+          if(e.ClickCount==2 && sel==selected) {
+            DTopic t = sel.GetModel();
+            if(t!=null) {
+              App.Workspace.Open(t.fullPath);
+            }
             e.Handled = true;
+          } else {
+            selected = sel;
+            if(selected == null) {
+              base.OnMouseDown(e);
+            } else {
+              e.Handled = true;
+            }
           }
         } else {
           e.Handled = true;
