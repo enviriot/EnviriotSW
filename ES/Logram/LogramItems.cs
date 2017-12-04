@@ -611,6 +611,7 @@ namespace X13.UI {
 
     internal class loBlock : loElement {
       private const int MAX_PINS = 10;
+      private readonly DTopic model;
       private List<loPin> _pins;
       private int _oldX = -1;
       private int _oldY = -1;
@@ -621,25 +622,44 @@ namespace X13.UI {
         : base(owner) {
         this.model = model;
         _pins = new List<loPin>();
-        model.changed += model_changed;
+        this.model.changed += model_changed;
         lv.AddVisual(this);
+        this.model.GetAsync(null).ContinueWith(ModelLoaded, TaskScheduler.FromCurrentSynchronizationContext());
+      }
 
-        if(model.children!=null) {
+      private void ModelLoaded(Task<DTopic> tt) {
+        if(tt.IsFaulted || !tt.IsCompleted || tt.Result == null) {
+          return;
+        }
+        if(model.children != null) {
           foreach(var c in model.children) {
             c.GetAsync(null).ContinueWith(PinLoaded, TaskScheduler.FromCurrentSynchronizationContext());
           }
         }
       }
-
       private void PinLoaded(Task<DTopic> tt) {
-        if(tt.IsFaulted || !tt.IsCompleted || tt.Result == null) {
+        DTopic t;
+        if(tt.IsFaulted || !tt.IsCompleted || (t=tt.Result) == null) {
           return;
         }
-        model_changed(DTopic.Art.addChild, tt.Result);
+        loPin p;
+
+        var chs = model.Manifest["Children"];
+        if(chs.ValueType != JSC.JSValueType.Object || chs.Value == null) {
+          return;
+        }
+        var pd = chs[t.name];
+        string ddr;
+        if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || string.IsNullOrEmpty(ddr = JsLib.OfString(pd["ddr"], null))) {
+          return;
+        }
+        p = new loPin(this, t, ddr[0] >= 'A' && ddr[0] <= (char)('A' + MAX_PINS));
+        _pins.Add(p);
+        lv.AddVisual(p);
+        t.changed += pin_changed;
+
+        this.Render(3);
       }
-
-      public readonly DTopic model;
-
       private void model_changed(DTopic.Art a, DTopic t) {
         if(t == model) {
           if(a == DTopic.Art.type || a == DTopic.Art.addChild) {
@@ -649,22 +669,10 @@ namespace X13.UI {
           loPin p;
           p = _pins.FirstOrDefault(z => z.GetModel() == t);
           if(p == null) {
-            if(a != DTopic.Art.addChild) {
-              return;
+            if(a == DTopic.Art.addChild) {
+              t.GetAsync(null).ContinueWith(PinLoaded, TaskScheduler.FromCurrentSynchronizationContext());
             }
-            var chs = model.Manifest["Children"];
-            if(chs.ValueType != JSC.JSValueType.Object || chs.Value == null) {
-              return;
-            }
-            var pd = chs[t.name];
-            string ddr;
-            if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || string.IsNullOrEmpty(ddr = JsLib.OfString(pd["ddr"], null))) {
-              return;
-            }
-            p = new loPin(this, t, ddr[0] >= 'A' && ddr[0] <= (char)( 'A' + MAX_PINS ));
-            _pins.Add(p);
-            lv.AddVisual(p);
-            t.changed += pin_changed;
+            return;
           }
           if(a == DTopic.Art.RemoveChild) {
             lv.DeleteVisual(p);
@@ -674,8 +682,7 @@ namespace X13.UI {
           this.Render(3);
         }
       }
-
-      void pin_changed(DTopic.Art a, DTopic t) {
+      private void pin_changed(DTopic.Art a, DTopic t) {
         loPin p;
         p = _pins.FirstOrDefault(z => z.GetModel() == t);
         if(p == null) {
@@ -683,7 +690,8 @@ namespace X13.UI {
         }
         p.Render(a == DTopic.Art.value ? 1 : 3);
       }
-
+      
+      #region loElement Members
       public override void Render(int chLevel) {
         int x, y;
         y = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.top"), 0);
@@ -853,6 +861,8 @@ namespace X13.UI {
         }
         
       }
+      #endregion loElement Members
+
       public override string ToString() {
         return model.path;
       }
