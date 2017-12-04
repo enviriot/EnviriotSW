@@ -204,13 +204,8 @@ namespace X13.EsBroker {
         }
         return;
       }
-      var s = msg[3];
-      JSL.Date js_d;
-      if(s.ValueType == JSC.JSValueType.Date && (js_d = s.Value as JSL.Date) != null && Math.Abs((js_d.ToDateTime() - new DateTime(1001, 1, 1, 12, 0, 0)).TotalDays) < 1) {
-        s = JSC.JSObject.Marshal(DateTime.UtcNow);
-      }
       var t = Topic.I.Get(Topic.root, msg[2].Value as string, true, _owner, false, false);
-      Topic.I.Fill(t, s, (msg[4].ValueType == JSC.JSValueType.Object && msg[4].Value != null) ? JsLib.Clone(msg[4]) : null, _owner);
+      Topic.I.Fill(t, msg[3], (msg[4].ValueType == JSC.JSValueType.Object && msg[4].Value != null) ? JsLib.Clone(msg[4]) : null, _owner);
     }
     /// <summary>Move topic</summary>
     /// <param name="args">

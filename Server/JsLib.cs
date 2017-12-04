@@ -31,7 +31,11 @@ namespace X13 {
             }
           }
           if(s.Length == 24 && s[4] == '-' && s[7] == '-' && s[10] == 'T' && s[13] == ':' && s[16] == ':' && s[19] == '.') {
-            return JSC.JSValue.Marshal(new JSL.Date(new JSC.Arguments() { args[1] }));
+            JSL.Date js_d = new JSL.Date(new JSC.Arguments() { args[1] });
+            if(Math.Abs(( js_d.ToDateTime() - new DateTime(1001, 1, 1, 12, 0, 0) ).TotalDays) < 1) {
+              return JSC.JSObject.Marshal(DateTime.UtcNow);
+            }
+            return JSC.JSValue.Marshal(js_d);
           }
         }
       }

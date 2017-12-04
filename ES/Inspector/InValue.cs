@@ -182,10 +182,6 @@ namespace X13.UI {
         return _value;
       }
       set {
-        JSL.Date js_d;
-        if(value != null && value.ValueType == JSC.JSValueType.Date && (js_d = value.Value as JSL.Date) != null && Math.Abs((js_d.ToDateTime() - new DateTime(1001, 1, 1, 12, 0, 0)).TotalDays) < 1) {
-          value = JSC.JSObject.Marshal(DateTime.UtcNow);
-        }
         if(_parent == null) {
           _data.SetValue(value);
         } else {

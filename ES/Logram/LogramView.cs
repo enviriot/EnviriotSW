@@ -297,8 +297,8 @@ namespace X13.UI {
         if(_mSelected == null) {
           var sel = GetVisual(ScreenStartPoint.X, ScreenStartPoint.Y);
           if(e.ClickCount==2 && sel==selected) {
-            DTopic t = sel.GetModel();
-            if(t!=null) {
+            DTopic t;
+            if(sel!=null && (t = sel.GetModel())!=null) {
               App.Workspace.Open(t.fullPath);
             }
             e.Handled = true;
@@ -701,6 +701,7 @@ namespace X13.UI {
       //l.Add(mi);
       mi = new MenuItem() { Header = "Delete", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Delete.png"), Width = 16, Height = 16 }, Tag = owner };
       mi.Click += miDelete_Click;
+      mi.IsEnabled = ( owner.Manifest==null || ( JsLib.OfInt(owner.Manifest["attr"], 0) & 1 )!=1 );
       l.Add(mi);
     }
     //private void FillActions(ObservableCollection<Control> l, JSC.JSValue lst){
