@@ -8,6 +8,6 @@ using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 
 namespace X13.UI {
-  public interface IBaseForm {
+  public interface IBaseForm : IDisposable {
   }
 }

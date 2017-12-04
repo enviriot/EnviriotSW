@@ -28,6 +28,7 @@ namespace X13.UI {
     private IBaseForm _contentForm;
     private Client _cl;
     public UIDocument(string path, string view) {
+      base.Unloaded += UIDocument_Unloaded;
       _path = path;
       _view = view;
       _pathItems = new ObservableCollection<DTopic>();
@@ -72,7 +73,6 @@ namespace X13.UI {
       }
     }
     public bool ChangeViewEn { get { return _altView!=null; } }
-
 
     private void ClientChanged(object sender, PropertyChangedEventArgs e) {
       if(e.PropertyName == "Status") {
@@ -193,12 +193,30 @@ namespace X13.UI {
 
       if(_view == "IN") {
         if(( ccMain.Content as InspectorForm ) == null) {
+          if(contentForm != null) {
+            contentForm.Dispose();
+          }
           contentForm = new InspectorForm(_data);
         }
       } else if(_view == "LO") {
         if(( ccMain.Content as LogramForm ) == null) {
+          if(contentForm != null) {
+            contentForm.Dispose();
+          }
           contentForm = new LogramForm(_data);
         }
+      }
+    }
+
+    private void UIDocument_Unloaded(object sender, RoutedEventArgs e) {
+      var d = System.Threading.Interlocked.Exchange(ref _data, null);
+      if(d != null) {
+        d.changed -= DataChanged;
+        if(_cl != null) {
+          _cl.PropertyChanged -= ClientChanged;
+        }
+        _contentForm.Dispose();
+        _contentForm = null;
       }
     }
 

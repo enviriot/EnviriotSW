@@ -183,6 +183,15 @@ namespace X13.UI {
       tv.FinishNameEdit(tb.Text);
       e.Handled = true;
     }
+
+    #region IDisposable Member
+    public void Dispose() {
+      foreach(var vc in _valueVC.ToArray()) {
+        vc.Dispose();
+      }
+      _valueVC.Clear();
+    }
+    #endregion IDisposable Member
   }
   internal class GridColumnSpringConverter : IMultiValueConverter {
     public object Convert(object[] values, System.Type targetType, object parameter, System.Globalization.CultureInfo culture) {

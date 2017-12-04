@@ -16,9 +16,10 @@ using System.Windows.Media;
 using X13.Data;
 
 namespace X13.UI {
-  internal partial class LogramView : Canvas {
+  internal partial class LogramView : Canvas, IDisposable {
     private DTopic _model;
     private System.Threading.Timer _loadTimer;
+    private int _disposed;
 
     private double _zoom;
     private Point ScreenStartPoint;
@@ -37,6 +38,7 @@ namespace X13.UI {
     private bool move;
 
     public LogramView() {
+      _disposed = 0;
       _zoom = 1.25;
       _visuals = new List<Visual>();
       _backgroundVisual = new DrawingVisual();
@@ -53,7 +55,6 @@ namespace X13.UI {
       this.ContextMenu = new ContextMenu();
       this.AllowDrop = true;
       this.Drop += LogramView_Drop;
-
     }
 
     public void Attach(DTopic model) {
@@ -791,5 +792,26 @@ namespace X13.UI {
     }
     
     #endregion ContextMenu  
+  
+    #region IDisposable Member
+    public void Dispose() {
+      if(System.Threading.Interlocked.Exchange(ref this._disposed, 1)==0) {
+        var lt = System.Threading.Interlocked.Exchange(ref _loadTimer, null);
+        if(lt != null) {
+          lt.Change(-1, -1);
+        }
+
+        _model.changed -= ModelChanged;
+        DTopic t;
+        foreach(var it in _visuals.OfType<loItem>().ToArray()) {
+          if((t = it.GetModel()) != null) {
+            t.changed -= ChildChanged;
+          }
+          it.Dispose();
+        }
+        _disposed = 2;
+      }
+    }
+    #endregion IDisposable Member
   }
 }

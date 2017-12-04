@@ -13,7 +13,7 @@ using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.UI {
-  internal class InValue : InBase, IDisposable {
+  internal class InValue : InBase {
     private DTopic _data;
     private InValue _parent;
     private JSC.JSValue _value;
@@ -298,7 +298,7 @@ namespace X13.UI {
     #endregion ContextMenu
 
     #region IDisposable Member
-    public void Dispose() {
+    public override void Dispose() {
       if(_parent == null) {
         _data.changed -= _data_PropertyChanged;
       }

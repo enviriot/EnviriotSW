@@ -14,7 +14,7 @@ using System.Windows.Media.Imaging;
 using X13.Data;
 
 namespace X13.UI {
-  public abstract class InBase : NPC_UI, IComparable<InBase> {
+  public abstract class InBase : NPC_UI, IComparable<InBase>, IDisposable {
     protected bool _isVisible;
     protected JSC.JSValue _manifest;
     protected string _editorName;
@@ -139,6 +139,14 @@ namespace X13.UI {
         _collFunc(this, false);
       }
     }
+
+    #region IComparable<InBase> Member
     public abstract int CompareTo(InBase other);
+    #endregion IComparable<InBase> Member
+
+    #region IDisposable Member
+    public abstract void Dispose();
+    #endregion IDisposable Member
+
   }
 }

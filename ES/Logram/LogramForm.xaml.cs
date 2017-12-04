@@ -101,6 +101,17 @@ namespace X13.UI {
 
     }
 
+    #region IDisposable Member
+    public void Dispose() {
+      foreach(var b in _blocks.ToArray()) {
+        b.owner.changed -= LBDescrChanged;
+      }
+      _blocks.Clear();
+      uiLogram.Dispose();
+    }
+    #endregion IDisposable Member
+
+
     internal class LBDesc {
       public readonly DTopic owner;
 

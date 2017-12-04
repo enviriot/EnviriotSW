@@ -12,7 +12,7 @@ using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.UI {
-  internal class InManifest : InBase, IDisposable {
+  internal class InManifest : InBase {
     private static int SIGNATURE_CNT = 0;
 
     private DTopic _data;
@@ -24,11 +24,11 @@ namespace X13.UI {
 
     public InManifest(DTopic data, Action<InBase, bool> collFunc) {
       _signature = System.Threading.Interlocked.Increment(ref SIGNATURE_CNT);
-      this._data = data;
-      this._parent = null;
+      _data = data;
+      _parent = null;
       base._collFunc = collFunc;
-      this.name = "Manifest";
-      this._path = string.Empty;
+      name = "Manifest";
+      _path = string.Empty;
       base._isVisible = true;
       base._isExpanded = true;
       base.IsGroupHeader = true;
@@ -43,7 +43,7 @@ namespace X13.UI {
         _tManifest = td.Result;
         _tManifest.changed += Manifest_changed;
         UpdateType(_tManifest.State, _data.Manifest);
-        base._isExpanded = IsGroupHeader && this.HasChildren;
+        base._isExpanded = this.HasChildren;
       }
     }
     private InManifest(InManifest parent, string name, JSC.JSValue value, JSC.JSValue type) {
@@ -319,9 +319,12 @@ namespace X13.UI {
     #endregion ContextMenu
 
     #region IDisposable Member
-    public void Dispose() {
+    public override void Dispose() {
       if(_parent == null) {
         _data.changed -= _data_PropertyChanged;
+        if(_tManifest != null) {
+          _tManifest.changed -= Manifest_changed;
+        }
       }
     }
     #endregion IDisposable Member

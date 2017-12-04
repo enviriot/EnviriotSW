@@ -14,7 +14,7 @@ using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.UI {
-  internal class InTopic : InBase, IDisposable {
+  internal class InTopic : InBase {
     private InTopic _parent;
     private DTopic _owner;
     private bool _populated;
@@ -531,11 +531,17 @@ namespace X13.UI {
     #endregion IComparable<InBase> Members
 
     #region IDisposable Member
-    public void Dispose() {
+    public override void Dispose() {
       _collFunc(this, false);
-      if(_owner != null) {
-        _owner.changed -= _owner_PropertyChanged;
-        _owner = null;
+      var o = System.Threading.Interlocked.Exchange(ref _owner, null);
+      if(o != null) {
+        o.changed -= _owner_PropertyChanged;
+        var its = System.Threading.Interlocked.Exchange(ref base._items, null);
+        if(its != null) {
+          foreach(var it in its.ToArray()) {
+            it.Dispose();
+          }
+        }
       }
     }
     #endregion IDisposable Member
