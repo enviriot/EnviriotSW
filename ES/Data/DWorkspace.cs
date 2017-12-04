@@ -124,6 +124,7 @@ namespace X13.Data {
       UIDocument doc= w as UIDocument;
       if(doc != null) {
         Files.Remove(doc);
+        doc.Dispose();
       } else {
         Tools.Remove(w);
       }

@@ -21,14 +21,13 @@ using X13.Data;
 
 namespace X13.UI {
   /// <summary></summary>
-  public partial class UIDocument : BaseWindow {
+  public partial class UIDocument : BaseWindow, IDisposable {
     private ObservableCollection<DTopic> _pathItems;
     private string _path;
     private string _view;
     private IBaseForm _contentForm;
     private Client _cl;
     public UIDocument(string path, string view) {
-      base.Unloaded += UIDocument_Unloaded;
       _path = path;
       _view = view;
       _pathItems = new ObservableCollection<DTopic>();
@@ -208,18 +207,6 @@ namespace X13.UI {
       }
     }
 
-    private void UIDocument_Unloaded(object sender, RoutedEventArgs e) {
-      var d = System.Threading.Interlocked.Exchange(ref _data, null);
-      if(d != null) {
-        d.changed -= DataChanged;
-        if(_cl != null) {
-          _cl.PropertyChanged -= ClientChanged;
-        }
-        _contentForm.Dispose();
-        _contentForm = null;
-      }
-    }
-
     #region Address bar
     private void tbAddress_Loaded(object sender, RoutedEventArgs e) {
       if(!this.connected && _path == null) {
@@ -257,5 +244,19 @@ namespace X13.UI {
       }
     }
     #endregion Address bar
+
+    #region IDisposable Member
+    public void Dispose() {
+      var d = System.Threading.Interlocked.Exchange(ref _data, null);
+      if(d != null) {
+        d.changed -= DataChanged;
+        if(_cl != null) {
+          _cl.PropertyChanged -= ClientChanged;
+        }
+        _contentForm.Dispose();
+        _contentForm = null;
+      }
+    }
+    #endregion IDisposable Member
   }
 }
