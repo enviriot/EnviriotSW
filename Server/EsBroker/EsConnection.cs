@@ -13,6 +13,14 @@ using X13.Repository;
 
 namespace X13.EsBroker {
   internal class EsConnection : EsSocket {
+    private static readonly JSC.JSValue EmptyManifest;
+
+    static EsConnection() {
+      EmptyManifest = JSC.JSObject.CreateObject();
+      EmptyManifest["attr"] = 0;
+    }
+
+
     private EsBrokerPl _basePl;
     private Topic _owner;
     private List<Tuple<SubRec, EsMessage>> _subscriptions;
@@ -291,7 +299,11 @@ namespace X13.EsBroker {
         break;
       case Perform.Art.subscribe:
         if(sb.setTopic == p.src) {
-          base.SendArr(new JSL.Array { 4, p.src.path, p.src.GetState(), p.src.GetField(null) });
+          var m = p.src.GetField(null);
+          if(m == null || m.ValueType!=JSC.JSValueType.Object || m.Value == null) {
+            m = EmptyManifest;
+          }
+          base.SendArr(new JSL.Array { 4, p.src.path, p.src.GetState(), m });
         } else {
           base.SendArr(new JSL.Array { 4, p.src.path });
         }
