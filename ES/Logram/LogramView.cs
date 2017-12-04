@@ -237,6 +237,19 @@ namespace X13.UI {
       }
     }
     public DTopic Model { get { return _model; } }
+    public void ResetSelection(System.Windows.Input.MouseButtonEventArgs e) {
+      var p = e.GetPosition(this);
+      ScreenStartPoint = new Point(Math.Min(Math.Max(p.X, 0), this.Width), Math.Min(Math.Max(p.Y, 0), this.Height));
+
+      if(_mSelected != null && _mSelected.Length > 0) {
+        foreach(var el in _mSelected) {
+          el.Select(false);
+        }
+        _mSelected = null;
+      } else if(selected != null) {
+        selected = null;
+      }
+    }
 
     protected override void OnKeyUp(KeyEventArgs e) {
       if(e.Key == Key.Delete) {
@@ -285,7 +298,11 @@ namespace X13.UI {
           selected = GetVisual(ScreenStartPoint.X, ScreenStartPoint.Y);
           if(selected == null) {
             base.OnMouseDown(e);
+          } else {
+            e.Handled = true;
           }
+        } else {
+          e.Handled = true;
         }
       }
     }

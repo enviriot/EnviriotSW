@@ -29,7 +29,7 @@
         <EventSetter Event="KeyUp" Handler="ListViewItem_KeyUp" />
         <EventSetter Event="ContextMenuOpening" Handler="ListViewItem_ContextMenuOpening" />
         <EventSetter Event="ContextMenuClosing" Handler="ListViewItem_ContextMenuClosing" />
-        <!--EventSetter Event="MouseDoubleClick" Handler="ListViewItem_DoubleClick" /-->
+        <!-- EventSetter Event="MouseDoubleClick" Handler="ListViewItem_DoubleClick" /-->
         <EventSetter Event="MouseLeave" Handler="ListViewItem_MouseLeave" />
         <Setter Property="ContextMenu">
           <Setter.Value>

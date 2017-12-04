@@ -62,6 +62,11 @@ namespace X13.UI {
 
     }
 
+    protected override void OnMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e) {
+      uiLogram.ResetSelection(e);
+      base.OnMouseLeftButtonDown(e);
+    }
+
     private Image _selectedImage;
     private Point _MouseDownPoint;
     private bool _readyToDrag;
@@ -85,7 +90,7 @@ namespace X13.UI {
         _readyToDrag=false;
         if(uiLogram.Model!=null) {
           string name;
-          if(uiLogram.Model != null) {
+          if(uiLogram.Model.children != null) {
             int i = 1;
             do {
               name = string.Format("A{0:D02}", i);

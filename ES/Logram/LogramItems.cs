@@ -867,6 +867,5 @@ namespace X13.UI {
         return model.path;
       }
     }
-
   }
 }
