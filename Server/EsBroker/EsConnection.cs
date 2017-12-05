@@ -222,7 +222,6 @@ namespace X13.EsBroker {
           }
       }
     }
-
     /// <summary>Move topic</summary>
     /// <param name="args">
     /// REQUEST: [10, msgId, path source, path destinations parent, new name(optional rename)]

@@ -431,6 +431,12 @@ namespace X13.Data {
         if(success) {   // value == null after connect
           if(value != null && (value.ValueType != JSC.JSValueType.Boolean || !((bool)value))) {
             _cur._disposed = true;
+            var parent = _cur.parent;
+            if(parent != null) {
+              parent.RemoveChild(_cur);
+              parent.ChangedReise(Art.RemoveChild, _cur);
+            }
+
           }
         } else {
           _tcs.SetException(new ApplicationException((value == null ? "TopicReqError" : value.ToString())));
