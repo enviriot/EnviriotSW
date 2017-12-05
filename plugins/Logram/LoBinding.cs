@@ -45,9 +45,15 @@ namespace X13.Logram {
             _srcSR.Dispose();
           }
           _srcSR = _src.Subscribe(SubRec.SubMask.Value | SubRec.SubMask.Once, SourceChanged);
+          if(_owner.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
+            _owner.ClearAttribute(Topic.Attribute.Saved);
+          }
         }
       } else {
         this.Dispose();
+        if(!_owner.disposed) {
+          _owner.SetAttribute(Topic.Attribute.DB);
+        }
       }
     }
     #endregion IloItem Members

@@ -70,7 +70,7 @@ namespace X13.Logram {
         LoBinding b = it as LoBinding;
         if(a == Perform.Art.remove) {
           if(b != null) {
-            b.Dispose();
+            b.Changed(null, null);
           }
           _items.Remove(t);
         } else if(b != null) {
