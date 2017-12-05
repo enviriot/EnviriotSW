@@ -204,9 +204,25 @@ namespace X13.EsBroker {
         }
         return;
       }
-      var t = Topic.I.Get(Topic.root, msg[2].Value as string, true, _owner, false, false);
-      Topic.I.Fill(t, msg[3], (msg[4].ValueType == JSC.JSValueType.Object && msg[4].Value != null) ? JsLib.Clone(msg[4]) : null, _owner);
+      Create(Topic.root, msg[2].Value as string, msg[3], (msg[4].ValueType == JSC.JSValueType.Object && msg[4].Value != null) ? msg[4] : null);
     }
+    private void Create(Topic parent, string path, JSC.JSValue state, JSC.JSValue manifest) {
+      var t = Topic.I.Get(parent, path, true, _owner, false, false);
+      Topic.I.Fill(t, state, manifest, _owner);
+      JSC.JSValue typeS, typeV, ChL;
+      Topic typeT;
+
+      if(manifest != null && (typeS = manifest["type"]).ValueType == JSC.JSValueType.String && !string.IsNullOrWhiteSpace(typeS.Value as string)
+        && Topic.root.Get("/$YS/TYPES").Exist(typeS.Value as string, out typeT) && (typeV = typeT.GetState()) != null && typeV.ValueType == JSC.JSValueType.Object && typeV.Value != null
+        && (ChL = typeV["Children"]).ValueType == JSC.JSValueType.Object && ChL.Value != null) {
+          foreach(var ch in ChL) {
+            if((JsLib.OfInt(JsLib.GetField(ch.Value, "manifest.attr"), 0) & (int)Topic.Attribute.Required) != 0) {
+              Create(t, ch.Key, ch.Value["default"], ch.Value["manifest"]);
+            }
+          }
+      }
+    }
+
     /// <summary>Move topic</summary>
     /// <param name="args">
     /// REQUEST: [10, msgId, path source, path destinations parent, new name(optional rename)]

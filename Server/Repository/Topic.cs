@@ -286,7 +286,7 @@ namespace X13.Repository {
       public static void Fill(Topic t, JSValue state, JSValue manifest, Topic prim) {
         t._manifest = manifest??JSObject.CreateObject();
         if(!t._manifest["attr"].IsNumber) {
-          t._manifest["attr"] = new JST.Number(0);
+          t._manifest = JsLib.SetField(t._manifest, "attr", new JST.Number(0));
         }
 
         var c = Perform.Create(t, Perform.Art.create, prim);
