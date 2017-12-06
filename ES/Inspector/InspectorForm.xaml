@@ -97,10 +97,6 @@
                           <Setter Property="Stroke" TargetName="ExpandPath" Value="#FF1BBBFA"/>
                           <Setter Property="Fill" TargetName="ExpandPath" Value="Transparent"/>
                         </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                          <Setter Property="Stroke" TargetName="ExpandPath" Value="Transparent"/>
-                          <Setter Property="Fill" TargetName="ExpandPath" Value="Transparent"/>
-                        </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                           <Setter Property="RenderTransform" TargetName="ExpandPath">
                             <Setter.Value>
@@ -109,6 +105,10 @@
                           </Setter>
                           <Setter Property="Fill" TargetName="ExpandPath" Value="#FF595959"/>
                           <Setter Property="Stroke" TargetName="ExpandPath" Value="#FF262626"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                          <Setter Property="Stroke" TargetName="ExpandPath" Value="Transparent"/>
+                          <Setter Property="Fill" TargetName="ExpandPath" Value="Transparent"/>
                         </Trigger>
                       </ControlTemplate.Triggers>
                     </ControlTemplate>

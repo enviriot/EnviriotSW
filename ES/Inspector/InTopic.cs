@@ -117,8 +117,8 @@ namespace X13.UI {
           _collFunc(this, false);
           if(!_parent._items.Any()) {
             _parent._items = null;
-            PropertyChangedReise("items");
-            PropertyChangedReise("HasChildren");
+            _parent.PropertyChangedReise("items");
+            _parent.PropertyChangedReise("HasChildren");
             _parent.IsExpanded = false;
           }
         }
@@ -149,6 +149,7 @@ namespace X13.UI {
       InTopic tmp;
       var tt = await t.GetAsync(null);
       if(tt != null) {
+        bool o_hc = _items != null && _items.Any();
         if((tmp = _items.OfType<InTopic>().FirstOrDefault(z => z.name == tt.name)) != null) {
           _items.Remove(tmp);
           _collFunc(tmp, false);
@@ -163,7 +164,7 @@ namespace X13.UI {
           }
         }
         _items.Insert(i, tmp);
-        if(_items.Count == 1) {
+        if(!o_hc) {
           PropertyChangedReise("items");
           PropertyChangedReise("HasChildren");
         }
@@ -187,6 +188,7 @@ namespace X13.UI {
       }
     }
     private void _owner_PropertyChanged(DTopic.Art art, DTopic child) {
+      bool o_hc = _items!=null && _items.Any();
       {
         var pr = this;
         while(pr._parent != null) {
@@ -222,13 +224,13 @@ namespace X13.UI {
               if(!_items.Any()) {
                 _items = null;
                 IsExpanded = false;
-                PropertyChangedReise("HasChildren");
-                PropertyChangedReise("items");
               }
             }
           }
         }
-      } else if(art == DTopic.Art.addChild && (_items==null || !_items.Any())){
+      }
+      if(o_hc != this.HasChildren) {
+        PropertyChangedReise("items");
         PropertyChangedReise("HasChildren");
       }
     }
@@ -457,6 +459,7 @@ namespace X13.UI {
       }
       if(pc_items) {
         PropertyChangedReise("items");
+        PropertyChangedReise("HasChildren");
       }
     }
     private void miAktion_Click(object sender, System.Windows.RoutedEventArgs e) {
