@@ -520,7 +520,7 @@ namespace X13.UI {
           Model.CreateAsync(name, t.State["default"], JsLib.SetField(JsLib.SetField(t.State["manifest"], "Logram.top", y), "Logram.left", x));
         } else if((e.AllowedEffects & DragDropEffects.Link) == DragDropEffects.Link) {
           string name = t.name;
-          if(Model.children.Any(z => z.name == name)) {
+          if(Model.children!=null && Model.children.Any(z => z.name == name)) {
             if(t.parent == null || (name = t.parent.name + "_" + t.name) == null || Model.children.Any(z => z.name == name)) {
               int i = 1;
               do {
