@@ -130,6 +130,7 @@ namespace X13.UI {
         sb.Append(")");
         Log.Debug("{0}", sb.ToString());
       }*/
+      bool o_hc = _items.Any();
       _value = val;
       base.UpdateType(type);
       if(_value.ValueType == JSC.JSValueType.Object) {
@@ -173,6 +174,12 @@ namespace X13.UI {
             _items.RemoveAt(i);
           }
         }
+      }
+      if(o_hc != _items.Any()) {
+        if(o_hc) {  // now has now children
+          IsExpanded = false;
+        }
+        PropertyChangedReise("HasChildren");
       }
     }
 
@@ -279,31 +286,24 @@ namespace X13.UI {
       var mi = sender as MenuItem;
       JSC.JSValue decl;
       if(!IsReadonly && mi != null && (decl = mi.Tag as JSC.JSValue) != null) {
-        if(!IsExpanded) {
-          IsExpanded = true;
-          base.PropertyChangedReise("IsExpanded");
-        }
-        bool pc_items = false;
         if((bool)decl["willful"]) {
-          if(_items == null) {
-            lock(this) {
-              if(_items == null) {
-                _items = new List<InBase>();
-                pc_items = true;
-              }
-            }
-          }
+          bool o_hc = _items.Any();
+
           var ni = new InManifest(decl, this);
           _items.Insert(0, ni);
           _collFunc(ni, true);
+          if(!o_hc) {
+            PropertyChangedReise("HasChildren");
+          }
+          if(!IsExpanded) {
+            IsExpanded = true;
+            base.PropertyChangedReise("IsExpanded");
+          }
         } else {
           if(decl != null) {
             string fName = mi.Header as string;
             _data.SetField(IsGroupHeader ? fName : _path + "." + fName, decl["default"]);
           }
-        }
-        if(pc_items) {
-          PropertyChangedReise("items");
         }
       }
     }
