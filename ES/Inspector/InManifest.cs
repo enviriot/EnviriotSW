@@ -253,7 +253,7 @@ namespace X13.UI {
         } else {
           if(_data.Connection.CoreTypes != null) {
             foreach(var t in _data.Connection.CoreTypes.children) {
-              if((v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null) {
+              if((v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null || !v1["default"].Defined) {
                 continue;
               }
               mi = new MenuItem() { Header = t.name, Tag = v1 };

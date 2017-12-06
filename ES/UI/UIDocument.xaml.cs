@@ -173,6 +173,8 @@ namespace X13.UI {
         if(Icon!=ni) {
           Icon = ni;
         }
+      } else if(a == DTopic.Art.RemoveChild && t == _data) {
+        App.Workspace.Close(this);
       }
     }
     private void buChangeView_Click(object sender, RoutedEventArgs e) {

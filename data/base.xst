@@ -2,15 +2,16 @@
 <xst path='/' m='{"attr":65}'>
   <i n='$YS' m='{"attr":65}'>
     <i n='TYPES' m='{"attr":65}'>
-      <i n='Core' m='{"attr":65}' ver="0.4.1711.30013">
-        <i n='Boolean' s='{"default":false,"willful":true}' m='{"attr":69}' />
-        <i n='ByteArray' s='{"default":"¤BA","willful":true}' m='{"attr":69}' />
-        <i n='Date' s='{"default":"1001-01-01T12:00:00.000Z","willful":true}' m='{"attr":69}' />
-        <i n='Double' s='{"default":0,"willful":true}' m='{"attr":69}' />
-        <i n='Integer' s='{"default":0,"manifest":{"type":"Integer"},"willful":true}' m='{"attr":69}' />
-        <i n='Logram' s='{"default":{},"icon":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAadEVYdFNvZnR3YXJlAFBhaW50Lk5FVCB2My41LjEwMPRyoQAAAGBJREFUOE9jKK9pIh7FJaUzAFX/Jw4AVSI0xNZlQhBQ7+YprBAEZCOLU6aBGEeh2ECyhtCsOmQE1I8WdBARhKdpr4FkP5CsoS4rDIKQdSLHGrqnSdZAmpNIS63AuCAJAQDZygmbQTNYbQAAAABJRU5ErkJggg==","manifest":{"type":"Core/Logram"},"willful":true}' m='{"attr":69}' />
-        <i n='Object' s='{"default":{},"willful":true}' m='{"attr":69}' />
-        <i n='String' s='{"default":"","willful":true}' m='{"attr":69}' />
+      <i n='Core' m='{"attr":65}' ver="0.4.1712.06015">
+        <i n='Boolean' s='{"default":false,"manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
+        <i n='ByteArray' s='{"default":"¤BA","manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
+        <i n='Date' s='{"default":"1001-01-01T12:00:00.000Z","manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
+        <i n='Double' s='{"default":0,"manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
+        <i n='Folder' s='{"icon":"","manifest":{"attr":0},"willful":true}' m='{"attr":69}' />
+        <i n='Integer' s='{"default":0,"editor":"Integer","manifest":{"attr":4,"type":"Core/Integer"},"willful":true}' m='{"attr":69}' />
+        <i n='Logram' s='{"icon":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAadEVYdFNvZnR3YXJlAFBhaW50Lk5FVCB2My41LjEwMPRyoQAAAGBJREFUOE9jKK9pIh7FJaUzAFX/Jw4AVSI0xNZlQhBQ7+YprBAEZCOLU6aBGEeh2ECyhtCsOmQE1I8WdBARhKdpr4FkP5CsoS4rDIKQdSLHGrqnSdZAmpNIS63AuCAJAQDZygmbQTNYbQAAAABJRU5ErkJggg==","manifest":{"type":"Core/Logram"},"willful":true}' m='{"attr":69}' />
+        <i n='Object' s='{"default":{},"manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
+        <i n='String' s='{"default":"","manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
       </i>
       <i n='Enum' m='{"attr":65}'>
         <i n='DPlcStatus' s='[{"text":"unknown","BG":"LightGray"},{"text":"Run","BG":"MediumAquamarine"},{"text":"Stop","BG":"Tomato"}]'  m='{"attr":71}'  ver="0.4.1709.20010" />

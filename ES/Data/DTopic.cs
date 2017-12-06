@@ -245,6 +245,7 @@ namespace X13.Data {
           mid = max;
         } else {
           _children.RemoveAt(mid);
+          t.ChangedReise(Art.RemoveChild, t);
           ChangedReise(Art.RemoveChild, t);
           break;
         }
@@ -434,6 +435,7 @@ namespace X13.Data {
             var parent = _cur.parent;
             if(parent != null) {
               parent.RemoveChild(_cur);
+              _cur.ChangedReise(Art.RemoveChild, _cur);
               parent.ChangedReise(Art.RemoveChild, _cur);
             }
 
@@ -576,6 +578,7 @@ namespace X13.Data {
             var parent = cur.parent;
             if(parent != null) {
               parent.RemoveChild(cur);
+              cur.ChangedReise(Art.RemoveChild, cur);
               parent.ChangedReise(Art.RemoveChild, cur);
             }
           }

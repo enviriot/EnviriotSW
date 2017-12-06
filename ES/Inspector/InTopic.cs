@@ -59,13 +59,13 @@ namespace X13.UI {
         return _isExpanded && HasChildren;
       }
       set {
-        base.IsExpanded = value;
-        if(_isExpanded && _owner != null && _items == null) {
+        if(value && _owner != null && _items == null) {
           _populated = true;
           if(_owner.children != null) {
             InsertItems(_owner.children);
           }
         }
+        base.IsExpanded = value;
       }
     }
     public override bool HasChildren {
@@ -84,7 +84,8 @@ namespace X13.UI {
         _parent._collFunc(this, false);
         if(!string.IsNullOrEmpty(name)) {
           _parent._owner.CreateAsync(name, _createTag["default"], _createTag["manifest"]).ContinueWith(SetNameComplete, TaskScheduler.FromCurrentSynchronizationContext());
-        } else if(!_parent._items.Any()) {
+        }
+        if(!_parent._items.Any()) {
           _parent._items = null;
           PropertyChangedReise("items");
           PropertyChangedReise("HasChildren");
@@ -272,7 +273,7 @@ namespace X13.UI {
       if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
         foreach(var t in tt.Result.children) {
           var z = await t.GetAsync(null);
-          if(z.State.ValueType == JSC.JSValueType.Object && z.State.Value != null && z.State["default"].Defined) {
+          if(z.State.ValueType == JSC.JSValueType.Object && z.State.Value != null && (z.State["default"].Defined || z.State["manifest"].Defined)) {
             acts.Add(z.name, z.State);
           }
         }

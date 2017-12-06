@@ -64,6 +64,7 @@ namespace X13.UI {
     }
 
     private void UpdateData(JSC.JSValue val) {
+      bool o_hc = HasChildren;
       _value = val;
       if(_value.ValueType == JSC.JSValueType.Object) {
         InValue vc;
@@ -107,6 +108,9 @@ namespace X13.UI {
         PropertyChangedReise("editor");
       } else {
         editor.ValueChanged(_value);
+      }
+      if(o_hc != this.HasChildren) {
+        PropertyChangedReise("HasChildren");
       }
     }
     private void ChangeValue(string name, JSC.JSValue val) {
@@ -225,7 +229,7 @@ namespace X13.UI {
         } else {
           if(_data.Connection.CoreTypes != null) {
             foreach(var t in _data.Connection.CoreTypes.children) {
-              if((v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null) {
+              if((v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null || !v1["default"].Defined) {
                 continue;
               }
               mi = new MenuItem() { Header = t.name, Tag = v1 };
