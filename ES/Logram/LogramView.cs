@@ -175,12 +175,16 @@ namespace X13.UI {
       lock(_map) {
         foreach(var i in _map.Where(z => z.Value == val).ToArray()) {
           _map.Remove(i.Key);
-          //Log.Debug("MapRemove({0}, {1}, {2}) = {3}", (i.Key&1)!=0?"V":"H", (i.Key>>1) & 0xFFFF, (i.Key>>17) & 0x7FFF, i.Value);
         }
       }
     }
-    private void MapSet(bool vert, int x, int y, loItem val) {
-      uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0xFFFF) << 1) | (vert ? 1 : 0));
+    /// <summary></summary>
+    /// <param name="dir">0 - X+, 1 - Y-, 2 - Y+, 3 - X-</param>
+    /// <param name="x">X</param>
+    /// <param name="y">Y</param>
+    /// <param name="val">item</param>
+    private void MapSet(int dir, int x, int y, loItem val) {
+      uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0x7FFF) << 2) | (dir & 0x03));
       lock(_map) {
         if(val == null) {
           _map.Remove(idx);
@@ -188,11 +192,9 @@ namespace X13.UI {
           _map[idx] = val;
         }
       }
-      //RenderBackground();
-      //Log.Debug("MapSet({0}, {1}, {2}) = {3}", vert?"V":"H", x, y, val);
     }
-    private loItem MapGet(bool vert, int x, int y) {
-      uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0xFFFF) << 1) | (vert ? 1 : 0));
+    private loItem MapGet(int dir, int x, int y) {
+      uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0x7FFF) << 2) | (dir & 0x03));
       loItem ret;
       lock(_map) {
         _map.TryGetValue(idx, out ret);
@@ -412,10 +414,10 @@ namespace X13.UI {
             _mSelected = null;
             if(move) {
               if(d + CELL_SIZE > this.Height) {
-                _model.SetField("Logram.height", 1 + (int)(d) / CELL_SIZE);
+                _model.SetField("Logram.height", (int)(d + CELL_SIZE));
               }
               if(r + CELL_SIZE > this.Width) {
-                _model.SetField("Logram.width", 1 + (int)(r) / CELL_SIZE);
+                _model.SetField("Logram.width", (int)(r + CELL_SIZE));
               }
             }
           }
@@ -429,10 +431,10 @@ namespace X13.UI {
             if((el = selected as loElement) != null && move) {
               el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), true);
               if(selected.Offset.Y + selected.ContentBounds.Bottom + CELL_SIZE > this.Height) {
-                _model.SetField("Logram.height", 1 + (int)(selected.Offset.Y + selected.ContentBounds.Bottom) / CELL_SIZE);
+                _model.SetField("Logram.height", (int)(selected.Offset.Y + selected.ContentBounds.Bottom + CELL_SIZE));
               }
               if(selected.Offset.X + selected.ContentBounds.Right + CELL_SIZE > this.Width) {
-                _model.SetField("Logram.width", 1 + (int)(selected.Offset.X + selected.ContentBounds.Right) / CELL_SIZE);
+                _model.SetField("Logram.width", (int)(selected.Offset.X + selected.ContentBounds.Right + CELL_SIZE));
               }
             } else if((w = selected as loBinding) != null && (w.Output == null || w.Input == null)) {
               loPin finish = GetVisual(cp.X, cp.Y) as loPin;
@@ -496,11 +498,11 @@ namespace X13.UI {
 
     private void LogramView_Drop(object sender, DragEventArgs e) {
       var pos = e.GetPosition(this);
-      int y = ((int)(pos.Y / CELL_SIZE) - 1) * CELL_SIZE;
+      int y = (int)(pos.Y / CELL_SIZE + 0.5);
       if(y < 0) {
         y = 0;
       }
-      int x = ((int)(pos.X / CELL_SIZE) - 1) * CELL_SIZE;
+      int x = (int)(pos.X / CELL_SIZE);
       if(x < 0) {
         x = 0;
       }

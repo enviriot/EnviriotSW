@@ -88,6 +88,7 @@ namespace X13.UI {
       public void SetLocation(Vector center, int chLevel) {
         _ownerOffset = center;
         Render(chLevel);
+
       }
       public void AddBinding(loBinding w) {
         if(w == null) {
@@ -111,6 +112,7 @@ namespace X13.UI {
         if(model == null || model.State==null || model.Manifest==null) {
           return;
         }
+
         if(_mode != 0 && chLevel == 3) {
           var src_s = JsLib.OfString(JsLib.GetField(model.Manifest, "cctor.LoBind"), null);
           if(src_s == null) {
@@ -125,6 +127,11 @@ namespace X13.UI {
           }
         }
         this.Offset = _owner.Offset + _ownerOffset;
+        if(chLevel == 3) {
+          lv.MapRemove(this);
+          lv.MapSet(_mode==0?3:0, (int)(Offset.X / CELL_SIZE), (int)(Offset.Y / CELL_SIZE), this);
+        }
+
         var tc = model.State.ValueType;
         switch(tc) {
         case JSC.JSValueType.Object:
@@ -274,7 +281,7 @@ namespace X13.UI {
         }
 
         using(DrawingContext dc = this.RenderOpen()) {
-          Pen pn = ( _selected || Input == null ) ? SelectionPen : new Pen(Input.brush, 2.0);
+          Pen pn = (_selected || Input == null) ? SelectionPen : new Pen(Input.brush, 2.0);
           for(int i = 0; i < _track.Count - 1; i++) {
             if(_track[i].X == _track[i + 1].X && _track[i].Y == _track[i + 1].Y) {
               dc.DrawEllipse(Input.brush, null, _track[i], 3, 3);
@@ -285,19 +292,18 @@ namespace X13.UI {
         }
       }
 
-      private static int[,] direction = new int[4, 2] { { -1, 0 }, { 0, -1 }, { 1, 0 }, { 0, 1 } };
+      private static int[,] direction = new int[4, 3] { { 1, 0, 3 }, { 0, -1, 2 }, { 0, 1, 1 }, { -1, 0, 0 } };
       private void FindPath(List<Point> track) {
         PriorityQueue<PathFinderNode> mOpen = new PriorityQueue<PathFinderNode>(new ComparePFNode());
         List<PathFinderNode> mClose = new List<PathFinderNode>();
-        double mVert = 0;
         int mSearchLimit = 3000;
 
         PathFinderNode parentNode;
         bool found = false;
-        int startX = (int)Math.Round(this.Input.Offset.X / CELL_SIZE - 1, 0);
-        int startY = (int)Math.Round(this.Input.Offset.Y / CELL_SIZE - 1, 0);
-        int finishX = (int)Math.Round(this.Output.Offset.X / CELL_SIZE - 1, 0);
-        int finishY = (int)Math.Round(this.Output.Offset.Y / CELL_SIZE - 1, 0);
+        int startX = (int)(this.Input.Offset.X / CELL_SIZE);
+        int startY = (int)(this.Input.Offset.Y / CELL_SIZE);
+        int finishX = (int)(this.Output.Offset.X / CELL_SIZE);
+        int finishY = (int)(this.Output.Offset.Y / CELL_SIZE);
         mOpen.Clear();
         mClose.Clear();
 
@@ -307,8 +313,8 @@ namespace X13.UI {
         parentNode.F = parentNode.G + parentNode.H;
         parentNode.X = startX;
         parentNode.Y = startY;
-        parentNode.PX = startX + Math.Sign(this.Input.Offset.X - CELL_SIZE - startX * CELL_SIZE);
-        parentNode.PY = startY + Math.Sign(this.Output.Offset.Y - CELL_SIZE - startY * CELL_SIZE);
+        parentNode.PX = startX - 1;
+        parentNode.PY = startY;
 
         mOpen.Push(parentNode);
         while(mOpen.Count > 0) {
@@ -324,8 +330,6 @@ namespace X13.UI {
             return;
           }
 
-          mVert = ( parentNode.Y - parentNode.PY );
-
           //Lets calculate each successors
           for(int i = 0; i < 4; i++) {
             PathFinderNode newNode;
@@ -333,14 +337,15 @@ namespace X13.UI {
             newNode.PY = parentNode.Y;
             newNode.X = parentNode.X + direction[i, 0];
             newNode.Y = parentNode.Y + direction[i, 1];
-            int newG = this.GetWeigt(newNode.X, newNode.Y, direction[i, 0] == 0);
+            int newG = this.GetWeigt(newNode.X, newNode.Y, i);
+            newG = Math.Max(newG, this.GetWeigt(newNode.PX, newNode.PY, direction[i, 2]));
             if(newG > 100 || newG == 0)
               continue;
             newG += parentNode.G;
 
             // Дополнительная стоимиость поворотов
-            if(( ( newNode.Y - parentNode.Y ) != 0 ) != ( mVert != 0 )) {
-              if(this.GetWeigt(parentNode.X, parentNode.Y, direction[i, 0] == 0) > 100) {
+            if( Math.Abs(newNode.Y - parentNode.PY)==1 || Math.Abs(newNode.X - parentNode.PX)==1 ) {
+              if(this.GetWeigt(parentNode.X, parentNode.Y, i) > 100) {
                 continue;
               }
               newG += 4; // 20;
@@ -380,78 +385,79 @@ namespace X13.UI {
           loItem pIt = null, cIt;
           track.Clear();
           PathFinderNode fNode = mClose[mClose.Count - 1];
-          track.Add(new Point(CELL_SIZE + finishX * CELL_SIZE, CELL_SIZE + finishY * CELL_SIZE));
+          track.Add(new Point(finishX * CELL_SIZE, finishY * CELL_SIZE));
           for(int i = mClose.Count - 1; i >= 0; i--) {
             if(fNode.PX == mClose[i].X && fNode.PY == mClose[i].Y || i == mClose.Count - 1) {
               fNode = mClose[i];
-              bool vert = ( fNode.PY - fNode.Y ) != 0;
-              if(( lv.MapGet(vert, fNode.PX, fNode.PY) ) == null) {
-                lv.MapSet(vert, fNode.PX, fNode.PY, this);
+              int dir = CalcDir(fNode.PX, fNode.X, fNode.PY, fNode.Y);
+              if(( lv.MapGet(dir, fNode.PX, fNode.PY) ) == null) {
+                lv.MapSet(dir, fNode.PX, fNode.PY, this);
               }
-              if(( cIt = lv.MapGet(vert, fNode.X, fNode.Y) ) == null) {
-                lv.MapSet(vert, fNode.X, fNode.Y, this);
+              if(( cIt = lv.MapGet(dir, fNode.X, fNode.Y) ) == null) {
+                lv.MapSet(dir, fNode.X, fNode.Y, this);
               } else {
                 if(cIt == this || cIt == this.Input || cIt == this.Output) {
                   cIt = null;
                 }
               }
               if(i > 0 && i < mClose.Count - 1 && cIt != pIt) {
-                track.Insert(0, new Point(CELL_SIZE + fNode.X * CELL_SIZE, CELL_SIZE + fNode.Y * CELL_SIZE));
-                track.Insert(0, new Point(CELL_SIZE + fNode.X * CELL_SIZE, CELL_SIZE + fNode.Y * CELL_SIZE));
+                track.Insert(0, new Point(fNode.X * CELL_SIZE, fNode.Y * CELL_SIZE));
+                track.Insert(0, new Point(fNode.X * CELL_SIZE, fNode.Y * CELL_SIZE));
                 //Log.Info("{0}: {1}; {2}, {3} - {4}; {5}, {6}", this.ToString(), pIt, fNode.X, fNode.Y, cIt, fNode.PX, fNode.PY);
-              } else if(track[0].X != CELL_SIZE + fNode.PX * CELL_SIZE && track[0].Y != CELL_SIZE + fNode.PY * CELL_SIZE) {
-                track.Insert(0, new Point(CELL_SIZE + fNode.X * CELL_SIZE, CELL_SIZE + fNode.Y * CELL_SIZE));
+              } else if(track[0].X != fNode.PX * CELL_SIZE && track[0].Y != fNode.PY * CELL_SIZE) {
+                track.Insert(0, new Point(fNode.X * CELL_SIZE, fNode.Y * CELL_SIZE));
               }
+              //Log.Info("{0}: {1}; {2}, {3} - {4}; {5}, {6}", this.ToString(), pIt, fNode.X, fNode.Y, cIt, fNode.PX, fNode.PY);
               pIt = cIt;
             }
           }
-          if(track[0].X != startX * CELL_SIZE + CELL_SIZE || track[0].Y != startY * CELL_SIZE + CELL_SIZE) {
-            track.Insert(0, new Point(CELL_SIZE + startX * CELL_SIZE, CELL_SIZE + startY * CELL_SIZE));
+          if(track[0].X != startX * CELL_SIZE || track[0].Y != startY * CELL_SIZE) {
+            track.Insert(0, new Point(startX * CELL_SIZE, startY * CELL_SIZE));
           }
         }
         // Visu
-        //using(DrawingContext dc=this.RenderOpen()) {
-        //  for(int i=0; i<mClose.Count; i++) {
-        //    FormattedText txt=new FormattedText(mClose[i].F.ToString(), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.FtFont, gs*0.3, Brushes.Violet);
-        //    dc.DrawText(txt, new Point(gs/2+mClose[i].X*gs, gs/2+mClose[i].Y*gs));
-        //    dc.DrawLine(new Pen(Brushes.RosyBrown, 1), new Point(gs+mClose[i].X*gs, gs+mClose[i].Y*gs), new Point(gs+mClose[i].PX*gs, gs+mClose[i].PY*gs));
+        //using(DrawingContext dc = this.RenderOpen()) {
+        //  for(int i = 0; i < mClose.Count; i++) {
+        //    FormattedText txt = new FormattedText(mClose[i].G.ToString(), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LFont, CELL_SIZE * 0.3, Brushes.Violet);
+        //    dc.DrawText(txt, new Point(mClose[i].X * CELL_SIZE, mClose[i].Y * CELL_SIZE + CELL_SIZE / 2));
+        //    dc.DrawLine(new Pen(Brushes.RosyBrown, 1), new Point(mClose[i].X * CELL_SIZE, CELL_SIZE + mClose[i].Y * CELL_SIZE), new Point(mClose[i].PX * CELL_SIZE, CELL_SIZE + mClose[i].PY * CELL_SIZE));
         //  }
-        //  Pen pn=new Pen(A.brush, 2.0);
-        //  for(int i=0; i<_track.Count-1; i++) {
-        //    dc.DrawLine(_selected?Schema.SelectionPen:pn, _track[i], _track[i+1]);
+        //  for(int i = 0; i < _track.Count - 1; i++) {
+        //    dc.DrawLine(SelectionPen, _track[i], _track[i + 1]);
         //  }
         //}
       }
-      private int GetWeigt(int X, int Y, bool vert) {
+      private int GetWeigt(int X, int Y, int dir) {
         if(X < 0 || Y < 0 || X * CELL_SIZE >= lv.Width - CELL_SIZE || Y * CELL_SIZE >= lv.Height - CELL_SIZE) {
           return 256;
         }
-        var it = lv.MapGet(vert, X, Y);
-        if(it is loElement) {
-          vert = !vert;
-          it = lv.MapGet(vert, X, Y);
-        }
+        int g;
+        var it = lv.MapGet(dir, X, Y);
         if(it == null) {
-          return 3;
+          g = 3;
         } else if(it is loPin) {
-          if(it == this.Input || it == this.Output) {
-            return 1;
-          }
-          return 101;
+          g = (it == this.Input || it == this.Output) ? 1 : 101;
         } else if(it is loBinding) {
           var w = it as loBinding;
           if(w.Input == this.Input || w.Input == this.Output || w.Output == this.Input || w.Output == this.Output) {
-            return 1;
-          } else if(( w = lv.MapGet(!vert, X, Y) as loBinding ) != null && ( w.Input == this.Input || w.Input == this.Output || w.Output == this.Input || w.Output == this.Output )) {
-            return 1;
+            g = 1;
+          } else {
+            g = 101;
           }
-          return 101;
         } else if(it is loElement) {
-          return 101;
+          g = 101;
+        } else {
+          g = 5;
         }
-        return 5;
+        //if(it != null) {
+        //  Log.Debug("[{0}:{1} - {2}] g={3}, it={4}", X, Y, dir, g, it);
+        //}
+        return g;
       }
-
+      
+      private int CalcDir(int PX, int X, int PY, int Y) {  // 0 - X+, 1 - Y-, 2 - Y+, 3 - X-
+        return (PY==Y)?(X>PX?0:3):(Y>PY?2:1);
+      }
       private class ComparePFNode : IComparer<PathFinderNode> {
         public int Compare(PathFinderNode x, PathFinderNode y) {
           if(x.F > y.F)
@@ -496,9 +502,6 @@ namespace X13.UI {
     internal class loVariable : loElement {
       public loPin Input { get; private set; }
       public loPin Output { get; private set; }
-      private int _oldX = -1;
-      private int _oldY = -1;
-      private int _oldH = 0;
 
       public readonly DTopic model;
 
@@ -516,25 +519,17 @@ namespace X13.UI {
 
       public override void SetLocation(Vector loc, bool save) {
         if(save) {
-          int topCell = (int)( loc.Y - CELL_SIZE / 2 );
+          int topCell = (int)( loc.Y / CELL_SIZE +  0.5 );
           if(topCell < 0) {
             topCell = 0;
           }
-          int leftCell = (int)( loc.X );
+          int leftCell = (int)( loc.X / CELL_SIZE );
           if(leftCell < 0) {
             leftCell = 0;
           }
           model.SetField("Logram.top", topCell);
           model.SetField("Logram.left", leftCell);
         } else {
-          if(_oldX >= 0 && _oldY >= 0) {
-            for(int inH = _oldH; inH >= 0; inH--) {
-              lv.MapSet(true, _oldX, _oldY + inH, null);
-              lv.MapSet(false, _oldX, _oldY + inH, null);
-            }
-          }
-          _oldX = -1;
-          _oldY = -1;
           this.Offset = loc;
           Output.Render(2);
           Input.Render(2);
@@ -545,7 +540,7 @@ namespace X13.UI {
         y = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.top"), 0);
         x = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.left"), 0);
         double width = 0;
-        base.OriginalLocation = new Vector(( 1.0 + x / CELL_SIZE ) * CELL_SIZE, ( 0.5 + y / CELL_SIZE ) * CELL_SIZE);
+        base.OriginalLocation = new Vector(x * CELL_SIZE, ( y - 0.5) * CELL_SIZE);
         this.Offset = OriginalLocation;
 
         using(DrawingContext dc = this.RenderOpen()) {
@@ -557,15 +552,13 @@ namespace X13.UI {
           dc.DrawText(ft, new Point(5, 1));
         }
         if(chLevel == 3) {
-          _oldY = x;
-          _oldX = y;
-          _oldH = (int)width / CELL_SIZE;
-          for(int inH = _oldH; inH >= 0; inH--) {
-            lv.MapSet(true, _oldX, _oldY + inH, this);
-            lv.MapSet(false, _oldX, _oldY + inH, this);
+          lv.MapRemove(this);
+          for(int w = (int)(width / CELL_SIZE + 0.5); w >= 0; w--) {
+            lv.MapSet(0, x + w, y, this);
+            lv.MapSet(1, x + w, y, this);
+            lv.MapSet(2, x + w, y, this);
+            lv.MapSet(3, x + w, y, this);
           }
-          lv.MapSet(false, _oldX, _oldY, Input);
-          lv.MapSet(false, _oldX, _oldY + _oldH, Output);
         }
 
         if(chLevel > 1) {
@@ -613,10 +606,6 @@ namespace X13.UI {
       private const int MAX_PINS = 10;
       private readonly DTopic model;
       private List<loPin> _pins;
-      private int _oldX = -1;
-      private int _oldY = -1;
-      private int _oldW = 0;
-      private int _oldH = 0;
 
       public loBlock(DTopic model, LogramView owner)
         : base(owner) {
@@ -696,7 +685,7 @@ namespace X13.UI {
         int x, y;
         y = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.top"), 0);
         x = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.left"), 0);
-        base.OriginalLocation = new Vector(( 1.0 + x / CELL_SIZE ) * CELL_SIZE, ( 0.5 + y / CELL_SIZE ) * CELL_SIZE);
+        base.OriginalLocation = new Vector(x * CELL_SIZE, (y - 0.5) * CELL_SIZE);
         this.Offset = OriginalLocation;
 
 
@@ -760,14 +749,15 @@ namespace X13.UI {
           return;
         }
         if(chLevel == 3) {
-          _oldY = x;
-          _oldX = y;
-          _oldW = (int)width / CELL_SIZE;
-          _oldH = 1 + (int)height / CELL_SIZE;
-          for(int inW = _oldW; inW >= 0; inW--) {
-            for(int inH = _oldH - 1; inH >= 0; inH--) {
-              lv.MapSet(true, _oldX + inW, _oldY + inH, this);
-              lv.MapSet(false, _oldX + inW, _oldY + inH, this);
+          lv.MapRemove(this);
+          int cw = (int)width / CELL_SIZE;
+          int ch = 1 + (int)height / CELL_SIZE;
+          for(int i = cw - 1; i >= 0; i--) {
+            for(int j = ch - 1; j >= 0; j--) {
+              lv.MapSet(0, x + i, y + j, this);
+              lv.MapSet(1, x + i, y + j, this);
+              lv.MapSet(2, x + i, y + j, this);
+              lv.MapSet(3, x + i, y + j, this);
             }
           }
         }
@@ -781,18 +771,12 @@ namespace X13.UI {
           for(i = 0; i < cntIp; i++) {
             if(textIp[i] != null && pinIp[i] != null) {
               dc.DrawText(textIp[i], new Point(7, ( i + 1 ) * CELL_SIZE + 2));
-              if(chLevel == 3) {
-                lv.MapSet(false, _oldX, _oldY + 1 + i, pinIp[i]);
-              }
             }
           }
           int inW = (int)width / CELL_SIZE;
           for(i = 0; i < cntOp; i++) {
             if(textOp[i] != null && pinOp[i] != null) {
               dc.DrawText(textOp[i], new Point(width - 7 - textOp[i].WidthIncludingTrailingWhitespace, ( i + 1 ) * CELL_SIZE + 2));
-              if(chLevel == 3) {
-                lv.MapSet(false, _oldX + inW, _oldY + 1 + i, pinOp[i]);
-              }
             }
           }
         }
@@ -817,11 +801,11 @@ namespace X13.UI {
           yo = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.top"), 0);
 
 
-          int topCell = (int)( loc.Y );
+          int topCell = (int)( loc.Y / CELL_SIZE + 0.5);
           if(topCell < 0) {
             topCell = 0;
           }
-          int leftCell = (int)( loc.X - CELL_SIZE / 2 );
+          int leftCell = (int)( loc.X / CELL_SIZE );
           if(leftCell < 0) {
             leftCell = 0;
           }
@@ -832,16 +816,6 @@ namespace X13.UI {
             model.SetField("Logram.top", topCell);
           }
         } else {
-          if(_oldX >= 0 && _oldY >= 0) {
-            for(int inW = _oldW; inW >= 0; inW--) {
-              for(int inH = _oldH - 1; inH >= 0; inH--) {
-                lv.MapSet(true, _oldX + inW, _oldY + inH, null);
-                lv.MapSet(false, _oldX + inW, _oldY + inH, null);
-              }
-            }
-          }
-          _oldX = -1;
-          _oldY = -1;
           this.Offset = loc;
           foreach(var p in _pins) {
             p.Render(2);
