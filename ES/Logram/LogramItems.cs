@@ -129,7 +129,7 @@ namespace X13.UI {
         this.Offset = _owner.Offset + _ownerOffset;
         if(chLevel == 3) {
           lv.MapRemove(this);
-          lv.MapSet(_mode==0?3:0, (int)(Offset.X / CELL_SIZE), (int)(Offset.Y / CELL_SIZE), this);
+          lv.MapSet(_mode == 0 ? 3 : 0, (int)(Offset.X / CELL_SIZE + 0.5), (int)(Offset.Y / CELL_SIZE + 0.5), this);
         }
 
         var tc = model.State.ValueType;
@@ -300,10 +300,10 @@ namespace X13.UI {
 
         PathFinderNode parentNode;
         bool found = false;
-        int startX = (int)(this.Input.Offset.X / CELL_SIZE);
-        int startY = (int)(this.Input.Offset.Y / CELL_SIZE);
-        int finishX = (int)(this.Output.Offset.X / CELL_SIZE);
-        int finishY = (int)(this.Output.Offset.Y / CELL_SIZE);
+        int startX = (int)(this.Input.Offset.X / CELL_SIZE + 0.5);
+        int startY = (int)(this.Input.Offset.Y / CELL_SIZE + 0.5);
+        int finishX = (int)(this.Output.Offset.X / CELL_SIZE + 0.5);
+        int finishY = (int)(this.Output.Offset.Y / CELL_SIZE + 0.5);
         mOpen.Clear();
         mClose.Clear();
 
@@ -313,7 +313,7 @@ namespace X13.UI {
         parentNode.F = parentNode.G + parentNode.H;
         parentNode.X = startX;
         parentNode.Y = startY;
-        parentNode.PX = startX - 1;
+        parentNode.PX = startX-1;
         parentNode.PY = startY;
 
         mOpen.Push(parentNode);
@@ -338,9 +338,13 @@ namespace X13.UI {
             newNode.X = parentNode.X + direction[i, 0];
             newNode.Y = parentNode.Y + direction[i, 1];
             int newG = this.GetWeigt(newNode.X, newNode.Y, i);
-            newG = Math.Max(newG, this.GetWeigt(newNode.PX, newNode.PY, direction[i, 2]));
-            if(newG > 100 || newG == 0)
+            if(newG > 100 || newG == 0) {
               continue;
+            }
+            newG = Math.Max(newG, this.GetWeigt(newNode.PX, newNode.PY, direction[i, 2]));
+            if(newG > 100 || newG == 0) {
+              continue;
+            }
             newG += parentNode.G;
 
             // Дополнительная стоимиость поворотов
@@ -348,7 +352,7 @@ namespace X13.UI {
               if(this.GetWeigt(parentNode.X, parentNode.Y, i) > 100) {
                 continue;
               }
-              newG += 4; // 20;
+              newG += 8;
             }
 
             int foundInOpenIndex = -1;
@@ -390,9 +394,9 @@ namespace X13.UI {
             if(fNode.PX == mClose[i].X && fNode.PY == mClose[i].Y || i == mClose.Count - 1) {
               fNode = mClose[i];
               int dir = CalcDir(fNode.PX, fNode.X, fNode.PY, fNode.Y);
-              if(( lv.MapGet(dir, fNode.PX, fNode.PY) ) == null) {
-                lv.MapSet(dir, fNode.PX, fNode.PY, this);
-              }
+              //if(( lv.MapGet(dir, fNode.PX, fNode.PY) ) == null) {
+              //  lv.MapSet(dir, fNode.PX, fNode.PY, this);
+              //}
               if(( cIt = lv.MapGet(dir, fNode.X, fNode.Y) ) == null) {
                 lv.MapSet(dir, fNode.X, fNode.Y, this);
               } else {
@@ -434,20 +438,16 @@ namespace X13.UI {
         int g;
         var it = lv.MapGet(dir, X, Y);
         if(it == null) {
-          g = 3;
+          g = 6;
         } else if(it is loPin) {
           g = (it == this.Input || it == this.Output) ? 1 : 101;
         } else if(it is loBinding) {
           var w = it as loBinding;
-          if(w.Input == this.Input || w.Input == this.Output || w.Output == this.Input || w.Output == this.Output) {
-            g = 1;
-          } else {
-            g = 101;
-          }
+          g = (w.Input == this.Input || w.Input == this.Output || w.Output == this.Input || w.Output == this.Output)? 1 : 101;
         } else if(it is loElement) {
           g = 101;
         } else {
-          g = 5;
+          g = 9;
         }
         //if(it != null) {
         //  Log.Debug("[{0}:{1} - {2}] g={3}, it={4}", X, Y, dir, g, it);
@@ -456,7 +456,7 @@ namespace X13.UI {
       }
       
       private int CalcDir(int PX, int X, int PY, int Y) {  // 0 - X+, 1 - Y-, 2 - Y+, 3 - X-
-        return (PY==Y)?(X>PX?0:3):(Y>PY?2:1);
+        return (PY==Y)?(PX>X?3:0):(Y>PY?2:1);
       }
       private class ComparePFNode : IComparer<PathFinderNode> {
         public int Compare(PathFinderNode x, PathFinderNode y) {
@@ -752,7 +752,7 @@ namespace X13.UI {
           lv.MapRemove(this);
           int cw = (int)width / CELL_SIZE;
           int ch = 1 + (int)height / CELL_SIZE;
-          for(int i = cw - 1; i >= 0; i--) {
+          for(int i = cw; i >= 0; i--) {
             for(int j = ch - 1; j >= 0; j--) {
               lv.MapSet(0, x + i, y + j, this);
               lv.MapSet(1, x + i, y + j, this);
@@ -763,8 +763,8 @@ namespace X13.UI {
         }
         base.VisualBitmapScalingMode = BitmapScalingMode.HighQuality;
         using(DrawingContext dc = this.RenderOpen()) {
-          dc.DrawRectangle(Brushes.White, null, new Rect(-1, 2, width + 4, height + CELL_SIZE - 2));
-          dc.DrawRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(3, CELL_SIZE, wo > 0 ? width - 6 : width - 2, height + 1));
+          dc.DrawRectangle(Brushes.White, null, new Rect(-2, 2, width + 4, height + CELL_SIZE - 2));
+          dc.DrawRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, CELL_SIZE, width, height));
           dc.DrawText(head, new Point(( width - head.WidthIncludingTrailingWhitespace ) / 2, 1));
           dc.DrawImage(App.GetIcon(JsLib.OfString(model.Manifest["icon"], null)), new Rect(wi, CELL_SIZE, CELL_SIZE, CELL_SIZE));
           int i;
@@ -784,12 +784,12 @@ namespace X13.UI {
           int i;
           for(i = 0; i < cntIp; i++) {
             if(pinIp[i] != null) {
-              pinIp[i].SetLocation(new Vector(3, i * CELL_SIZE + CELL_SIZE * 1.5), chLevel);
+              pinIp[i].SetLocation(new Vector(0, i * CELL_SIZE + CELL_SIZE * 1.5), chLevel);
             }
           }
           for(i = 0; i < cntOp; i++) {
             if(pinOp[i] != null) {
-              pinOp[i].SetLocation(new Vector(width - 3, i * CELL_SIZE + CELL_SIZE * 1.5), chLevel);
+              pinOp[i].SetLocation(new Vector(width, i * CELL_SIZE + CELL_SIZE * 1.5), chLevel);
             }
           }
         }

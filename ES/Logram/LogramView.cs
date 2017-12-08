@@ -141,13 +141,14 @@ namespace X13.UI {
     }
     private void RenderBackground() {
       using(DrawingContext dc = _backgroundVisual.RenderOpen()) {
+        dc.DrawRectangle(Brushes.White, new Pen(Brushes.Black, 1), new Rect(-8, -8, this.Width + 8, this.Height + 8));
         Pen pen = new Pen(Brushes.LightGray, 0.5d);
         pen.DashStyle = new DashStyle(new double[] { 3, CELL_SIZE * 2 - 3 }, 1.5);
-        for(double x = CELL_SIZE; x < this.Width; x += CELL_SIZE) {
-          dc.DrawLine(pen, new Point(x, 0), new Point(x, this.Height));
+        for(double x = 0; x < this.Width - CELL_SIZE; x += CELL_SIZE) {
+          dc.DrawLine(pen, new Point(x, 0), new Point(x, this.Height - CELL_SIZE));
         }
-        for(double y = CELL_SIZE; y < this.Height; y += CELL_SIZE) {
-          dc.DrawLine(pen, new Point(0, y), new Point(this.Width, y));
+        for(double y = 0; y < this.Height - CELL_SIZE; y += CELL_SIZE) {
+          dc.DrawLine(pen, new Point(0, y), new Point(this.Width - CELL_SIZE, y));
         }
       }
     }
