@@ -10,7 +10,7 @@
 		xmlns:at="clr-namespace:Xceed.Wpf.AvalonDock.Themes;assembly=Xceed.Wpf.AvalonDock.Themes.Aero"
 		TextOptions.TextRenderingMode="ClearType" TextOptions.TextFormattingMode="Display" FontFamily="Arial" FontSize="14"
         Background="{DynamicResource {x:Static at:AeroColors.BaseColor15Key}}"
-        Title="Enviriot Studio" Icon="logo32.ico" Closed="Window_Closed" Loaded="Window_Loaded">
+        Title="Enviriot Studio" Icon="logo48.ico" Closed="Window_Closed" Loaded="Window_Loaded">
   <Window.Style>
     <Style TargetType="Window">
       <Setter Property="WindowChrome.WindowChrome">
@@ -154,7 +154,7 @@
               <MenuItem Header="Open Log" Style="{x:Null}" Click="miOpenLog" />
             </ContextMenu>
           </Button.ContextMenu>
-          <Image x:Name="AppIcon" Width="32" Height="32" Source="logo32.ico" />
+          <Image x:Name="AppIcon" Width="32" Height="32" Source="logo48.ico" />
         </Button>
         <Button Name="buEditUndo" Grid.Column="1" Command="Undo">
           <Image Source="Images/Edit_Undo.png" Width="24" Height="24" />

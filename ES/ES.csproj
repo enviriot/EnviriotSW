@@ -49,7 +49,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>..\Server\logo32.ico</ApplicationIcon>
+    <ApplicationIcon>logo48.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
     <NoWin32Manifest>true</NoWin32Manifest>
@@ -307,11 +307,6 @@
     <Resource Include="Images\Edit_Undo.png" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="..\Server\logo32.ico">
-      <Link>logo32.ico</Link>
-    </Resource>
-  </ItemGroup>
-  <ItemGroup>
     <Resource Include="Images\ty_js.png" />
   </ItemGroup>
   <ItemGroup>
@@ -326,6 +321,9 @@
   </ItemGroup>
   <ItemGroup>
     <SplashScreen Include="Images\logo.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="logo48.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
