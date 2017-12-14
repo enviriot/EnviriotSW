@@ -112,16 +112,16 @@ namespace X13.UI {
         if(model == null || model.State==null || model.Manifest==null) {
           return;
         }
-
         if(_mode != 0 && chLevel == 3) {
           var src_s = JsLib.OfString(JsLib.GetField(model.Manifest, "cctor.LoBind"), null);
           if(src_s == null) {
             _mode = 1;
-          } else if(_source == null || _source.path != src_s || ( _mode == 2 && _srcBinding == null )) {
+          } else if(_source == null || _source.path != src_s || (_mode == 2 && _srcBinding == null)) {
             model.GetAsync(src_s).ContinueWith(SourceLoaded, TaskScheduler.FromCurrentSynchronizationContext());
             return;
           }
           if(_mode != 2 && _srcBinding != null) {
+            _source = null;
             _srcBinding.Dispose();
             _srcBinding = null;
           }
@@ -394,9 +394,10 @@ namespace X13.UI {
             if(fNode.PX == mClose[i].X && fNode.PY == mClose[i].Y || i == mClose.Count - 1) {
               fNode = mClose[i];
               int dir = CalcDir(fNode.PX, fNode.X, fNode.PY, fNode.Y);
-              //if(( lv.MapGet(dir, fNode.PX, fNode.PY) ) == null) {
-              //  lv.MapSet(dir, fNode.PX, fNode.PY, this);
-              //}
+              int ndir = direction[dir, 2];
+              if(( lv.MapGet(ndir, fNode.PX, fNode.PY) ) == null) {
+                lv.MapSet(ndir, fNode.PX, fNode.PY, this);
+              }
               if(( cIt = lv.MapGet(dir, fNode.X, fNode.Y) ) == null) {
                 lv.MapSet(dir, fNode.X, fNode.Y, this);
               } else {
