@@ -109,7 +109,7 @@ namespace X13.UI {
         _connections.Remove(w);
       }
       public override void Render(int chLevel) {
-        if(model == null || model.State==null || model.Manifest==null) {
+        if(model == null || model.State == null || model.Manifest == null) {
           return;
         }
         if(_mode != 0 && chLevel == 3) {
@@ -147,7 +147,7 @@ namespace X13.UI {
         case JSC.JSValueType.Double:
         case JSC.JSValueType.Integer: {
             double val = (double)model.State;
-            this.brush = val > 0 ? ( val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen ) : ( val == 0 ? brValueFalse : Brushes.DodgerBlue );
+            this.brush = val > 0 ? (val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen) : (val == 0 ? brValueFalse : Brushes.DodgerBlue);
           }
           break;
         case JSC.JSValueType.Boolean:
@@ -184,17 +184,15 @@ namespace X13.UI {
         if(_owner is loBlock && lo != null) {
           lo = lo.parent;
         }
-        if(tt.Result.parent == lo || ( tt.Result.parent != null && tt.Result.parent.parent == lo )) {
+        if(tt.Result.parent == lo || (tt.Result.parent != null && tt.Result.parent.parent == lo)) {
           _mode = 2;
-          if(lv._loadTimer == null) {
-            var src = lv._visuals.OfType<loPin>().FirstOrDefault(z => z.model == _source && !z.IsInput);
-            if(src != null) {
-              if(_srcBinding != null) {
-                _srcBinding.Dispose();
-              }
-              _srcBinding = new loBinding(src, this, lv);
-              src.AddBinding(_srcBinding);
+          var src = lv._visuals.OfType<loPin>().FirstOrDefault(z => z.model == _source && !z.IsInput);
+          if(src != null) {
+            if(_srcBinding != null) {
+              _srcBinding.Dispose();
             }
+            _srcBinding = new loBinding(src, this, lv);
+            src.AddBinding(_srcBinding);
           }
         } else {
           _mode = 3;
@@ -206,7 +204,7 @@ namespace X13.UI {
       }
       public override void Dispose() {
         var srcB = System.Threading.Interlocked.Exchange(ref _srcBinding, null);
-        if(srcB!=null) {
+        if(srcB != null) {
           srcB.Dispose();
         }
         _source = null;
@@ -215,13 +213,14 @@ namespace X13.UI {
       }
 
       public override string ToString() {
-        return model.path + ( _mode < 2 ? ( _mode == 0 ? "Out" : "InF" ) : ( _mode == 2 ? "InI" : "InE" ) );
+        return model.path + (_mode < 2 ? (_mode == 0 ? "Out" : "InF") : (_mode == 2 ? "InI" : "InE"));
       }
     }
 
     internal class loBinding : loItem {
       private Point _cur;
       private List<Point> _track = new List<Point>();
+      private bool _mapped;
 
       public loPin Input { get; private set; }
       public loPin Output { get; private set; }
@@ -259,15 +258,25 @@ namespace X13.UI {
         this.Dispose();
       }
       public override void Render(int chLevel) {
-        if(chLevel > 1 && _track.Count > 0) {
-          lv.MapRemove(this);
+        if(lv._loadTimer != null) {
+          return;
         }
-        if(chLevel > 2 && Input != null && Output != null) {
+        if(chLevel > 1 && _track.Any()
+           && (chLevel == (_mapped ? 2 : 3)
+             || _track[0].X != Input.Offset.X || _track[0].Y != Input.Offset.Y || _track[_track.Count - 1].X != Output.Offset.X || _track[_track.Count - 1].Y != Output.Offset.Y)) {
+          if(_mapped) {
+            lv.MapRemove(this);
+            _mapped = false;
+          }
+          _track.Clear();
+        }
+
+        if(chLevel == 3 && Input != null && Output != null && !_mapped) {
           FindPath(_track);
+          Log.Debug("{0}.FindPath() - {1}", this.ToString(), _track.Count);
         }
 
         if(_track.Count == 0 || chLevel == 2) {
-          _track.Clear();
           if(Input != null) {
             _track.Add(new Point(Input.Offset.X, Input.Offset.Y));
           } else {
@@ -313,7 +322,7 @@ namespace X13.UI {
         parentNode.F = parentNode.G + parentNode.H;
         parentNode.X = startX;
         parentNode.Y = startY;
-        parentNode.PX = startX-1;
+        parentNode.PX = startX - 1;
         parentNode.PY = startY;
 
         mOpen.Push(parentNode);
@@ -348,7 +357,7 @@ namespace X13.UI {
             newG += parentNode.G;
 
             // Дополнительная стоимиость поворотов
-            if( Math.Abs(newNode.Y - parentNode.PY)==1 || Math.Abs(newNode.X - parentNode.PX)==1 ) {
+            if(Math.Abs(newNode.Y - parentNode.PY) == 1 || Math.Abs(newNode.X - parentNode.PX) == 1) {
               if(this.GetWeigt(parentNode.X, parentNode.Y, i) > 100) {
                 continue;
               }
@@ -395,10 +404,10 @@ namespace X13.UI {
               fNode = mClose[i];
               int dir = CalcDir(fNode.PX, fNode.X, fNode.PY, fNode.Y);
               int ndir = direction[dir, 2];
-              if(( lv.MapGet(ndir, fNode.PX, fNode.PY) ) == null) {
+              if((lv.MapGet(ndir, fNode.PX, fNode.PY)) == null) {
                 lv.MapSet(ndir, fNode.PX, fNode.PY, this);
               }
-              if(( cIt = lv.MapGet(dir, fNode.X, fNode.Y) ) == null) {
+              if((cIt = lv.MapGet(dir, fNode.X, fNode.Y)) == null) {
                 lv.MapSet(dir, fNode.X, fNode.Y, this);
               } else {
                 if(cIt == this || cIt == this.Input || cIt == this.Output) {
@@ -419,6 +428,7 @@ namespace X13.UI {
           if(track[0].X != startX * CELL_SIZE || track[0].Y != startY * CELL_SIZE) {
             track.Insert(0, new Point(startX * CELL_SIZE, startY * CELL_SIZE));
           }
+          _mapped = true;
         }
         // Visu
         //using(DrawingContext dc = this.RenderOpen()) {
@@ -444,7 +454,7 @@ namespace X13.UI {
           g = (it == this.Input || it == this.Output) ? 1 : 101;
         } else if(it is loBinding) {
           var w = it as loBinding;
-          g = (w.Input == this.Input || w.Input == this.Output || w.Output == this.Input || w.Output == this.Output)? 1 : 101;
+          g = (w.Input == this.Input || w.Input == this.Output || w.Output == this.Input || w.Output == this.Output) ? 1 : 101;
         } else if(it is loElement) {
           g = 101;
         } else {
@@ -455,9 +465,9 @@ namespace X13.UI {
         //}
         return g;
       }
-      
+
       private int CalcDir(int PX, int X, int PY, int Y) {  // 0 - X+, 1 - Y-, 2 - Y+, 3 - X-
-        return (PY==Y)?(PX>X?3:0):(Y>PY?2:1);
+        return (PY == Y) ? (PX > X ? 3 : 0) : (Y > PY ? 2 : 1);
       }
       private class ComparePFNode : IComparer<PathFinderNode> {
         public int Compare(PathFinderNode x, PathFinderNode y) {
@@ -482,7 +492,7 @@ namespace X13.UI {
         return null;
       }
       public override string ToString() {
-        return ( Input != null ? Input.GetModel().path : "nc" ) + " => " + ( Output != null ? Output.GetModel().path : "nc" );
+        return (Input != null ? Input.GetModel().path : "nc") + " => " + (Output != null ? Output.GetModel().path : "nc");
       }
 
       public override void Dispose() {
@@ -519,19 +529,30 @@ namespace X13.UI {
       }
 
       public override void SetLocation(Vector loc, bool save) {
+        int topCell = (int)(loc.Y / CELL_SIZE + 0.5);
+        if(topCell < 0) {
+          topCell = 0;
+        }
+        int leftCell = (int)(loc.X / CELL_SIZE);
+        if(leftCell < 0) {
+          leftCell = 0;
+        }
         if(save) {
-          int topCell = (int)( loc.Y / CELL_SIZE +  0.5 );
-          if(topCell < 0) {
-            topCell = 0;
+          var lo = JsLib.GetField(model.Manifest, "Logram");
+          int xo, yo;
+          xo = JsLib.OfInt(JsLib.GetField(lo, "left"), 0);
+          yo = JsLib.OfInt(JsLib.GetField(lo, "top"), 0);
+
+          if(xo == leftCell && yo == topCell) {    // refresh wires
+            this.Dispatcher.BeginInvoke(new Action<int>(this.Render), System.Windows.Threading.DispatcherPriority.DataBind, 3);
+          } else {
+            lo = JsLib.SetField(lo, "top", topCell);
+            lo = JsLib.SetField(lo, "left", leftCell);
+            model.SetField("Logram", lo);
           }
-          int leftCell = (int)( loc.X / CELL_SIZE );
-          if(leftCell < 0) {
-            leftCell = 0;
-          }
-          model.SetField("Logram.top", topCell);
-          model.SetField("Logram.left", leftCell);
         } else {
-          this.Offset = loc;
+          this.Offset = new Vector(leftCell * CELL_SIZE, (topCell - 0.5) * CELL_SIZE);
+          ;
           Output.Render(2);
           Input.Render(2);
         }
@@ -541,12 +562,12 @@ namespace X13.UI {
         y = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.top"), 0);
         x = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.left"), 0);
         double width = 0;
-        base.OriginalLocation = new Vector(x * CELL_SIZE, ( y - 0.5) * CELL_SIZE);
+        base.OriginalLocation = new Vector(x * CELL_SIZE, (y - 0.5) * CELL_SIZE);
         this.Offset = OriginalLocation;
 
         using(DrawingContext dc = this.RenderOpen()) {
           FormattedText ft = new FormattedText(model.name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LFont, CELL_SIZE * 0.7, Brushes.White);
-          width = Math.Round(( ft.WidthIncludingTrailingWhitespace + CELL_SIZE * 1.5 ) / CELL_SIZE, 0) * CELL_SIZE;
+          width = Math.Round((ft.WidthIncludingTrailingWhitespace + CELL_SIZE * 1.5) / CELL_SIZE, 0) * CELL_SIZE;
           dc.DrawRoundedRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, 1, width - 1, CELL_SIZE - 3), CELL_SIZE / 4, CELL_SIZE / 4);
           ft.MaxTextHeight = CELL_SIZE - 3;
           ft.MaxTextWidth = width - CELL_SIZE / 2 - 5;
@@ -629,7 +650,7 @@ namespace X13.UI {
       }
       private void PinLoaded(Task<DTopic> tt) {
         DTopic t;
-        if(tt.IsFaulted || !tt.IsCompleted || (t=tt.Result) == null) {
+        if(tt.IsFaulted || !tt.IsCompleted || (t = tt.Result) == null) {
           return;
         }
         loPin p;
@@ -680,7 +701,7 @@ namespace X13.UI {
         }
         p.Render(a == DTopic.Art.value ? 1 : 3);
       }
-      
+
       #region loElement Members
       public override void Render(int chLevel) {
         int x, y;
@@ -714,7 +735,7 @@ namespace X13.UI {
           }
           char pc = ddr[0];
           double cw;
-          if(pc >= 'A' && pc <= (char)( 'A' + MAX_PINS )) {  // Input
+          if(pc >= 'A' && pc <= (char)('A' + MAX_PINS)) {  // Input
             pos = pc - 'A';
             if(cntIp < pos + 1) {
               cntIp = pos + 1;
@@ -726,7 +747,7 @@ namespace X13.UI {
               cw += 9;
             }
             wi = Math.Max(wi, cw);
-          } else if(pc >= 'a' && pc <= (char)( 'a' + MAX_PINS )) {  // Output
+          } else if(pc >= 'a' && pc <= (char)('a' + MAX_PINS)) {  // Output
             pos = pc - 'a';
             if(cntOp < pos + 1) {
               cntOp = pos + 1;
@@ -742,8 +763,8 @@ namespace X13.UI {
             continue;
           }
         }
-        wi = Math.Round(( 2 * wi ) / CELL_SIZE, 0) * CELL_SIZE / 2;
-        wo = Math.Round(( 2 * wo ) / CELL_SIZE, 0) * CELL_SIZE / 2;
+        wi = Math.Round((2 * wi) / CELL_SIZE, 0) * CELL_SIZE / 2;
+        wo = Math.Round((2 * wo) / CELL_SIZE, 0) * CELL_SIZE / 2;
         double width = Math.Round(Math.Max(head.WidthIncludingTrailingWhitespace * 2 - CELL_SIZE / 2, wi + wo + CELL_SIZE) / CELL_SIZE, 0) * CELL_SIZE;
         double height = Math.Max(cntIp * CELL_SIZE, cntOp * CELL_SIZE);
         if(height == 0) {
@@ -766,18 +787,18 @@ namespace X13.UI {
         using(DrawingContext dc = this.RenderOpen()) {
           dc.DrawRectangle(Brushes.White, null, new Rect(-2, 2, width + 4, height + CELL_SIZE - 2));
           dc.DrawRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, CELL_SIZE, width, height));
-          dc.DrawText(head, new Point(( width - head.WidthIncludingTrailingWhitespace ) / 2, 1));
+          dc.DrawText(head, new Point((width - head.WidthIncludingTrailingWhitespace) / 2, 1));
           dc.DrawImage(App.GetIcon(JsLib.OfString(model.Manifest["icon"], null)), new Rect(wi, CELL_SIZE, CELL_SIZE, CELL_SIZE));
           int i;
           for(i = 0; i < cntIp; i++) {
             if(textIp[i] != null && pinIp[i] != null) {
-              dc.DrawText(textIp[i], new Point(7, ( i + 1 ) * CELL_SIZE + 2));
+              dc.DrawText(textIp[i], new Point(7, (i + 1) * CELL_SIZE + 2));
             }
           }
           int inW = (int)width / CELL_SIZE;
           for(i = 0; i < cntOp; i++) {
             if(textOp[i] != null && pinOp[i] != null) {
-              dc.DrawText(textOp[i], new Point(width - 7 - textOp[i].WidthIncludingTrailingWhitespace, ( i + 1 ) * CELL_SIZE + 2));
+              dc.DrawText(textOp[i], new Point(width - 7 - textOp[i].WidthIncludingTrailingWhitespace, (i + 1) * CELL_SIZE + 2));
             }
           }
         }
@@ -796,28 +817,30 @@ namespace X13.UI {
         }
       }
       public override void SetLocation(Vector loc, bool save) {
+        int topCell = (int)(loc.Y / CELL_SIZE + 0.5);
+        if(topCell < 0) {
+          topCell = 0;
+        }
+        int leftCell = (int)(loc.X / CELL_SIZE);
+        if(leftCell < 0) {
+          leftCell = 0;
+        }
+
         if(save) {
+          var lo = JsLib.GetField(model.Manifest, "Logram");
           int xo, yo;
-          xo = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.left"), 0);
-          yo = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.top"), 0);
+          xo = JsLib.OfInt(JsLib.GetField(lo, "left"), 0);
+          yo = JsLib.OfInt(JsLib.GetField(lo, "top"), 0);
 
-
-          int topCell = (int)( loc.Y / CELL_SIZE + 0.5);
-          if(topCell < 0) {
-            topCell = 0;
-          }
-          int leftCell = (int)( loc.X / CELL_SIZE );
-          if(leftCell < 0) {
-            leftCell = 0;
-          }
           if(xo == leftCell && yo == topCell) {    // refresh wires
             this.Dispatcher.BeginInvoke(new Action<int>(this.Render), System.Windows.Threading.DispatcherPriority.DataBind, 3);
           } else {
-            model.SetField("Logram.left", leftCell);
-            model.SetField("Logram.top", topCell);
+            lo = JsLib.SetField(lo, "top", topCell);
+            lo = JsLib.SetField(lo, "left", leftCell);
+            model.SetField("Logram", lo);
           }
         } else {
-          this.Offset = loc;
+          this.Offset = new Vector(leftCell * CELL_SIZE, (topCell - 0.5) * CELL_SIZE);
           foreach(var p in _pins) {
             p.Render(2);
           }
@@ -834,7 +857,7 @@ namespace X13.UI {
           p.GetModel().changed -= pin_changed;
           p.Dispose();
         }
-        
+
       }
       #endregion loElement Members
 

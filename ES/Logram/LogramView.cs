@@ -77,8 +77,8 @@ namespace X13.UI {
       this.Dispatcher.BeginInvoke(new Action(LoadComplet2));
     }
     private void LoadComplet2() {
-      foreach(var p in _visuals.OfType<loPin>().Where(z => z.IsInput).ToArray()) {
-        p.Render(3);  // create loBinding's
+      foreach(var p in _visuals.OfType<loBinding>().ToArray()) {
+        p.Render(3);  // Draw loBinding's
       }
     }
     private void MChildrenLoad(Task<DTopic> tt) {
