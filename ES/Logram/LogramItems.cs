@@ -273,7 +273,6 @@ namespace X13.UI {
 
         if(chLevel == 3 && Input != null && Output != null && !_mapped) {
           FindPath(_track);
-          Log.Debug("{0}.FindPath() - {1}", this.ToString(), _track.Count);
         }
 
         if(_track.Count == 0 || chLevel == 2) {

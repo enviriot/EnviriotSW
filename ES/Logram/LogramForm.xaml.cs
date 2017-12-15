@@ -90,14 +90,15 @@ namespace X13.UI {
         _readyToDrag=false;
         if(uiLogram.Model!=null) {
           string name;
+          string prefix = JsLib.OfString(tag.owner.State["namePrefix"], "U");
           if(uiLogram.Model.children != null) {
             int i = 1;
             do {
-              name = string.Format("A{0:D02}", i);
+              name = prefix+i.ToString("D02");
               i++;
             } while(uiLogram.Model.children.Any(z => z.name == name));
           } else {
-            name = "A01";
+            name = prefix + "01";
           }
           uiLogram.Model.CreateAsync(name, tag.owner.State["default"], tag.owner.State["manifest"]);
         }
@@ -125,7 +126,7 @@ namespace X13.UI {
         Update();
       }
       public void Update() {
-        if(owner.State != null) {
+        if(owner.State != null && owner.State.Value!=null && owner.State.ValueType==JSC.JSValueType.Object) {
           string tmp_s;
 
           var iv = owner.State["icon"];

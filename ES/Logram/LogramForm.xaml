@@ -8,7 +8,10 @@
              mc:Ignorable="d" 
              d:DesignHeight="250" d:DesignWidth="600">
     <Grid Background="LightGray">
-    <Grid.RowDefinitions>
+    <Grid.Resources>
+      <BitmapImage x:Key="NullImage" UriSource="/ES;component/Images/ty_topic.png" />
+    </Grid.Resources>
+      <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
       <RowDefinition/>
     </Grid.RowDefinitions>
@@ -24,7 +27,7 @@
       </ItemsControl.ItemsPanel>
       <ItemsControl.ItemTemplate>
         <DataTemplate>
-          <Image Tag="{Binding}" ToolTip="{Binding Info}" Source="{Binding Icon}" Margin="4" Stretch="None" />
+          <Image Tag="{Binding}" ToolTip="{Binding Info}" Source="{Binding Icon, TargetNullValue={StaticResource NullImage}}" Margin="4" Stretch="None" />
         </DataTemplate>
       </ItemsControl.ItemTemplate>
     </ItemsControl>
