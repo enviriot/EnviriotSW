@@ -53,7 +53,11 @@ namespace X13.UI {
         if(bl == null) {
           bl = new LBDesc(t);
           lock(_blocks) {
-            _blocks.Add(bl);
+            int i = 0;
+            while(_blocks.Count > i && _blocks[i].owner.path.CompareTo(t.path)<=0) {
+              i++;
+            }
+            _blocks.Insert(i, bl);
           }
         } else {
           bl.Update();
