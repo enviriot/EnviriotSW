@@ -15,9 +15,13 @@ namespace X13.Logram {
     private Topic _owner;
     private Topic _verbose;
     private Dictionary<Topic, ILoItem> _items;
+    private List<ILoItem> _tasks;
+    private int _curLayer;
 
     public LogramPl() {
       _items = new Dictionary<Topic, ILoItem>();
+      _tasks = new List<ILoItem>();
+      _curLayer = 0;
     }
 
     public bool verbose {
@@ -25,6 +29,7 @@ namespace X13.Logram {
         return _verbose != null && (bool)_verbose.GetState();
       }
     }
+    public int CurrentLayer { get { return _curLayer; } }
 
     #region IPlugModul Members
     public void Init() {
@@ -42,9 +47,24 @@ namespace X13.Logram {
         _verbose.SetState(false);
 #endif
       }
+      Topic.Subscribe(SubFunc);
     }
     public void Tick() {
-
+      ILoItem it;
+      _curLayer = 0;
+      while(( it = _tasks.FirstOrDefault() )!=null) {
+        _tasks.RemoveAt(0);
+        try {
+          _curLayer = it.Layer;
+          it.Tick();
+          if(it.Disposed) {
+            _items.Remove(it.Owner);
+          }
+        }
+        catch(Exception ex) {
+          Log.Warning("{0}.Tick() - {1}", it.ToString(), ex.Message);
+        }
+      }
     }
     public void Stop() {
     }
@@ -64,41 +84,61 @@ namespace X13.Logram {
     }
     #endregion IPlugModul Members
 
-    private void BindCh(Topic t, Perform.Art a) {
+    internal LoVariable GetVariable(Topic t) {
+      LoVariable v;
       ILoItem it;
-      if(_items.TryGetValue(t, out it)) {
-        LoBinding b = it as LoBinding;
-        if(a == Perform.Art.remove) {
-          if(b != null) {
-            b.Changed(null, null);
-          }
-          _items.Remove(t);
-        } else if(b != null) {
-          b.Changed(null, null);
-          if(b.Disposed) {
-            _items.Remove(t);
-          }
-        }
-      } else if(a == Perform.Art.create) {
-        _items[t] = new LoBinding(this, t);
+      if(_items.TryGetValue(t, out it) && ( v = it as LoVariable )!=null) {
+        return v;
+      }
+      v=new LoVariable(this, t);
+      _items[t] = v;
+      v.ManifestChanged();
+      return v;
+    }
+    internal void Enqueue(ILoItem it) {
+      int idx = _tasks.BinarySearch(it);
+      if(idx<0) {
+        _tasks.Insert(~idx, it);
       }
     }
-    private void BlockCh(Topic t, Perform.Art a) {
+
+    private void BindCh(Topic t, Perform.Art a) {
       ILoItem it;
-      if(_items.TryGetValue(t, out it)) {
+      LoVariable v = null;
+      if((!_items.TryGetValue(t, out it) || (v = it as LoVariable)==null) && a == Perform.Art.create) {
+        v = new LoVariable(this, t);
+        _items[t] = v;
+      }
+      v.ManifestChanged();
+    }
+    private void BlockCh(Topic t, Perform.Art a) {
+      /*
+      ILoItem it;
+      if(_itemsO.TryGetValue(t, out it)) {
         LoBlock b = it as LoBlock;
         if(a == Perform.Art.remove) {
           if(b != null) {
             //b.Remove();
           }
-          _items.Remove(t);
+          _itemsO.Remove(t);
         } else if(b != null) {
           b.Changed(null, null);
         }
       } else if(a == Perform.Art.create) {
-        _items[t] = new LoBlock(this, t);
+        _itemsO[t] = new LoBlock(this, t);
+      }
+      */
+    }
+    private void SubFunc(Perform p) {
+      ILoItem it;
+      if(!_items.TryGetValue(p.src, out it)) {
+        return;
+      }
+      if(p.art==Perform.Art.changedState) {
+        it.SetValue(p.src.GetState(), p.prim);
+      } else if(p.art==Perform.Art.remove) {
+        Enqueue(it);
       }
     }
-
   }
 }

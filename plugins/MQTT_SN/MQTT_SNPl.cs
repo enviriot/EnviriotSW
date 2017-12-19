@@ -173,21 +173,7 @@ namespace X13.Periphery {
     }
 
     #endregion RPC
-    /*
-    private void SubFunc(Perform p, SubRec sb) {
-      if(p.art == Perform.Art.subscribe) {
-        if(p.src.GetField("MQTT-SN.phy1_addr").Defined) {
-          var dev = _devs.FirstOrDefault(z => z.name == p.src.name);
-          if(dev == null) {
-            dev = new MsDevice(this, p.src);
-            _devs.Add(dev);
-          }
-        }
-      } else if(p.art == Perform.Art.subAck) {
-        _gates.Add(new MsGUdp(this));
-        MsGSerial.Init(this);
-      }
-    }*/
+
     internal bool ProcessInPacket(IMsGate gate, byte[] addr, byte[] buf, int start, int end) {
       var msg = MsMessage.Parse(buf, start, end);
       if(msg == null) {

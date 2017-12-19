@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using X13.Repository;
 
-
+/*
 namespace X13.Logram {
   internal class LoBlock : ILoItem {
     private LogramPl _pl;
@@ -24,6 +24,18 @@ namespace X13.Logram {
       _pinsSR = this._owner.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Value, PinsChanged);
     }
 
+    #region ILoItem Members
+    public Topic Owner { get{ return _owner; } }
+    public ILoItem Source { get; set; }
+    public int Layer { get; set; }
+    public JSC.JSValue GetValue();
+    public void SetValue(JSC.JSValue value, Topic prim);
+    public ILoItem[] Route { get; set; }
+    public void Tick(){
+    }
+    public bool Disposed { get; private set;}
+    #endregion ILoItem Members
+ 
     private void PinsChanged(Perform p, SubRec sr) {
       if((p.prim==_owner && p.art!=Perform.Art.subAck) || p.art == Perform.Art.subscribe) {
         return;
@@ -121,4 +133,4 @@ namespace X13.Logram {
     #endregion JsFunctions
 
   }
-}
+}*/

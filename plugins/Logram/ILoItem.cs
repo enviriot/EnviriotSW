@@ -1,4 +1,6 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using JSC = NiL.JS.Core;
+using JSL = NiL.JS.BaseLibrary;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,8 +9,14 @@ using System.Threading.Tasks;
 using X13.Repository;
 
 namespace X13.Logram {
-  interface ILoItem {
-    void Changed(Perform p, SubRec r);
-    int Layer { get; }
+  internal interface ILoItem : IComparable<ILoItem> {
+    Topic Owner { get; }
+    ILoItem Source { get; set; }
+    int Layer { get; set; }
+    JSC.JSValue GetValue();
+    void SetValue(JSC.JSValue value, Topic prim);
+    ILoItem[] Route { get; set; }
+    void Tick();
+    bool Disposed { get; }
   }
 }

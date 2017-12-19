@@ -48,10 +48,10 @@
     <Compile Include="..\..\Server\Properties\VersionInfo.cs">
       <Link>Properties\VersionInfo.cs</Link>
     </Compile>
-    <Compile Include="LoBinding.cs" />
     <Compile Include="ILoItem.cs" />
     <Compile Include="LoBlock.cs" />
     <Compile Include="LogramPl.cs" />
+    <Compile Include="LoVariable.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
