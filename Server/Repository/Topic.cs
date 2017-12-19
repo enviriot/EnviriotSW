@@ -12,6 +12,15 @@ namespace X13.Repository {
     private static Repo _repo;
     public static Topic root { get; private set; }
 
+    public static void Subscribe(Action<Perform> func) {
+      if(_repo!=null) {
+        _repo.SubscribeAll(func);
+      } else {
+        Log.Error("Topic.Subscribe({0}.{1}) - _repo == null", func.Target!=null?func.Target.ToString():func.Method.DeclaringType.Name, func.Method.Name);
+        throw new NullReferenceException("Topic.Subscribe() - _repo == null");
+      }
+    }
+
     #region Member variables
     private Topic _parent;
     private string _name;

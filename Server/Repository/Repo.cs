@@ -18,6 +18,7 @@ namespace X13.Repository {
     #region internal Members
     private ConcurrentQueue<Perform> _tcQueue;
     private List<Perform> _prOp;
+    private List<Action<Perform>> _subscribers;
     private int _busyFlag;
     private int _pfPos;
 
@@ -29,6 +30,10 @@ namespace X13.Repository {
         _tcQueue.Enqueue(cmd);               // Process in next tick
       }
     }
+    internal void SubscribeAll(Action<Perform> func) {
+      _subscribers.Add(func);
+    }
+
     private int EnquePerf(Perform cmd) {
       int i;
       for(i = 0; i < _prOp.Count; i++) {
@@ -191,6 +196,7 @@ namespace X13.Repository {
     public Repo() {
       _tcQueue = new ConcurrentQueue<Perform>();
       _prOp = new List<Perform>(128);
+      _subscribers = new List<Action<Perform>>();
     }
 
     #region Import/Export
@@ -365,6 +371,15 @@ namespace X13.Repository {
         cmd = _prOp[_pfPos];
         if(cmd.art != Perform.Art.setState && cmd.art != Perform.Art.setField) {
           Topic.I.Publish(cmd);
+          for(int i = _subscribers.Count-1; i>=0; i--) {
+            var func = _subscribers[i];
+            try {
+              func.Invoke(cmd);
+            }
+            catch(Exception ex) {
+              Log.Error("{0}.{1}({2}) - {3}", func.Target!=null?func.Target.ToString():func.Method.DeclaringType.Name, func.Method.Name, cmd.ToString(), ex.Message);
+            }
+          }
         }
       }
 

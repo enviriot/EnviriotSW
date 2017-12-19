@@ -18,7 +18,6 @@ namespace X13.PersistentStorage {
     #region internal Members
     private LiteDatabase _db;
     private LiteCollection<BsonDocument> _objects, _states, _history;
-    private SubRec _subMq;
     private Topic _owner;
     private System.Collections.Generic.SortedDictionary<Topic, Stash> _base;
 
@@ -148,7 +147,7 @@ namespace X13.PersistentStorage {
       throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
     }
 
-    private void SubFunc(Perform p, SubRec sr) {
+    private void SubFunc(Perform p) {
       if(p.art == Perform.Art.subscribe || p.art == Perform.Art.subAck || p.art==Perform.Art.setField || p.art==Perform.Art.setState || p.art==Perform.Art.unsubscribe || p.prim == _owner) {
         return;
       }
@@ -315,15 +314,11 @@ namespace X13.PersistentStorage {
         }
         oldId.Clear();
       }
-      _subMq = Topic.root.Subscribe(SubRec.SubMask.All | SubRec.SubMask.Value | SubRec.SubMask.Field, string.Empty, SubFunc);
+      Topic.Subscribe(SubFunc);
     }
     public void Tick() {
     }
     public void Stop() {
-      SubRec sb;
-      if((sb = Interlocked.Exchange(ref _subMq, null)) != null) {
-        sb.Dispose();
-      }
       var db = Interlocked.Exchange(ref _db, null);
       if(db != null) {
         db.Dispose();
