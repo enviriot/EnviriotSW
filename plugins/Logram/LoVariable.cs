@@ -14,7 +14,7 @@ namespace X13.Logram {
     private Topic _owner;
     private ILoItem _src, _src_new;
     private JSC.JSValue _value, _value_new;
-    private int _layer, _layer_new;
+    private int _layer;
     private List<ILoItem> _links;
     private Topic _prim;
 
@@ -55,7 +55,7 @@ namespace X13.Logram {
         return _src;
       }
       set {
-        if(value!=_src) {
+        if(value!=_src || (_src!=null && (_src.Layer!=_layer || !Object.ReferenceEquals(_src.Route, Route) ))) {
           _src_new = value;
           _pl.EnqueueIn(this);
         }
@@ -71,12 +71,6 @@ namespace X13.Logram {
       get {
         return _layer;
       }
-      set {
-        if(_layer_new!=value) {
-          _layer_new=value;
-          _pl.EnqueuePr(this);
-        }
-      }
     }
     public void SetValue(JSC.JSValue value, Topic prim) {
       if(!JSC.JSValue.ReferenceEquals(_value, value)) {
@@ -90,25 +84,27 @@ namespace X13.Logram {
     public bool Disposed { get; private set; }
 
     public void Tick1() {
-      if(_owner.disposed) {
+      LoBlock bl;
+      if(_owner.disposed && !Disposed) {
+        Disposed = true;
         for(int i = _links.Count-1; i>=0; i--) {
-          LoBlock bl;
           if(( bl = _links[i] as LoBlock )!=null) {
             bl.DeletePin(this);
           } else {
             _links[i].Owner.SetField("cctor.LoBind", null, _owner);
           }
         }
-        Disposed = true;
+        _links.Clear();
         _src_new = null;
       }
-      if(_src != _src_new) {
+
+      if(_src != _src_new || ( _src!=null && ( _src.Layer!=Math.Abs(_layer) || !Object.ReferenceEquals(_src.Route, Route) ) )) {
         var svo = Interlocked.Exchange(ref _src, _src_new) as LoVariable;
         if(svo != null) {
           svo.DeleteLink(this);
         }
         if(_src!=null) {
-          _layer_new = _src.Layer;
+          _layer = _src.Layer;
           Route = _src.Route;
           if(_owner.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
             _owner.ClearAttribute(Topic.Attribute.Saved);
@@ -118,8 +114,14 @@ namespace X13.Logram {
             _value_new = svo._value;
             _prim = svo._owner;
           }
+          if(Route!=null && ( bl = _links.OfType<LoBlock>().FirstOrDefault() )!=null && Route.Contains(bl)) {  // make loop
+            if(_layer!=0) {
+              _layer = -_layer;
+            }
+          }
         } else {
-          _layer_new = 0;
+          _layer = 0;
+          Route = null;
           if(!_owner.disposed) {
             _owner.SetAttribute(Topic.Attribute.DB);
           }
@@ -127,16 +129,17 @@ namespace X13.Logram {
             Disposed = true;
           }
         }
+        if(_layer>=0) {  // if _layer < 0 -> loop
+          for(int i = _links.Count-1; i>=0; i--) {
+            if(_links[i]!=_src) {
+              _pl.EnqueueIn(_links[i]);
+            }
+          }
+        }
+        Log.Debug(this.ToString());
       }
     }
     public void Tick2() {
-      if(_layer!=_layer_new) {
-        _layer = _layer_new;
-        Route = _src!=null?_src.Route:null;
-        for(int i = _links.Count-1; i>=0; i--) {
-          _links[i].Layer = _layer;
-        }
-      }
       if(!JSC.JSValue.ReferenceEquals(_value, _value_new)) {
         _value = _value_new;
         _owner.SetState(_value, _prim);

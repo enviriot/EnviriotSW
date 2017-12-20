@@ -14,7 +14,6 @@ namespace X13.Logram {
     private Topic _owner, _typeT;
     private List<LoVariable> _pins;
     private int _layer;
-    private bool _layer_ch;
     private Topic _prim;
 
 
@@ -27,11 +26,10 @@ namespace X13.Logram {
       this._owner = owner;
       _pins = new List<LoVariable>();
       ManifestChanged();
-      _layer_ch = true;
       foreach(var ch in _owner.children) {
         GetPin(ch);
       }
-      _pl.EnqueuePr(this);
+      _pl.EnqueueIn(this);
     }
     public void ManifestChanged() {
       JSC.JSValue jSrc;
@@ -75,7 +73,9 @@ namespace X13.Logram {
           Log.Warning("{0}.ctor() - {1}", _owner.path, ex.Message);
         }
       } else {
-        Log.Warning("{0} constructor is not defined", _owner.path);
+        if(!_owner.disposed) {
+          Log.Warning("{0} constructor is not defined", _owner.path);
+        }
       }
     }
     public LoVariable GetPin(Topic t) {
@@ -103,10 +103,6 @@ namespace X13.Logram {
       get {
         return _layer;
       }
-      set {
-        _layer_ch = true;
-        _pl.EnqueuePr(this);
-      }
     }
     public void SetValue(JSC.JSValue value, Topic prim) {
       _prim = prim;
@@ -114,47 +110,44 @@ namespace X13.Logram {
     }
     public ILoItem[] Route { get; set; }
     public void Tick1() {
-      if(_owner.disposed) {
-        foreach(var p in _pins) {
-          if(p.Source==this) {
-            p.Source = null;
-          } else {
-            p.DeleteLink(this);
-          }
-        }
+      if(_owner.disposed && !Disposed) {
         Disposed = true;
+        foreach(var p in _pins.Where(z => z.Owner.parent!=_owner)) {
+          p.DeleteLink(this);
+        }
+        _pins.Clear();
+        if(_ctx!=null) {
+          JsExtLib.ClearTimeout(_ctx);
+        }
+        _ctx = null;
+        _self=null;
+        _calcFunc = null;
+        return;
       }
-    }
-    public void Tick2() {
-      if(_layer_ch) {
-        _layer_ch = false;
+      var ln = 0;
+      foreach(var p in _pins.Where(z => z.Source!=this && z.Layer>0)) {
+        if(ln<p.Layer) {
+          ln = p.Layer;
+        }
+      }
+      ln++;
+      if(_layer!=ln) {
         List<ILoItem> route = new List<ILoItem>();
-        int nl = 0;
-        foreach(var p in _pins) {
-          if(p.Source==this) {
-            continue;
-          }
-          if(p.Route!=null && p.Route.Contains(this)) {
-            continue;  // skip Loop
-          }
-          if(nl<p.Layer) {
-            nl = p.Layer;
-          }
+        foreach(var p in _pins.Where(z => z.Source!=this && z.Layer>0)) {
           if(p.Route!=null) {
             route.AddRange(p.Route);
           }
         }
         route.Add(this);
         Route = route.ToArray();
-        nl++;
-        if(_layer!=nl) {
-          _layer = nl;
-          foreach(var p in _pins.Where(z => z.Source==this)) {
-            p.Layer = _layer;
-          }
+        _layer = ln;
+        foreach(var p in _pins.Where(z => z.Source==this)) {
+          _pl.EnqueueIn(p);
         }
+        Log.Debug(this.ToString());
       }
-
+    }
+    public void Tick2() {
       if(_prim!=null) {
         string pr = _prim.parent == _owner ? _prim.name : _prim.path;
         _prim = null;
@@ -218,5 +211,8 @@ namespace X13.Logram {
     }
     #endregion JsFunctions
 
+    public override string ToString() {
+      return "["+_layer.ToString("000") + "] " + _owner.path;
+    }
   }
 }

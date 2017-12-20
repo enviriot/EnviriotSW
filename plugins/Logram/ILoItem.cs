@@ -11,7 +11,7 @@ using X13.Repository;
 namespace X13.Logram {
   internal interface ILoItem : IComparable<ILoItem> {
     Topic Owner { get; }
-    int Layer { get; set; }
+    int Layer { get; }
     void SetValue(JSC.JSValue value, Topic prim);
     ILoItem[] Route { get; set; }
     void Tick1();

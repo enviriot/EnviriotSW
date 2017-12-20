@@ -329,7 +329,7 @@ namespace X13.EsBroker {
         }
         break;
       case Perform.Art.changedState:
-        if(p.prim != _owner && sb.setTopic == p.src) {
+        if(!p.src.disposed && p.prim != _owner && sb.setTopic == p.src) {
           base.SendArr(new JSL.Array { 6, p.src.path, p.src.GetState() });
         }
         break;
