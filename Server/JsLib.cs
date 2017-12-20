@@ -114,8 +114,12 @@ namespace X13 {
     public static int OfInt(JSC.JSValue v, int def) {
       return (v == null || !v.IsNumber) ? def : ((int)v);
     }
-    public static string OfString(JSC.JSValue v, string def) {
+    public static string OfString(JSC.JSValue v, string def=null) {
       return (v == null || v.ValueType!=JSC.JSValueType.String) ? def : (v.Value as string);
+    }
+    public static string OfString(JSC.JSValue v, string path, string def) {
+      v = GetField(v, path);
+      return ( v == null || v.ValueType!=JSC.JSValueType.String ) ? def : ( v.Value as string );
     }
 
     internal static void Propertys(ref SortedList<string, JSC.JSValue> l, JSC.JSValue o) {

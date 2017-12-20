@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using X13.Repository;
+using System.Collections.Concurrent;
 
 namespace X13.Logram {
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
@@ -15,13 +16,15 @@ namespace X13.Logram {
     private Topic _owner;
     private Topic _verbose;
     private Dictionary<Topic, ILoItem> _items;
-    private List<ILoItem> _tasks;
-    private int _curLayer;
+    private ConcurrentQueue<ILoItem> _TaskIn;
+    private List<ILoItem> _TaskPr;
+    private int _curIdx;
 
     public LogramPl() {
       _items = new Dictionary<Topic, ILoItem>();
-      _tasks = new List<ILoItem>();
-      _curLayer = 0;
+      _TaskIn = new ConcurrentQueue<ILoItem>();
+      _TaskPr = new List<ILoItem>();
+      _curIdx = 0;
     }
 
     public bool verbose {
@@ -29,7 +32,6 @@ namespace X13.Logram {
         return _verbose != null && (bool)_verbose.GetState();
       }
     }
-    public int CurrentLayer { get { return _curLayer; } }
 
     #region IPlugModul Members
     public void Init() {
@@ -51,18 +53,28 @@ namespace X13.Logram {
     }
     public void Tick() {
       ILoItem it;
-      _curLayer = 0;
-      while(( it = _tasks.FirstOrDefault() )!=null) {
-        _tasks.RemoveAt(0);
+      _curIdx = -1;
+      while(_TaskIn.TryDequeue(out it)) {
         try {
-          _curLayer = it.Layer;
-          it.Tick();
+          it.Tick1();
           if(it.Disposed) {
             _items.Remove(it.Owner);
+          } else {
+            EnqueuePr(it);
           }
         }
         catch(Exception ex) {
-          Log.Warning("{0}.Tick() - {1}", it.ToString(), ex.Message);
+          Log.Warning("{0}.Tick1() - {1}", it.ToString(), ex.Message);
+        }
+      }
+      _curIdx = 0;
+      while(_curIdx< _TaskPr.Count) {
+        it = _TaskPr[_curIdx++];
+        try {
+          it.Tick2();
+        }
+        catch(Exception ex) {
+          Log.Warning("{0}.Tick2() - {1}", it.ToString(), ex.Message);
         }
       }
     }
@@ -95,49 +107,59 @@ namespace X13.Logram {
       v.ManifestChanged();
       return v;
     }
-    internal void Enqueue(ILoItem it) {
-      int idx = _tasks.BinarySearch(it);
+    internal void EnqueuePr(ILoItem it) {
+      int idx = _TaskPr.BinarySearch(it);
       if(idx<0) {
-        _tasks.Insert(~idx, it);
+        idx = ~idx;
+        if(_curIdx < idx) {
+          _TaskPr.Insert(idx, it);
+        } else {
+          _TaskIn.Enqueue(it);
+        }
+      } else if(_curIdx >= idx) {
+        _TaskIn.Enqueue(it);
       }
+    }
+    internal void EnqueueIn(ILoItem it) {
+      _TaskIn.Enqueue(it);
     }
 
     private void BindCh(Topic t, Perform.Art a) {
       ILoItem it;
       LoVariable v = null;
-      if((!_items.TryGetValue(t, out it) || (v = it as LoVariable)==null) && a == Perform.Art.create) {
+      if(( !_items.TryGetValue(t, out it) || ( v = it as LoVariable )==null ) && a == Perform.Art.create) {
         v = new LoVariable(this, t);
         _items[t] = v;
       }
       v.ManifestChanged();
     }
     private void BlockCh(Topic t, Perform.Art a) {
-      /*
       ILoItem it;
-      if(_itemsO.TryGetValue(t, out it)) {
-        LoBlock b = it as LoBlock;
-        if(a == Perform.Art.remove) {
-          if(b != null) {
-            //b.Remove();
-          }
-          _itemsO.Remove(t);
-        } else if(b != null) {
-          b.Changed(null, null);
+      LoBlock v = null;
+      if(!_items.TryGetValue(t, out it) || ( v = it as LoBlock )==null) {
+        if(a == Perform.Art.create) {
+          v = new LoBlock(this, t);
+          _items[t] = v;
         }
-      } else if(a == Perform.Art.create) {
-        _itemsO[t] = new LoBlock(this, t);
+      } else {
+        v.ManifestChanged();
       }
-      */
     }
     private void SubFunc(Perform p) {
       ILoItem it;
       if(!_items.TryGetValue(p.src, out it)) {
+        if(p.art==Perform.Art.create) {
+          LoBlock lb;
+          if(p.src.parent!=null && _items.TryGetValue(p.src.parent, out it) && ( lb = it as LoBlock )!=null) {
+            lb.GetPin(p.src);
+          }
+        }
         return;
       }
       if(p.art==Perform.Art.changedState) {
         it.SetValue(p.src.GetState(), p.prim);
       } else if(p.art==Perform.Art.remove) {
-        Enqueue(it);
+        _TaskIn.Enqueue(it);
       }
     }
   }

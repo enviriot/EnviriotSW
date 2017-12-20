@@ -11,12 +11,11 @@ using X13.Repository;
 namespace X13.Logram {
   internal interface ILoItem : IComparable<ILoItem> {
     Topic Owner { get; }
-    ILoItem Source { get; set; }
     int Layer { get; set; }
-    JSC.JSValue GetValue();
     void SetValue(JSC.JSValue value, Topic prim);
     ILoItem[] Route { get; set; }
-    void Tick();
+    void Tick1();
+    void Tick2();
     bool Disposed { get; }
   }
 }
