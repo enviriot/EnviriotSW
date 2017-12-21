@@ -77,6 +77,8 @@ namespace X13.Logram {
           Log.Warning("{0}.Tick2() - {1}", it.ToString(), ex.Message);
         }
       }
+      _TaskPr.Clear();
+      _curIdx = -1;
     }
     public void Stop() {
     }

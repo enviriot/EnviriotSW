@@ -185,11 +185,11 @@ namespace X13.Data {
         }
         break;
       case 6:  // [Publish, path, state]
-        if(msg.Count != 3 || msg[1].ValueType != JSC.JSValueType.String) {
+        if((msg.Count == 2 || msg.Count == 3) && msg[1].ValueType == JSC.JSValueType.String) {
+          App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg.Count == 3?msg[2]:JSC.JSObject.Null, null));
+        } else {
           Log.Warning("Synax error {0}", msg);
-          break;
         }
-        App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg[2], null));
         break;
       case 10:  // [Move, oldPath, newParent, newName]
         if(msg.Count!=4  || msg[1].ValueType != JSC.JSValueType.String || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String) {

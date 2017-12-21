@@ -47,6 +47,9 @@ namespace X13.Logram {
           _ctx = new JSC.Context(JsExtLib.Context);
           _ctx.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
           _ctx.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
+          _ctx.DefineVariable("clearTimeout").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimer)));
+          _ctx.DefineVariable("clearInterval").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimer)));
+          
 
           var f = _ctx.Eval(jSrc.Value as string) as JSL.Function;
           if(f != null) {
@@ -78,13 +81,14 @@ namespace X13.Logram {
         }
       }
     }
+
     public LoVariable GetPin(Topic t) {
       LoVariable v;
       v = _pins.FirstOrDefault(z => z.Owner==t);
       if(v==null) {
         v = _pl.GetVariable(t);
-        var ddr = _typeT!=null?JsLib.OfString(_typeT.GetState(), "Children."+t.name+".ddr", null):null;
-        if(t.parent!=_owner || string.IsNullOrEmpty(ddr) || ddr[0]<'a' || ddr[0]>'z') {
+        var ddr = _typeT!=null?JsLib.OfInt(_typeT.GetState(), "Children."+t.name+".ddr", 0):0;
+        if(t.parent!=_owner || ddr<=0) {
           v.AddLink(this);
         } else {
           v.Source = this;
@@ -180,6 +184,10 @@ namespace X13.Logram {
     private JSC.JSValue SetTimeout(JSC.JSValue func, int to) {
       return JsExtLib.SetTimer(func, to, -1, _ctx);
     }
+    private void ClearTimer(JSC.JSValue id) {
+      JsExtLib.ClearTimeout(id);
+    }
+
     private JSC.JSValue SetInterval(JSC.JSValue func, int interval) {
       return JsExtLib.SetTimer(func, interval, interval, _ctx);
     }
@@ -209,6 +217,7 @@ namespace X13.Logram {
       return JSC.JSValue.NotExists;
 
     }
+
     #endregion JsFunctions
 
     public override string ToString() {

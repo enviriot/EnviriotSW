@@ -510,18 +510,20 @@ namespace X13.UI {
       DTopic t;
       if(e.Data.GetDataPresent(typeof(DTopic)) && (t = e.Data.GetData(typeof(DTopic)) as DTopic) != null) {
         if(JsLib.OfString(JsLib.GetField(t.Manifest, "type"), null) == "Ext/LBDescr") {
-          string name;
-          string prefix = JsLib.OfString(t.State["namePrefix"], "U");
-          if(Model.children != null) {
-            int i = 1;
-            do {
-              name = prefix + i.ToString("D02");
-              i++;
-            } while(Model.children.Any(z => z.name == name));
-          } else {
-            name = prefix + "01";
+          if(t.State.ValueType == JSC.JSValueType.Object && t.State.Value != null) {
+            string name;
+            string prefix = JsLib.OfString(t.State["namePrefix"], "U");
+            if(Model.children != null) {
+              int i = 1;
+              do {
+                name = prefix + i.ToString("D02");
+                i++;
+              } while(Model.children.Any(z => z.name == name));
+            } else {
+              name = prefix + "01";
+            }
+            Model.CreateAsync(name, t.State["default"], JsLib.SetField(JsLib.SetField(t.State["manifest"], "Logram.top", y), "Logram.left", x));
           }
-          Model.CreateAsync(name, t.State["default"], JsLib.SetField(JsLib.SetField(t.State["manifest"], "Logram.top", y), "Logram.left", x));
         } else if((e.AllowedEffects & DragDropEffects.Link) == DragDropEffects.Link) {
           string name = t.name;
           if(Model.children!=null && Model.children.Any(z => z.name == name)) {

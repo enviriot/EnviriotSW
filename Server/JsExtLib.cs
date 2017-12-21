@@ -77,7 +77,7 @@ namespace X13 {
         t = t.next;
       }
     }
-    private static void ClearTimeout(JSC.JSValue oi) {
+    public static void ClearTimeout(JSC.JSValue oi) {
       if(oi == null || !oi.IsNumber) {
         return;
       }

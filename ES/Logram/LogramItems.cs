@@ -660,11 +660,11 @@ namespace X13.UI {
           return;
         }
         var pd = chs[t.name];
-        string ddr;
-        if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || string.IsNullOrEmpty(ddr = JsLib.OfString(pd["ddr"], null))) {
+        int ddr;
+        if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || (ddr = JsLib.OfInt(pd, "ddr", 0))==0) {
           return;
         }
-        p = new loPin(this, t, ddr[0] >= 'A' && ddr[0] <= (char)( 'A' + MAX_PINS ));
+        p = new loPin(this, t, ddr<0);
         _pins.Add(p);
         lv.AddVisual(p);
         t.changed += pin_changed;
@@ -729,14 +729,13 @@ namespace X13.UI {
 
         foreach(var p in _pins) {
           var pd = chs[p.GetModel().name];
-          string ddr;
-          if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || string.IsNullOrEmpty(ddr = JsLib.OfString(pd["ddr"], null))) {
+          int ddr;
+          if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || ( ddr = JsLib.OfInt(pd, "ddr", 0) )==0) {
             continue;
           }
-          char pc = ddr[0];
           double cw;
-          if(pc >= 'A' && pc <= (char)( 'A' + MAX_PINS )) {  // Input
-            pos = pc - 'A';
+          if(ddr<0) {  // Input
+            pos = -ddr-1;
             if(cntIp < pos + 1) {
               cntIp = pos + 1;
             }
@@ -747,8 +746,8 @@ namespace X13.UI {
               cw += 9;
             }
             wi = Math.Max(wi, cw);
-          } else if(pc >= 'a' && pc <= (char)( 'a' + MAX_PINS )) {  // Output
-            pos = pc - 'a';
+          } else if(ddr > 0) {  // Output
+            pos = ddr - 1;
             if(cntOp < pos + 1) {
               cntOp = pos + 1;
             }

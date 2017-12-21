@@ -114,6 +114,10 @@ namespace X13 {
     public static int OfInt(JSC.JSValue v, int def) {
       return (v == null || !v.IsNumber) ? def : ((int)v);
     }
+    public static int OfInt(JSC.JSValue v, string path, int def) {
+      v = GetField(v, path);
+      return ( v == null || !v.IsNumber ) ? def : ( (int)v );
+    }
     public static string OfString(JSC.JSValue v, string def=null) {
       return (v == null || v.ValueType!=JSC.JSValueType.String) ? def : (v.Value as string);
     }
