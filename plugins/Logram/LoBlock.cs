@@ -204,7 +204,7 @@ namespace X13.Logram {
       if(!_owner.disposed) {
         Topic t = _owner.Get(path, true, _owner);
         var v=GetPin(t);
-        if(v.Source == this) {
+        if(t.parent == _owner) {
           v.SetValue(value, _owner);
         }
       }

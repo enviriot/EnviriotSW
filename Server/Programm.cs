@@ -142,10 +142,22 @@ namespace X13 {
       InitPlugins();
       StartPlugins();
 
-      _tickTimer = new Timer(Tick, null, 200, 31);  // Tick = 1000/64 = 15.625 mS
+      _tickTimer = new Timer(Tick, null, 100, 15);  // Tick = 1000/64 = 15.625 mS
       int i;
+      //int j=1920;
+      //TimeSpan t = TimeSpan.Zero;
+      //var sw = new System.Diagnostics.Stopwatch();
+      //sw.Start();
       do {
         _tick.WaitOne();
+        //sw.Stop();
+        //t+=sw.Elapsed;
+        //if(--j<=0) {
+        //  j=1920;
+        //  Log.Debug("Tick = {0:0.000} mS", t.TotalMilliseconds/1920);
+        //  t = TimeSpan.Zero;
+        //}
+        //sw.Restart();
         JsExtLib.Tick();
         for(i = 0; i < _modules.Length; i++) {
           try {
@@ -157,6 +169,7 @@ namespace X13 {
         }
       } while(!_terminate);
       _tickTimer.Change(-1, -1);
+      //sw.Stop();
       StopPlugins();
     }
     private void Tick(object o) {

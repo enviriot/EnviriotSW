@@ -19,7 +19,7 @@ namespace X13 {
       Context.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
       Context.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
       Context.DefineVariable("clearTimeout").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimeout)));
-      
+      Context.DefineVariable("clearInterval").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimeout)));
     }
 
     #region Tick
@@ -110,7 +110,7 @@ namespace X13 {
         }
         _timer = cur.next;
         if(cur.interval > 0) {
-          cur.to = DateTime.Now.AddMilliseconds(cur.interval);
+          cur.to = now.AddMilliseconds(cur.interval);
           AddTimer(cur);
         }
       }
