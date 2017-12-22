@@ -148,7 +148,7 @@ namespace X13.Logram {
         foreach(var p in _pins.Where(z => z.Source==this)) {
           _pl.EnqueueIn(p);
         }
-        Log.Debug(this.ToString());
+        //Log.Debug(this.ToString());
       }
     }
     public void Tick2() {

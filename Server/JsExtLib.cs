@@ -14,7 +14,7 @@ namespace X13 {
     public static readonly JSC.Context Context;
 
     static JsExtLib() {
-      _timerCnt = 0;
+      _timerCnt = 1;
       Context = new JSC.Context(true);
       Context.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
       Context.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
@@ -29,10 +29,10 @@ namespace X13 {
       public int interval;
       public TimerContainer next;
       public JSC.Context ctx;
-      public int idx;
+      public double idx;
     }
     private static TimerContainer _timer;
-    private static int _timerCnt;
+    private static long _timerCnt;
     private static void AddTimer(TimerContainer tc) {
       TimerContainer cur = _timer, prev = null;
       while(cur != null && cur.to < tc.to) {
@@ -55,9 +55,10 @@ namespace X13 {
 
     public static JSC.JSValue SetTimer(JSC.JSValue func, int to, int interval, JSC.Context ctx) {
       JSL.Function f;
-      int idx = -1;
+      double idx = -1;
       if(((f = func as JSL.Function) != null || (f = func.Value as JSL.Function)!=null) && to>0) {
         idx = Interlocked.Increment(ref _timerCnt);
+        Interlocked.CompareExchange(ref _timerCnt, 1, ( (long)1<<52 )-1);
         AddTimer(new TimerContainer { func = f, to = DateTime.Now.AddMilliseconds(to), interval = interval, ctx = ctx, idx=idx });
       }
       return new JSL.Number(idx);
@@ -109,6 +110,7 @@ namespace X13 {
         }
         _timer = cur.next;
         if(cur.interval > 0) {
+          cur.to = DateTime.Now.AddMilliseconds(cur.interval);
           AddTimer(cur);
         }
       }

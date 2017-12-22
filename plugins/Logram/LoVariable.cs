@@ -136,7 +136,7 @@ namespace X13.Logram {
             }
           }
         }
-        Log.Debug(this.ToString());
+        //Log.Debug(this.ToString());
       }
     }
     public void Tick2() {

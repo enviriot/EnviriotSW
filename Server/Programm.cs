@@ -142,7 +142,7 @@ namespace X13 {
       InitPlugins();
       StartPlugins();
 
-      _tickTimer = new Timer(Tick, null, 200, 45);
+      _tickTimer = new Timer(Tick, null, 200, 31);  // Tick = 1000/64 = 15.625 mS
       int i;
       do {
         _tick.WaitOne();
