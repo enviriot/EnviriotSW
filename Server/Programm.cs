@@ -114,7 +114,7 @@ namespace X13 {
       _tick = new AutoResetEvent(false);
       _terminate = false;
       _thread = new Thread(new ThreadStart(PrThread));
-      _thread.Priority = ThreadPriority.AboveNormal;
+      _thread.Priority = ThreadPriority.Highest;
       _thread.IsBackground = false;
       _thread.Start();
 

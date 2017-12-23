@@ -558,7 +558,7 @@ namespace X13.UI {
 
       if(b != null && (t = b.Output.GetModel()) != null) {
         t.SetField("cctor.LoBind", null);
-      } else if((t = el.GetModel()) != null) {
+      } else if(( t = el.GetModel() ) != null && ( t.Manifest==null || ( JsLib.OfInt(t.Manifest, "attr", 0) & 1 )!=1 )) {
         t.Delete();
       }
     }
