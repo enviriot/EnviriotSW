@@ -35,9 +35,9 @@ namespace X13 {
       // 
       // serviceInstaller1
       // 
-      this.serviceInstaller1.Description = "Provides network communications and Logram processing";
-      this.serviceInstaller1.DisplayName = "X13 Home automation service";
-      this.serviceInstaller1.ServiceName = "X13.HAServer";
+      this.serviceInstaller1.Description = "Provides network communications and Logramm processing";
+      this.serviceInstaller1.DisplayName = "Enviriot service";
+      this.serviceInstaller1.ServiceName = "Enviriot";
       this.serviceInstaller1.StartType = System.ServiceProcess.ServiceStartMode.Automatic;
       // 
       // ProjectInstaller

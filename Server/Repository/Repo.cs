@@ -167,6 +167,9 @@ namespace X13.Repository {
         foreach(var k in lo.Where(z => ln.ContainsKey(z.Key)).Select(z => z.Key).ToArray()) {
           vn = ln[k];
           if(!JSValue.ReferenceEquals(lo[k], vn)) {
+            if(lc==null) {
+              lc = new SortedList<string, JSValue>();
+            }
             lc.Add(k, vn);
           }
           lo.Remove(k);

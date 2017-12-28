@@ -15,7 +15,7 @@ namespace X13 {
     public static void InstallService(string name) {
       string[] args_i=new string[] { name, "/LogFile=..\\log\\install.log" };
       ManagedInstallerClass.InstallHelper(args_i);
-      Log.Info("The service installed");
+      Log.Info("The Enviriot service installed");
 
       List<SC_ACTION> FailureActions = new List<SC_ACTION>();
 
@@ -38,9 +38,9 @@ namespace X13 {
       });
 
       // Configure service recovery property.
-      ServiceRecoveryProperty.ChangeRecoveryProperty("enviriot", FailureActions, 60 * 60 * 24, "", false, "");
+      ServiceRecoveryProperty.ChangeRecoveryProperty("Enviriot", FailureActions, 60 * 60 * 24, "", false, "");
       Log.Info("The service recovery property is modified successfully");
-      ServiceController svc =  new ServiceController("enviriot");
+      ServiceController svc =  new ServiceController("Enviriot");
       svc.Start();
       svc.WaitForStatus(ServiceControllerStatus.Running, new TimeSpan(0, 0, 3));
     }
