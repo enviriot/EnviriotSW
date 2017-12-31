@@ -76,7 +76,8 @@ namespace X13.Periphery {
     }
     static MsDevice() {
       _rand = new Random((int)DateTime.Now.Ticks);
-      _createConv = (JsExtLib.Context.Eval("Function('src', 'return Function(\"name\", \"value\", src);')") as JSL.Function).MakeDelegate(typeof(Func<string, JSC.JSValue>)) as Func<string, JSC.JSValue>;
+      var ctx = new JSC.Context(JsExtLib.Context);
+      _createConv = (ctx.Eval("Function('src', 'return Function(\"name\", \"value\", src);')") as JSL.Function).MakeDelegate(typeof(Func<string, JSC.JSValue>)) as Func<string, JSC.JSValue>;
     }
 
     private string _oldName;
