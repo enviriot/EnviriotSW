@@ -733,38 +733,35 @@ namespace X13.UI {
           if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || ( ddr = JsLib.OfInt(pd, "ddr", 0) )==0) {
             continue;
           }
-          double cw;
+          var ft = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White);
+          double cw = 4 + ft.WidthIncludingTrailingWhitespace;
           if(ddr<0) {  // Input
             pos = -ddr-1;
             if(cntIp < pos + 1) {
               cntIp = pos + 1;
             }
             pinIp[pos] = p;
-            textIp[pos] = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White);
-            cw = 4 + textIp[pos].WidthIncludingTrailingWhitespace;
+            textIp[pos] = ft;
             if(pos == 0) {
               cw += 9;
             }
             wi = Math.Max(wi, cw);
-          } else if(ddr > 0) {  // Output
+          } else {  // Output
             pos = ddr - 1;
             if(cntOp < pos + 1) {
               cntOp = pos + 1;
             }
             pinOp[pos] = p;
-            textOp[pos] = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White);
-            cw = 4 + textOp[pos].WidthIncludingTrailingWhitespace;
+            textOp[pos] = ft;
             if(pos == 0) {
               cw += 9;
             }
             wo = Math.Max(wo, cw);
-          } else {
-            continue;
           }
         }
         wi = Math.Round(( 2 * wi ) / CELL_SIZE, 0) * CELL_SIZE / 2;
         wo = Math.Round(( 2 * wo ) / CELL_SIZE, 0) * CELL_SIZE / 2;
-        double width = Math.Round(Math.Max(head.WidthIncludingTrailingWhitespace * 2 - CELL_SIZE / 2, wi + wo + CELL_SIZE) / CELL_SIZE, 0) * CELL_SIZE;
+        double width = Math.Round(Math.Max(head.WidthIncludingTrailingWhitespace * 2 - CELL_SIZE / 2, wi + wo + CELL_SIZE) / CELL_SIZE + 0.5, 0) * CELL_SIZE;
         double height = Math.Max(cntIp * CELL_SIZE, cntOp * CELL_SIZE);
         if(height == 0) {
           return;

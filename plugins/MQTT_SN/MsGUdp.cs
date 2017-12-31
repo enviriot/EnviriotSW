@@ -32,7 +32,7 @@ namespace X13.Periphery {
       foreach(var c in udpT.children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
         var we = AddrWithMask.Parse(c.GetState().Value as string, c.name);
         if(we == null) {
-          Log.Warning("{0} = {1} is not IpAddress wit Mask", c.path, c.GetState().Value as string);
+          Log.Warning("{0} = {1} is not IpAddress with Mask", c.path, c.GetState().Value as string);
         } else {
           wl.Add(we);
         }

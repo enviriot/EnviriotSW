@@ -133,6 +133,8 @@ namespace X13 {
       Log.Finish();
     }
     private void PrThread() {
+      DateTime today = DateTime.Now.Date;
+
       if(!IsLinux) {
         int cpuCnt = System.Environment.ProcessorCount;
         if(cpuCnt > 1) {
@@ -166,6 +168,11 @@ namespace X13 {
           catch(Exception ex) {
             Log.Error("{0}.Tick() - {1}", _modules[i].GetType().FullName, ex.ToString());
           }
+        }
+        var now = DateTime.Now.Date;
+        if(today!=now) {
+          today = now;
+          Log.Info(today.ToLongDateString());
         }
       } while(!_terminate);
       _tickTimer.Change(-1, -1);
