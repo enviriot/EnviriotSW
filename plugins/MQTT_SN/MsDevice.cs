@@ -1245,8 +1245,8 @@ namespace X13.Periphery {
 
       new Tuple<string, DType>("Ms", DType.String),
 
-      new Tuple<string, DType>("St", DType.ByteArray),  // Serial port transmit
-      new Tuple<string, DType>("Sr", DType.ByteArray),  // Serial port recieve
+      new Tuple<string, DType>("St", DType.String),  // Serial port transmit
+      new Tuple<string, DType>("Sr", DType.String),  // Serial port recieve
       new Tuple<string, DType>("Ma", DType.ByteArray),  // Merkers
 
       new Tuple<string, DType>("pa", DType.ByteArray | DType.PLC),    // Program
