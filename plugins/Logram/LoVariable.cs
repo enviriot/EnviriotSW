@@ -111,8 +111,10 @@ namespace X13.Logram {
           }
           if(( svo = _src as LoVariable )!=null) {
             svo.AddLink(this);
-            _value_new = svo._value;
-            _prim = svo._owner;
+            if(svo._value!=null && svo._value.Defined) {
+              _value_new = svo._value;
+              _prim = svo._owner;
+            }
           }
           if(Route!=null && ( bl = _links.OfType<LoBlock>().FirstOrDefault() )!=null && Route.Contains(bl)) {  // make loop
             if(_layer!=0) {
