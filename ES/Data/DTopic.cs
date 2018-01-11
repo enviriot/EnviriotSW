@@ -91,6 +91,7 @@ namespace X13.Data {
         ts = this;
         p = this == Connection.root ? ("/" + p) : (this.path + "/" + p);
       }
+      //Log.Debug(this.path+".GetAsync("+( p??"null" )+")");
       var req = new TopicReq(ts, p);
       App.PostMsg(req);
       return req.Task;

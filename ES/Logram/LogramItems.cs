@@ -116,7 +116,7 @@ namespace X13.UI {
           var src_s = JsLib.OfString(JsLib.GetField(model.Manifest, "cctor.LoBind"), null);
           if(src_s == null) {
             _mode = 1;
-          } else if(_source == null || _source.path != src_s || ( _mode == 2 && _srcBinding == null )) {
+          } else if(_source == null || _source.path != src_s || ( _mode == 2 && _srcBinding == null && lv._loadTimer==null)) {
             model.GetAsync(src_s).ContinueWith(SourceLoaded, TaskScheduler.FromCurrentSynchronizationContext());
             return;
           }
@@ -193,11 +193,12 @@ namespace X13.UI {
             }
             _srcBinding = new loBinding(src, this, lv);
             src.AddBinding(_srcBinding);
+            this.Render(3);
           }
         } else {
           _mode = 3;
+          this.Render(3);
         }
-        this.Render(3);
       }
       public override DTopic GetModel() {
         return model;
@@ -669,6 +670,10 @@ namespace X13.UI {
         lv.AddVisual(p);
         t.changed += pin_changed;
 
+        var lt = lv._loadTimer;
+        if(lt != null) {
+          lt.Change(100, -1);
+        }
         this.Render(3);
       }
       private void model_changed(DTopic.Art a, DTopic t) {

@@ -77,7 +77,7 @@ namespace X13.UI {
       this.Dispatcher.BeginInvoke(new Action(LoadComplet2));
     }
     private void LoadComplet2() {
-      foreach(var p in _visuals.OfType<loBinding>().ToArray()) {
+      foreach(var p in _visuals.OfType<loPin>().Where(z => z.IsInput && !z.IsFreeInput).ToArray()) {
         p.Render(3);  // Draw loBinding's
       }
     }
@@ -90,7 +90,7 @@ namespace X13.UI {
       ChildChanged(DTopic.Art.addChild, t);
       var lt = _loadTimer;
       if(lt != null) {
-        lt.Change(100, -1);
+        lt.Change(300, -1);
       }
     }
     private void ModelChanged(DTopic.Art a, DTopic t) {
