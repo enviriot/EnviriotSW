@@ -133,33 +133,41 @@ namespace X13.UI {
         }
 
         var tc = model.State.ValueType;
+        Brush br;
         switch(tc) {
         case JSC.JSValueType.Object:
           if(model.State is ByteArray || model.State.Value is ByteArray) {
-            this.brush = brByteArray;
+            br = brByteArray;
+          } else if(model.State!=null) {
+            br = Brushes.MediumOrchid;
           } else {
-            this.brush = Brushes.MediumOrchid;
+            br = Brushes.Black;
           }
           break;
         case JSC.JSValueType.String:
-          this.brush = Brushes.Gold;
+          br = Brushes.Gold;
           break;
         case JSC.JSValueType.Double:
         case JSC.JSValueType.Integer: {
             double val = (double)model.State;
-            this.brush = val > 0 ? ( val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen ) : ( val == 0 ? brValueFalse : Brushes.DodgerBlue );
+            br = val > 0 ? ( val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen ) : ( val == 0 ? brValueFalse : Brushes.DodgerBlue );
           }
           break;
         case JSC.JSValueType.Boolean:
-          this.brush = (bool)model.State.Value ? Brushes.LawnGreen : brValueFalse;
+          br = (bool)model.State.Value ? Brushes.LawnGreen : brValueFalse;
           break;
         default:
-          this.brush = Brushes.MediumOrchid;
+          br = Brushes.Black;
           break;
         }
+        if(chLevel == 1 && this.brush == br){
+          return;
+        }
+        this.brush = br;
+
         using(DrawingContext dc = this.RenderOpen()) {
           if(_mode == 3) {
-            dc.DrawRectangle(_selected ? brItemSelected : this.brush, null, new Rect(-4, -4, 8, 8));
+            dc.DrawRectangle(_selected ? brItemSelected : this.brush, null, new Rect(-2, -5, 4, 10));
           } else {
             dc.DrawEllipse(_selected ? brItemSelected : this.brush, null, new Point(0, 0), 3, 3);
           }
@@ -660,11 +668,13 @@ namespace X13.UI {
 
         var chs = model.Manifest["Children"];
         if(chs.ValueType != JSC.JSValueType.Object || chs.Value == null) {
+          lv.TopicLoaded(t);
           return;
         }
         var pd = chs[t.name];
         int ddr;
         if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || (ddr = JsLib.OfInt(pd, "ddr", 0))==0) {
+          lv.TopicLoaded(t);
           return;
         }
         p = new loPin(this, t, ddr<0);
