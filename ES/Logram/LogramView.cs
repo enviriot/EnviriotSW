@@ -18,7 +18,6 @@ using X13.Data;
 namespace X13.UI {
   internal partial class LogramView : Canvas, IDisposable {
     private DTopic _model;
-    private System.Threading.Timer _loadTimer;
     private int _disposed;
 
     private double _zoom;
@@ -36,6 +35,7 @@ namespace X13.UI {
     private loElement[] _mSelected;
     private bool _multipleSelection;
     private bool move;
+    private bool _dataIsLoaded;
 
     public LogramView() {
       _disposed = 0;
@@ -52,35 +52,50 @@ namespace X13.UI {
       RenderTransform = _transformGroup;
       AddVisualChild(_backgroundVisual);
       _map = new SortedList<uint, loItem>();
+      _topicsToLoad = new List<DTopic>();
       this.ContextMenu = new ContextMenu();
       this.AllowDrop = true;
       this.Drop += LogramView_Drop;
     }
-
-    public void Attach(DTopic model) {
+    public void Attach(DTopic model, Action onDataLoadedAction) {
       this._model = model;
+      this._onDataLoadedAction = onDataLoadedAction;
+
       _map.Clear();
 
       _model.changed += ModelChanged;
       ModelChanged(DTopic.Art.type, _model);
 
       if(_model.children != null) {
-        _loadTimer = new System.Threading.Timer(LoadComplet, null, 250, -1);
         foreach(var ch in _model.children) {
+          Topic2Load(ch);
           ch.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
         }
       }
     }
 
-    private void LoadComplet(object state) {
-      _loadTimer = null;
-      this.Dispatcher.BeginInvoke(new Action(LoadComplet2));
+    #region Loading data
+    private List<DTopic> _topicsToLoad;
+    private Action _onDataLoadedAction;
+    private void Topic2Load(DTopic t) {
+      _topicsToLoad.Add(t);
     }
-    private void LoadComplet2() {
+    private void TopicLoaded(DTopic t) {
+      _topicsToLoad.Remove(t);
+      if(_topicsToLoad.Count==0) {
+        _topicsToLoad.Clear();
+        this.Dispatcher.BeginInvoke(new Action(LoadComplet));
+      }
+    }
+    private void LoadComplet() {
+      _dataIsLoaded = true;
       foreach(var p in _visuals.OfType<loPin>().Where(z => z.IsInput && !z.IsFreeInput).ToArray()) {
         p.Render(3);  // Draw loBinding's
       }
+      _onDataLoadedAction();
     }
+    #endregion Loading data
+
     private void MChildrenLoad(Task<DTopic> tt) {
       DTopic t;
       if(tt.IsFaulted || !tt.IsCompleted || (t = tt.Result) == null) {
@@ -88,10 +103,6 @@ namespace X13.UI {
       }
       t.changed += ChildChanged;
       ChildChanged(DTopic.Art.addChild, t);
-      var lt = _loadTimer;
-      if(lt != null) {
-        lt.Change(300, -1);
-      }
     }
     private void ModelChanged(DTopic.Art a, DTopic t) {
       if(t == _model) {
@@ -123,6 +134,7 @@ namespace X13.UI {
             var p = _visuals.OfType<loVariable>().FirstOrDefault(z => z.GetModel() == t);
             if(p == null) {
               p = new loVariable(t, this);
+              TopicLoaded(t);
             }
           }
         }
@@ -829,11 +841,6 @@ namespace X13.UI {
     #region IDisposable Member
     public void Dispose() {
       if(System.Threading.Interlocked.Exchange(ref this._disposed, 1)==0) {
-        var lt = System.Threading.Interlocked.Exchange(ref _loadTimer, null);
-        if(lt != null) {
-          lt.Change(-1, -1);
-        }
-
         _model.changed -= ModelChanged;
         DTopic t;
         foreach(var it in _visuals.OfType<loItem>().ToArray()) {

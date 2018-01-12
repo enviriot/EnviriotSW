@@ -1,5 +1,6 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Controls;
@@ -15,9 +16,8 @@ namespace X13.UI {
 
     internal LogramForm(DTopic data) {
       _blocks = new ObservableCollection<LBDesc>();
-      data.Connection.root.GetAsync("/$YS/TYPES/LoBlock").ContinueWith(this.LoBlockLoad, TaskScheduler.FromCurrentSynchronizationContext());
       InitializeComponent();
-      uiLogram.Attach(data);
+      uiLogram.Attach(data, new Action(() => data.Connection.root.GetAsync("/$YS/TYPES/LoBlock").ContinueWith(this.LoBlockLoad, TaskScheduler.FromCurrentSynchronizationContext())));
       icBlocks.ItemsSource = _blocks;
     }
 

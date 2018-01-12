@@ -116,7 +116,7 @@ namespace X13.UI {
           var src_s = JsLib.OfString(JsLib.GetField(model.Manifest, "cctor.LoBind"), null);
           if(src_s == null) {
             _mode = 1;
-          } else if(_source == null || _source.path != src_s || ( _mode == 2 && _srcBinding == null && lv._loadTimer==null)) {
+          } else if(_source == null || _source.path != src_s || ( _mode == 2 && _srcBinding == null && lv._dataIsLoaded)) {
             model.GetAsync(src_s).ContinueWith(SourceLoaded, TaskScheduler.FromCurrentSynchronizationContext());
             return;
           }
@@ -259,7 +259,7 @@ namespace X13.UI {
         this.Dispose();
       }
       public override void Render(int chLevel) {
-        if(lv._loadTimer != null) {
+        if(!lv._dataIsLoaded) {
           return;
         }
         if(chLevel > 1 && _track.Any()
@@ -645,9 +645,11 @@ namespace X13.UI {
         }
         if(model.children != null) {
           foreach(var c in model.children) {
+            lv.Topic2Load(c);
             c.GetAsync(null).ContinueWith(PinLoaded, TaskScheduler.FromCurrentSynchronizationContext());
           }
         }
+        lv.TopicLoaded(model);
       }
       private void PinLoaded(Task<DTopic> tt) {
         DTopic t;
@@ -670,10 +672,7 @@ namespace X13.UI {
         lv.AddVisual(p);
         t.changed += pin_changed;
 
-        var lt = lv._loadTimer;
-        if(lt != null) {
-          lt.Change(100, -1);
-        }
+        lv.TopicLoaded(t);
         this.Render(3);
       }
       private void model_changed(DTopic.Art a, DTopic t) {
