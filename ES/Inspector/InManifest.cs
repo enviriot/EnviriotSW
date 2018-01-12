@@ -92,6 +92,9 @@ namespace X13.UI {
       }
     }
     private void UpdateType(JSC.JSValue type, JSC.JSValue val) {
+      _value = val;
+
+      #region Trace
       /*{
         StringBuilder sb = new StringBuilder();
         sb.Append(this.ToString());
@@ -130,9 +133,12 @@ namespace X13.UI {
         sb.Append(")");
         Log.Debug("{0}", sb.ToString());
       }*/
+      #endregion Trace
+
       bool o_hc = _items.Any();
-      _value = val;
       base.UpdateType(type);
+      base.editor.ValueChanged(_value);
+
       if(_value.ValueType == JSC.JSValueType.Object) {
         InManifest vc;
         int i;
