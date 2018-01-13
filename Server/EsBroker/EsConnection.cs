@@ -313,7 +313,11 @@ namespace X13.EsBroker {
           if(m == null || m.ValueType!=JSC.JSValueType.Object || m.Value == null) {
             m = EmptyManifest;
           }
-          base.SendArr(new JSL.Array { 4, p.src.path, p.src.GetState(), m });
+          var s= p.src.GetState();
+          if(s==null || (s.ValueType==JSC.JSValueType.Double && (bool)JSL.Number.isNaN(s))){
+            s=JSC.JSValue.Undefined;  // !!!!! wait for fix in NiL.JS
+          }
+          base.SendArr(new JSL.Array { 4, p.src.path, s, m });
         } else {
           base.SendArr(new JSL.Array { 4, p.src.path });
         }
