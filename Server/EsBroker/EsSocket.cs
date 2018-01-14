@@ -144,9 +144,7 @@ namespace X13.EsBroker {
                   }
                 }
                 catch(Exception ex) {
-                  if(verbose) {
-                    Log.Warning("{0}.Rcv({1}) - {2}", this.ToString(), ms ?? BitConverter.ToString(_rcvMsgBuf, 0, _rcvState), ex.Message);
-                  }
+                  Log.Warning("{0}.Rcv({1}) - {2}", this.ToString(), ms ?? BitConverter.ToString(_rcvMsgBuf, 0, _rcvState), ex.Message);
                 }
               } else {
                 if(verbose) {

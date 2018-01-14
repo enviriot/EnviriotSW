@@ -78,10 +78,12 @@ namespace X13.UI {
     private List<DTopic> _topicsToLoad;
     private Action _onDataLoadedAction;
     private void Topic2Load(DTopic t) {
+      //Log.Debug("+$ "+t.path);
       _topicsToLoad.Add(t);
     }
     private void TopicLoaded(DTopic t) {
       _topicsToLoad.Remove(t);
+      //Log.Debug("$- "+t.path);
       if(_topicsToLoad.Count==0) {
         _topicsToLoad.Clear();
         this.Dispatcher.BeginInvoke(new Action(LoadComplet));
@@ -89,6 +91,7 @@ namespace X13.UI {
     }
     private void LoadComplet() {
       _dataIsLoaded = true;
+      //Log.Debug(" $ "+Model.ToString());
       foreach(var p in _visuals.OfType<loPin>().Where(z => z.IsInput && !z.IsFreeInput).ToArray()) {
         p.Render(3);  // Draw loBinding's
       }

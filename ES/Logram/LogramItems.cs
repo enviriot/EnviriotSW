@@ -116,7 +116,7 @@ namespace X13.UI {
           var src_s = JsLib.OfString(JsLib.GetField(model.Manifest, "cctor.LoBind"), null);
           if(src_s == null) {
             _mode = 1;
-          } else if(_source == null || _source.path != src_s || ( _mode == 2 && _srcBinding == null && lv._dataIsLoaded)) {
+          } else if(_source == null || _source.path != src_s || ( _mode == 2 && _srcBinding == null && lv._dataIsLoaded )) {
             model.GetAsync(src_s).ContinueWith(SourceLoaded, TaskScheduler.FromCurrentSynchronizationContext());
             return;
           }
@@ -160,7 +160,7 @@ namespace X13.UI {
           br = Brushes.Black;
           break;
         }
-        if(chLevel == 1 && this.brush == br){
+        if(chLevel == 1 && this.brush == br) {
           return;
         }
         this.brush = br;
@@ -576,10 +576,10 @@ namespace X13.UI {
 
         using(DrawingContext dc = this.RenderOpen()) {
           FormattedText ft = new FormattedText(model.name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LFont, CELL_SIZE * 0.7, Brushes.White);
-          width = Math.Round(( ft.WidthIncludingTrailingWhitespace + CELL_SIZE * 1.5 ) / CELL_SIZE, 0) * CELL_SIZE;
+          width = Math.Ceiling(( ft.WidthIncludingTrailingWhitespace+11 ) / CELL_SIZE) * CELL_SIZE;
           dc.DrawRoundedRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, 1, width - 1, CELL_SIZE - 3), CELL_SIZE / 4, CELL_SIZE / 4);
           ft.MaxTextHeight = CELL_SIZE - 3;
-          ft.MaxTextWidth = width - CELL_SIZE / 2 - 5;
+          ft.MaxTextWidth = width - 11;
           dc.DrawText(ft, new Point(5, 1));
         }
         if(chLevel == 3) {
@@ -673,7 +673,7 @@ namespace X13.UI {
         }
         var pd = chs[t.name];
         int ddr;
-        if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || (ddr = JsLib.OfInt(pd, "ddr", 0))==0) {
+        if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || ( ddr = JsLib.OfInt(pd, "ddr", 0) )==0) {
           lv.TopicLoaded(t);
           return;
         }
@@ -733,8 +733,8 @@ namespace X13.UI {
         loPin[] pinOp = new loPin[MAX_PINS];
         int cntOp = 0;
         int pos = 0;
-        double wi = 0;
-        double wo = 0;
+        double wi = CELL_SIZE;
+        double wo = CELL_SIZE;
 
         var chs = model.Manifest["Children"];
         if(chs.ValueType != JSC.JSValueType.Object || chs.Value == null) {
@@ -748,7 +748,7 @@ namespace X13.UI {
             continue;
           }
           var ft = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White);
-          double cw = 4 + ft.WidthIncludingTrailingWhitespace;
+          double cw = 7 + ft.WidthIncludingTrailingWhitespace;
           if(ddr<0) {  // Input
             pos = -ddr-1;
             if(cntIp < pos + 1) {
@@ -773,9 +773,7 @@ namespace X13.UI {
             wo = Math.Max(wo, cw);
           }
         }
-        wi = Math.Round(( 2 * wi ) / CELL_SIZE, 0) * CELL_SIZE / 2;
-        wo = Math.Round(( 2 * wo ) / CELL_SIZE, 0) * CELL_SIZE / 2;
-        double width = Math.Round(Math.Max(head.WidthIncludingTrailingWhitespace * 2 - CELL_SIZE / 2, wi + wo + CELL_SIZE) / CELL_SIZE + 0.5, 0) * CELL_SIZE;
+        double width = Math.Ceiling(Math.Max(head.WidthIncludingTrailingWhitespace, wi + wo) / CELL_SIZE) * CELL_SIZE;
         double height = Math.Max(cntIp * CELL_SIZE, cntOp * CELL_SIZE);
         if(height == 0) {
           return;
@@ -798,17 +796,20 @@ namespace X13.UI {
           dc.DrawRectangle(Brushes.White, null, new Rect(-2, 2, width + 4, height + CELL_SIZE - 2));
           dc.DrawRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, CELL_SIZE, width, height));
           dc.DrawText(head, new Point(( width - head.WidthIncludingTrailingWhitespace ) / 2, 1));
-          dc.DrawImage(App.GetIcon(JsLib.OfString(model.Manifest["icon"], null)), new Rect(wi, CELL_SIZE, CELL_SIZE, CELL_SIZE));
           int i;
           for(i = 0; i < cntIp; i++) {
             if(textIp[i] != null && pinIp[i] != null) {
-              dc.DrawText(textIp[i], new Point(7, ( i + 1 ) * CELL_SIZE + 2));
+              if(i==0) {
+                wi = Math.Max(( width-CELL_SIZE ) / 2, Math.Ceiling(( 2 * textIp[i].WidthIncludingTrailingWhitespace ) / CELL_SIZE) * CELL_SIZE / 2);
+              }
+              dc.DrawText(textIp[i], new Point(7, ( i + 1 ) * CELL_SIZE + 1));
             }
           }
+          dc.DrawImage(App.GetIcon(JsLib.OfString(model.Manifest["icon"], null)), new Rect(wi, CELL_SIZE, CELL_SIZE, CELL_SIZE));
           int inW = (int)width / CELL_SIZE;
           for(i = 0; i < cntOp; i++) {
             if(textOp[i] != null && pinOp[i] != null) {
-              dc.DrawText(textOp[i], new Point(width - 7 - textOp[i].WidthIncludingTrailingWhitespace, ( i + 1 ) * CELL_SIZE + 2));
+              dc.DrawText(textOp[i], new Point(width - 7 - textOp[i].WidthIncludingTrailingWhitespace, ( i + 1 ) * CELL_SIZE + 1));
             }
           }
         }
