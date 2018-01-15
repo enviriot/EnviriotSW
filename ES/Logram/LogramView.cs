@@ -60,7 +60,7 @@ namespace X13.UI {
     public void Attach(DTopic model, Action onDataLoadedAction) {
       this._model = model;
       this._onDataLoadedAction = onDataLoadedAction;
-
+      Topic2Load(_model);
       _map.Clear();
 
       _model.changed += ModelChanged;
@@ -72,6 +72,7 @@ namespace X13.UI {
           ch.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
         }
       }
+      TopicLoaded(_model); // for new Logramm
     }
 
     #region Loading data
