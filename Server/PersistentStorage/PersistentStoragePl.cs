@@ -21,6 +21,41 @@ namespace X13.PersistentStorage {
     private Topic _owner;
     private System.Collections.Generic.SortedDictionary<Topic, Stash> _base;
 
+    private static string EscapFieldName(string fn) {
+      if(string.IsNullOrEmpty(fn)) {
+        throw new ArgumentNullException("PersistentStorage.EscapFieldName()");
+      }
+      StringBuilder sb = new StringBuilder();
+
+      for(var i = 0; i < fn.Length; i++) {
+        var c = fn[i];
+
+        if(char.IsLetterOrDigit(c) || (c == '$' && i == 0) || (c == '-' && i > 0)) {
+          sb.Append(c);
+        } else {
+          sb.Append("_");
+          sb.Append(((ushort)c).ToString("X4"));
+        }
+      }
+      return sb.ToString();
+    }
+    private static string UnescapFieldName(string fn) {
+      if(string.IsNullOrEmpty(fn)) {
+        throw new ArgumentNullException("PersistentStorage.UnescapFieldName()");
+      }
+      StringBuilder sb = new StringBuilder();
+      ushort cc;
+      for(var i = 0; i < fn.Length; i++) {
+        var c = fn[i];
+        if(c == '_' && i + 4 < fn.Length && ushort.TryParse(fn.Substring(i + 1, 4), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out cc)) {
+          i += 4;
+          sb.Append((char)cc);
+        } else {
+          sb.Append(c);
+        }
+      }
+      return sb.ToString();
+    }
     private BsonValue Js2Bs(JSC.JSValue val) {
       if(val == null) {
         return BsonValue.Null;
@@ -80,7 +115,7 @@ namespace X13.PersistentStorage {
           {
           var r = new BsonDocument();
           foreach(var f in val) {
-            r[f.Key] = Js2Bs(f.Value);
+            r[EscapFieldName(f.Key)] = Js2Bs(f.Value);
           }
           return r;
         }
@@ -129,7 +164,7 @@ namespace X13.PersistentStorage {
           var r = JSC.JSObject.CreateObject();
           var o = val.AsDocument;
           foreach(var i in o) {
-            r[i.Key] = Bs2Js(i.Value);
+            r[UnescapFieldName(i.Key)] = Bs2Js(i.Value);
           }
           return r;
         }
@@ -153,18 +188,18 @@ namespace X13.PersistentStorage {
     }
 
     private void SubFunc(Perform p) {
-      if(p.art == Perform.Art.subscribe || p.art == Perform.Art.subAck || p.art==Perform.Art.setField || p.art==Perform.Art.setState || p.art==Perform.Art.unsubscribe || p.prim == _owner) {
+      if(p.art == Perform.Art.subscribe || p.art == Perform.Art.subAck || p.art == Perform.Art.setField || p.art == Perform.Art.setState || p.art == Perform.Art.unsubscribe || p.prim == _owner) {
         return;
       }
       Topic t = p.src;
       Stash a;
       JSC.JSValue jTmp;
-      bool saveM=false, saveS=false;
+      bool saveM = false, saveS = false;
       if(!_base.TryGetValue(t, out a)) {
         if(p.art == Perform.Art.remove) {
           return;
         }
-        a = new Stash{ id = ObjectId.NewObjectId() };
+        a = new Stash { id = ObjectId.NewObjectId() };
         _base[t] = a;
       }
 
@@ -210,7 +245,7 @@ namespace X13.PersistentStorage {
         if(saveM) {
           _objects.Upsert(a.bm);
         }
-        if(saveS && a.bs!=null) {
+        if(saveS && a.bs != null) {
           _states.Upsert(a.bs);
         }
       }
@@ -279,7 +314,7 @@ namespace X13.PersistentStorage {
             continue;  // skip load, old version
           }
           t = Topic.I.Get(Topic.root, sTmp, true, _owner, false, false);
-          a= new Stash{ id=obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null};
+          a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
           // check version
           {
             jTmp = t.GetField("version");
@@ -287,7 +322,7 @@ namespace X13.PersistentStorage {
             if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out vRepo)) {
               jTmp = a.jm["version"];
               if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out vDB) || vRepo > vDB) {
-                oldT.Add(t.path+"/");
+                oldT.Add(t.path + "/");
                 oldId.Add(a.id);
                 continue; // skip load, old version
               }
