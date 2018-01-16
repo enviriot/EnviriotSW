@@ -183,6 +183,7 @@ namespace X13.Periphery {
             _ctx = new JSC.Context(JsExtLib.Context);
             _ctx.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
             _ctx.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
+            _ctx.DefineVariable("setAlarm").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
 
             var f = _ctx.Eval(jSrc.Value as string) as JSL.Function;
             if(f != null) {
@@ -218,6 +219,15 @@ namespace X13.Periphery {
       private JSC.JSValue SetInterval(JSC.JSValue func, int interval) {
         return JsExtLib.SetTimer(func, interval, interval, _ctx);
       }
+      private JSC.JSValue SetAlarm(JSC.JSValue func, JSC.JSValue time) {
+        var jd = time.Value as JSL.Date;
+        if(jd != null) {
+          return JsExtLib.SetTimer(func, jd.ToDateTime(), _ctx);
+        } else {
+          throw new ArgumentException("SetAlarm(, Date)");
+        }
+      }
+
       private JSC.JSValue GetState(string path) {
         Topic t;
         if(owner.Exist(path, out t)) {

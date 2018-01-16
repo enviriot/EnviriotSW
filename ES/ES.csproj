@@ -151,6 +151,7 @@
     <Compile Include="ValueEditors\veMsStatus.xaml.cs">
       <DependentUpon>veMsStatus.xaml</DependentUpon>
     </Compile>
+    <Compile Include="ValueEditors\veTimePicker.cs" />
     <Compile Include="ValueEditors\veVersion.cs" />
     <Compile Include="ValueEditors\IValueEditor.cs" />
     <Compile Include="ValueEditors\veAttribute.xaml.cs">

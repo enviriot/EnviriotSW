@@ -47,9 +47,7 @@ namespace X13.Logram {
           _ctx = new JSC.Context(JsExtLib.Context);
           _ctx.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
           _ctx.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
-          _ctx.DefineVariable("clearTimeout").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimer)));
-          _ctx.DefineVariable("clearInterval").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimer)));
-          
+          _ctx.DefineVariable("setAlarm").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
 
           var f = _ctx.Eval(jSrc.Value as string) as JSL.Function;
           if(f != null) {
@@ -184,13 +182,18 @@ namespace X13.Logram {
     private JSC.JSValue SetTimeout(JSC.JSValue func, int to) {
       return JsExtLib.SetTimer(func, to, -1, _ctx);
     }
-    private void ClearTimer(JSC.JSValue id) {
-      JsExtLib.ClearTimeout(id);
-    }
-
     private JSC.JSValue SetInterval(JSC.JSValue func, int interval) {
       return JsExtLib.SetTimer(func, interval, interval, _ctx);
     }
+    private JSC.JSValue SetAlarm(JSC.JSValue func, JSC.JSValue time) {
+      var jd = time.Value as JSL.Date;
+      if(jd != null) {
+        return JsExtLib.SetTimer(func, jd.ToDateTime(), _ctx);
+      } else {
+        throw new ArgumentException("SetAlarm(, Date)");
+      }
+    }
+
     private JSC.JSValue GetState(string path) {
       Topic t;
       LoVariable v;

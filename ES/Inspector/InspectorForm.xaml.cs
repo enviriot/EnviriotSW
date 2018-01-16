@@ -37,6 +37,7 @@ namespace X13.UI {
       _editors["Hexadecimal"] = veHexadecimal.Create;
       _editors["MsStatus"] = veMsStatus.Create;
       _editors["String"] = veString.Create;
+      _editors["Time"] = veTimePicker.Create;
       _editors["TopicReference"] = veTopicReference.Create;
       _editors["Version"] = veVersion.Create;
     }

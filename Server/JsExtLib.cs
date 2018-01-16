@@ -21,6 +21,7 @@ namespace X13 {
       Context.ActivateInCurrentThread();
       Context.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
       Context.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
+      Context.DefineVariable("setAlarm").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
       Context.DefineVariable("clearTimeout").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimeout)));
       Context.DefineVariable("clearInterval").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimeout)));
       Context.DefineConstructor(typeof(XMLHttpRequest));
@@ -148,10 +149,18 @@ namespace X13 {
       }
     }
     private static JSC.JSValue SetTimeout(JSC.JSValue func, int to) {
-      return SetTimer(func, to, -1, null);
+      return SetTimer(func, to, 0, null);
     }
     private static JSC.JSValue SetInterval(JSC.JSValue func, int interval) {
       return SetTimer(func, interval, interval, null);
+    }
+    private static JSC.JSValue SetAlarm(JSC.JSValue func, JSC.JSValue time) {
+      var jd = time.Value as JSL.Date;
+      if(jd != null) {
+        return JsExtLib.SetTimer(func, jd.ToDateTime(), null);
+      } else {
+        throw new ArgumentException("SetAlarm(, Date)");
+      }
     }
 
     public static JSC.JSValue SetTimer(JSC.JSValue func, int to, int interval, JSC.Context ctx) {
@@ -164,6 +173,17 @@ namespace X13 {
       }
       return new JSL.Number(idx);
     }
+    public static JSC.JSValue SetTimer(JSC.JSValue func, DateTime time, JSC.Context ctx) {
+      JSL.Function f;
+      double idx = -1;
+      if(((f = func as JSL.Function) != null || (f = func.Value as JSL.Function) != null)) {
+        idx = Interlocked.Increment(ref _timerCnt);
+        Interlocked.CompareExchange(ref _timerCnt, 1, ((long)1 << 52) - 1);
+        AddTimer(new TimerContainer { func = f, to = DateTime.Now.Date.Add(time.TimeOfDay), interval = int.MinValue, ctx = ctx, idx = idx });
+      }
+      return new JSL.Number(idx);
+    }
+
     public static void ClearTimeout(JSC.Context ctx) {
       TimerContainer t=_timer, tp=null;
       while(t != null) {
@@ -212,6 +232,9 @@ namespace X13 {
         _timer = cur.next;
         if(cur.interval > 0) {
           cur.to = now.AddMilliseconds(cur.interval);
+          AddTimer(cur);
+        } else if(cur.interval == int.MinValue) {
+          cur.to = cur.to.AddDays(1);
           AddTimer(cur);
         }
       }
