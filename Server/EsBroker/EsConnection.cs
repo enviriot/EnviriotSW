@@ -227,8 +227,8 @@ namespace X13.EsBroker {
     /// REQUEST: [10, msgId, path source, path destinations parent, new name(optional rename)]
     /// </param>
     private void Move(EsMessage msg) {
-      if(msg.Count < 4 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String
-        || (msg.Count == 5 && msg[4].ValueType != JSC.JSValueType.String)) {
+      if(msg.Count < 4 || msg.Count > 5 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String
+        || ( msg.Count == 5 && msg[4].ValueType != JSC.JSValueType.String )) {
         if(_basePl.verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
