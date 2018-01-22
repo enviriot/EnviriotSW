@@ -136,18 +136,18 @@ namespace X13.Periphery {
           throw new ArgumentOutOfRangeException(string.Format("Msg is too long {0}", this.ToString()));
         }
 
-        if(_length>255) {
-          _length+=2;
-        }
+        //if(_length>255) {
+        //  _length+=2;
+        //}
         _sendBuf=new byte[_length];
         int ptr=0;
-        if(_length>255) {
-          _sendBuf[ptr++]=1;
-          _sendBuf[ptr++]=(byte)(_length>>8);
+        //if(_length>255) {
+        //  _sendBuf[ptr++]=1;
+        //  _sendBuf[ptr++]=(byte)(_length>>8);
+        //  _sendBuf[ptr++]=(byte)(_length);
+        //} else {
           _sendBuf[ptr++]=(byte)(_length);
-        } else {
-          _sendBuf[ptr++]=(byte)(_length);
-        }
+        //}
         _sendBuf[ptr]=(byte)MsgTyp;
 
       }

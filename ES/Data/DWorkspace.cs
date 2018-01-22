@@ -95,7 +95,7 @@ namespace X13.Data {
         }
         return ui;
       } else {
-        var doc = Files.FirstOrDefault(z => z != null && (z.data != null && z.data.fullPath == path) || z.ContentId == id);
+        var doc = Files.FirstOrDefault(z => z != null && ((z.data != null && z.data.fullPath == path) || z.ContentId == id));
         if(doc==null){
           doc = new UI.UIDocument(path, view);
           Files.Add(doc);

@@ -1,4 +1,6 @@
-﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -58,7 +60,7 @@ namespace X13.UI {
       base._collFunc = parent._collFunc;
       base.name = string.Empty;
       this._path = _parent._path + ".";
-      base.levelPadding = _parent == null ? 1 : _parent.levelPadding + 8;
+      base.levelPadding = _parent.levelPadding + 8;
       base._items = new List<InBase>();
       base.IsEdited = true;
     }
@@ -82,7 +84,7 @@ namespace X13.UI {
             JSC.JSValue cs;
             {
               JSC.JSValue pr;
-              if(_manifest == null || (pr = _manifest["Fields"] as JSC.JSValue).ValueType != JSC.JSValueType.Object || (cs = pr[kv.Key]).ValueType != JSC.JSValueType.Object) {
+              if(_manifest == null || (pr = _manifest["Fields"]).ValueType != JSC.JSValueType.Object || (cs = pr[kv.Key]).ValueType != JSC.JSValueType.Object) {
                 cs = null;
               }
             }
@@ -166,7 +168,7 @@ namespace X13.UI {
     protected override void UpdateType(JSC.JSValue type) {
       base.UpdateType(type);
       if(_manifest != null && _manifest.ValueType == JSC.JSValueType.Object && !_manifest.IsNull) {
-        var pr = _manifest["Fields"] as JSC.JSValue;
+        var pr = _manifest["Fields"];
         if(pr != null) {
           InValue vc;
           foreach(var kv in pr) {
@@ -280,10 +282,8 @@ namespace X13.UI {
           _items.Insert(0, ni);
           _collFunc(ni, true);
         } else {
-          if(decl != null) {
-            var def = decl["default"];
-            this.ChangeValue(mi.Header as string, def.Defined ? def : JSC.JSValue.Null);
-          }
+          var def = decl["default"];
+          this.ChangeValue(mi.Header as string, def.Defined ? def : JSC.JSValue.Null);
         }
         if(pc_items) {
           PropertyChangedReise("items");

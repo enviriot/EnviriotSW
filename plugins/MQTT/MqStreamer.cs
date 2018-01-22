@@ -9,7 +9,7 @@ using System.Net;
 using System.Threading;
 
 namespace X13.MQTT {
-  internal class MqStreamer {
+  internal class MqStreamer : IDisposable {
     private NetworkStream _stream;
 
     private int _rcvState=0;
@@ -129,7 +129,8 @@ namespace X13.MQTT {
         string re;
         try{
           re=Socket.Client.RemoteEndPoint.ToString();
-        }catch(Exception){
+        }
+        catch(Exception) {
           re="UNK";
         }
         Log.Warning("MqStreamer.SendIntern({0}, {1}) - {2}", msg.ToString(), re, ex.ToString());
@@ -293,11 +294,7 @@ namespace X13.MQTT {
       if(inf && _rcvCallback!=null) {
         _rcvCallback(new MqDisconnect());
       }
-      if(_connected) {
-        _connected=false;
-        _stream.Close();
-        Socket.Close();
-      }
+      Dispose();
     }
 
     public override string ToString() {
@@ -305,6 +302,18 @@ namespace X13.MQTT {
         return "Connected to " + Dns.GetHostEntry(((IPEndPoint)Socket.Client.RemoteEndPoint).Address).HostName;
       } else {
         return "Disconnected";
+      }
+    }
+
+    public void Dispose() {
+      if(_connected) {
+        _connected=false;
+        _stream.Close();
+        Socket.Close();
+      }
+      var str = Interlocked.Exchange(ref _rcvMemoryStream, null);
+      if(str != null) {
+        str.Dispose();
       }
     }
 

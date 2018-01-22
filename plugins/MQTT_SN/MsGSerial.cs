@@ -80,7 +80,7 @@ namespace X13.Periphery {
             }
             try {
               if(port != null) {
-                if(port != null && port.IsOpen) {
+                if(port.IsOpen) {
                   port.Close();
                 }
                 port.Dispose();
@@ -332,13 +332,13 @@ namespace X13.Periphery {
       }
       catch(Exception ex) {
         if(_pl.verbose) {
-          Log.Debug("MQTT-SN.Serial search on {0} - {1}", _port.PortName, ex.Message);
+          Log.Debug("MQTT-SN.Serial search on {0} - {1}", _port!=null?_port.PortName:"Unknown", ex.Message);
         }
       }
       if(!found) {
         try {
           if(_port != null) {
-            if(_port != null && _port.IsOpen) {
+            if(_port.IsOpen) {
               _port.Close();
             }
             _port.Dispose();

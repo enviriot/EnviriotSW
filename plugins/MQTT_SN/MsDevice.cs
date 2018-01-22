@@ -441,7 +441,7 @@ namespace X13.Periphery {
             throw new NotSupportedException("QoS -1 not supported " + owner.path);
           }
           if(ti != null 
-            && !tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId) {  // else arready recieved
+            && (!tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId)) {  // else arready recieved
 
             _lastInPub = tmp;
             switch(ti.dType & ~DType.TypeMask) {

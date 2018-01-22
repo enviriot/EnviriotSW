@@ -204,7 +204,7 @@ namespace X13.Periphery {
           return null;
         }
         var sp = s.Split('/');
-        if(sp == null || sp.Length == 0) {
+        if(sp.Length == 0) {
           return null;
         }
         byte[] addr;

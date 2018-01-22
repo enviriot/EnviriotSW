@@ -227,8 +227,8 @@ namespace X13.EsBroker {
     /// REQUEST: [10, msgId, path source, path destinations parent, new name(optional rename)]
     /// </param>
     private void Move(EsMessage msg) {
-      if(msg.Count < 5 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String
-        || (msg.Count > 5 && msg[4].ValueType != JSC.JSValueType.String)) {
+      if(msg.Count < 4 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String
+        || (msg.Count == 5 && msg[4].ValueType != JSC.JSValueType.String)) {
         if(_basePl.verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
@@ -237,7 +237,7 @@ namespace X13.EsBroker {
       Topic t = Topic.root.Get(msg[2].Value as string, false, _owner);
       Topic p = Topic.root.Get(msg[3].Value as string, false, _owner);
       if(t != null && p != null) {
-        string nname = msg.Count < 5 ? t.name : (msg[4].Value as string);
+        string nname = msg.Count == 5 ? (msg[4].Value as string) : t.name;
         t.Move(p, nname, _owner);
       }
     }

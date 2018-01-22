@@ -72,12 +72,10 @@ namespace X13.DevicePLC {
             }
             _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.API, m, node), 0, m.pOut);
             return this;
-          } else if(m.type == EP_Type.FUNCTION) {
+          } else {  // m.type == EP_Type.FUNCTION
             if(CallFunction(node, m, null)) {
               return this;
             }
-          } else {
-            throw new ApplicationException(m.vd.Name + " is not function");
           }
         } else {
           throw new NotSupportedException("Call(" + node.Childs[0].ToString() + ") Mode: " + node.CallMode.ToString());

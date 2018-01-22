@@ -52,7 +52,7 @@ namespace X13.UI {
 
     public void TypeChanged(JSC.JSValue manifest) {
       if(_enumT == null || _enumT.name != manifest["enum"].Value as string) {
-        _owner.Root.GetAsync("/$YS/TYPES/Enum/" + manifest["enum"].Value as string).ContinueWith(EnumRcv, TaskScheduler.FromCurrentSynchronizationContext());
+        _owner.Root.GetAsync("/$YS/TYPES/Enum/" + (manifest["enum"].Value as string)).ContinueWith(EnumRcv, TaskScheduler.FromCurrentSynchronizationContext());
       }
       if(_owner.IsReadonly) {
         //base.IsReadOnly = true;

@@ -138,10 +138,8 @@ namespace X13.UI {
         case JSC.JSValueType.Object:
           if(model.State is ByteArray || model.State.Value is ByteArray) {
             br = brByteArray;
-          } else if(model.State!=null) {
-            br = Brushes.MediumOrchid;
           } else {
-            br = Brushes.Black;
+            br = Brushes.MediumOrchid;
           }
           break;
         case JSC.JSValueType.String:
