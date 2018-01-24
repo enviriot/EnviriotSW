@@ -45,7 +45,6 @@ namespace X13.MQTT {
         msg.Add(ms.remotePath, QoS.AtMostOnce);
         Send(msg);
       }
-      Sites.Add(ms);
     }
     public void Unsubscribe(MqSite mqSite) {
       if(Sites.Remove(mqSite) && status == Status.Connected) {
@@ -62,6 +61,9 @@ namespace X13.MQTT {
         s.Send(new MqDisconnect());
         Thread.Sleep(0);
         s.Close();
+      }
+      foreach(var site in Sites.ToArray()) {
+        site.Disconnected();
       }
     }
 
@@ -115,12 +117,8 @@ namespace X13.MQTT {
             status = Status.Connected;
             _tOut.Change(KEEP_ALIVE*2, KEEP_ALIVE);
             Log.Info("Connected to {0}", Signature);
-            if(Sites.Any()) {
-              var sMsg = new MqSubscribe();
-              foreach(var site in Sites) {
-                sMsg.Add(site.remotePath, QoS.AtMostOnce);
-              }
-              Send(sMsg);
+            foreach(var site in Sites) {
+              site.Connected();
             }
           } else {
             status = Status.NotAccepted;

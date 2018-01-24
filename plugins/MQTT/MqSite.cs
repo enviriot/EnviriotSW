@@ -18,6 +18,7 @@ namespace X13.MQTT {
     public readonly MqClient Client;
     public readonly string remotePath;
     public readonly string remotePrefix;
+    private SubRec.SubMask _mask;
 
     public MqSite(MQTTPl pl, MqClient client, Topic owner, Uri uUri) {
       this.Client = client;
@@ -27,19 +28,22 @@ namespace X13.MQTT {
       remotePath = _uri.PathAndQuery + _uri.Fragment;
       var sl = remotePath.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
       remotePrefix = string.Empty;
-      SubRec.SubMask mask = SubRec.SubMask.Value;
+      _mask = SubRec.SubMask.Value;
       for(int i = 0; i < sl.Length; i++) {
         if(sl[i] == "+") {
-          mask |= SubRec.SubMask.Chldren;
+          _mask |= SubRec.SubMask.Chldren;
           break;
         }
         if(sl[i] == "#") {
-          mask |= SubRec.SubMask.All;
+          _mask |= SubRec.SubMask.All;
           break;
         }
         remotePrefix = remotePrefix + "/" + sl[i];
       }
-      _sr = Owner.Subscribe(mask, Changed);
+      Client.Sites.Add(this);
+      if(Client.status == MqClient.Status.Connected) {
+        this.Connected();
+      }
     }
     public void Publish(string path, string payload) {
       string lp = (path.Length > remotePrefix.Length) ? path.Substring(remotePrefix.Length + 1) : string.Empty;
@@ -56,8 +60,10 @@ namespace X13.MQTT {
         }
       }
     }
-
-    public void Dispose() {
+    public void Connected() {
+      _sr = Owner.Subscribe(_mask, Changed);
+    }
+    public void Disconnected() {
       var sr = Interlocked.Exchange(ref _sr, null);
       if(sr != null) {
         sr.Dispose();
@@ -65,11 +71,17 @@ namespace X13.MQTT {
       }
     }
 
+    public void Dispose() {
+      Disconnected();
+    }
+
     private void Changed(Perform p, SubRec sr) {
-      if(Client == null || Client.status != MqClient.Status.Connected || p.src.CheckAttribute(Topic.Attribute.Internal)) {
+      if(Client == null || Client.status != MqClient.Status.Connected) {
+        Disconnected();
+        Log.Warning("{0}.Changed({1}) - Client OFFLINE", Owner.path, p.ToString());
         return;
       }
-      if(p.art == Perform.Art.subscribe || ((p.art == Perform.Art.changedState || p.art==Perform.Art.create) && p.prim != Owner)) {
+      if((p.art == Perform.Art.subscribe || ((p.art == Perform.Art.changedState || p.art == Perform.Art.create) && p.prim != Owner)) && !p.src.CheckAttribute(Topic.Attribute.Internal)) {
         var rp = remotePrefix + p.src.path.Substring(Owner.path.Length);
         var payload = JSL.JSON.stringify(p.src.GetState() ?? JSC.JSValue.Null, null, null);
         if(!string.IsNullOrEmpty(rp) && payload != null) {
