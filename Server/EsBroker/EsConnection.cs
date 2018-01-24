@@ -314,8 +314,8 @@ namespace X13.EsBroker {
             m = EmptyManifest;
           }
           var s= p.src.GetState();
-          if(s==null || (s.ValueType==JSC.JSValueType.Double && (bool)JSL.Number.isNaN(s))){
-            s=JSC.JSValue.Undefined;  // !!!!! wait for fix in NiL.JS
+          if(s==null){
+            s=JSC.JSValue.Undefined;
           }
           base.SendArr(new JSL.Array { 4, p.src.path, s, m });
         } else {

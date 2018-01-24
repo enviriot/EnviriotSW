@@ -169,10 +169,6 @@ namespace X13.PersistentStorage {
           return r;
         }
       case BsonType.Double: {
-          double d = val.AsDouble;
-          if(double.IsNaN(d)) {
-            return JSC.JSValue.Undefined;  // !!!!! wait for fix in NiL.JS
-          }
           return new JSL.Number(val.AsDouble);
         }
       case BsonType.Int32:
