@@ -67,12 +67,12 @@ namespace X13.MQTT {
       var sr = Interlocked.Exchange(ref _sr, null);
       if(sr != null) {
         sr.Dispose();
-        Client.Unsubscribe(this);
       }
     }
 
     public void Dispose() {
       Disconnected();
+      Client.Unsubscribe(this);
     }
 
     private void Changed(Perform p, SubRec sr) {

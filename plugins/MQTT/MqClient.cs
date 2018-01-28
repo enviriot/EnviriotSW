@@ -56,6 +56,7 @@ namespace X13.MQTT {
     public void Dispose() {
       _tOut.Change(Timeout.Infinite, Timeout.Infinite);
       status = Status.Disconnected;
+      _waitPingResp = false;
       var s = Interlocked.Exchange(ref _stream, null);
       if(s != null && s.isOpen) {
         s.Send(new MqDisconnect());
@@ -81,7 +82,7 @@ namespace X13.MQTT {
         _stream = new MqStreamer(_tcp, Received, SendIdle);
         var id = string.Format("{0}_{1:X4}", Environment.MachineName, System.Diagnostics.Process.GetCurrentProcess().Id);
         var ConnInfo = new MqConnect();
-        ConnInfo.keepAlive = (ushort)(KEEP_ALIVE / 1000);
+        ConnInfo.keepAlive = (ushort)(KEEP_ALIVE / 900);
         ConnInfo.cleanSession = true;
         ConnInfo.clientId = id;
         if(_uName != null) {
@@ -115,7 +116,7 @@ namespace X13.MQTT {
           MqConnack cm = msg as MqConnack;
           if(cm.Response == MqConnack.MqttConnectionResponse.Accepted) {
             status = Status.Connected;
-            _tOut.Change(KEEP_ALIVE*2, KEEP_ALIVE);
+            _tOut.Change(KEEP_ALIVE, KEEP_ALIVE);
             Log.Info("Connected to {0}", Signature);
             foreach(var site in Sites) {
               site.Connected();
