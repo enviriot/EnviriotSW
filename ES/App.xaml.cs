@@ -93,6 +93,7 @@ namespace X13 {
       LoadIcon("Null", "ty_null.png");
       LoadIcon("Object", "ty_obj.png");
       LoadIcon("String", "ty_str.png");
+      LoadIcon("Time", "ed_time.png");
       LoadIcon("Version", "ty_version.png");
 
       mainWindow = new MainWindow(cfgPath);
