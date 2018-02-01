@@ -73,7 +73,7 @@ namespace X13.Logram {
       }
     }
     public void SetValue(JSC.JSValue value, Topic prim) {
-      if(!JSC.JSValue.ReferenceEquals(_value, value)) {
+      if(!JsLib.Equal(_value, value)) {
         _value_new = value;
         _prim = prim;
         _pl.EnqueuePr(this);

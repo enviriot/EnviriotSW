@@ -110,6 +110,18 @@ namespace X13 {
       }
       return JSC.JSValue.Marshal(org.Value);
     }
+    public static bool Equal(JSC.JSValue v1, JSC.JSValue v2) {
+      if(object.ReferenceEquals(v1, v2)) {
+        return true;
+      }
+      if(v1==null || v2==null) {
+        return false;
+      }
+      if(v1.ValueType!=v2.ValueType) {
+        return false;
+      }
+      return object.Equals(v1.Value, v2.Value);
+    }
 
     public static int OfInt(JSC.JSValue v, int def) {
       return (v == null || !v.IsNumber) ? def : ((int)v);

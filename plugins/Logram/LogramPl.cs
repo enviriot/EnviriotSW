@@ -113,7 +113,7 @@ namespace X13.Logram {
       int idx = _TaskPr.BinarySearch(it);
       if(idx<0) {
         idx = ~idx;
-        if(_curIdx < idx) {
+        if(_curIdx <= idx) {
           _TaskPr.Insert(idx, it);
         } else {
           _TaskIn.Enqueue(it);
