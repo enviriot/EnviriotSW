@@ -179,7 +179,11 @@ namespace X13 {
       if(((f = func as JSL.Function) != null || (f = func.Value as JSL.Function) != null)) {
         idx = Interlocked.Increment(ref _timerCnt);
         Interlocked.CompareExchange(ref _timerCnt, 1, ((long)1 << 52) - 1);
-        AddTimer(new TimerContainer { func = f, to = DateTime.Now.Date.Add(time.TimeOfDay), interval = int.MinValue, ctx = ctx, idx = idx });
+        var now = DateTime.Now;
+        if((time.TimeOfDay-now.TimeOfDay).TotalMilliseconds<1) {
+          now=now.AddDays(1);
+        }
+        AddTimer(new TimerContainer { func = f, to = now.Date.Add(time.TimeOfDay), interval = int.MinValue, ctx = ctx, idx = idx });
       }
       return new JSL.Number(idx);
     }
