@@ -22,6 +22,7 @@ namespace X13.Logram {
       this._pl = pl;
       this._owner = owner;
       _links = new List<ILoItem>();
+      _value = null;
       _value_new = _owner.GetState();
       _pl.EnqueuePr(this);
     }
@@ -62,7 +63,7 @@ namespace X13.Logram {
       }
     }
     public JSC.JSValue GetValue() {
-      return _value;
+      return _value??_value_new;  // for 1st Call
     }
 
     #region ILoItem Members
