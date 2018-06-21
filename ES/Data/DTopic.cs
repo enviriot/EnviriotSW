@@ -273,7 +273,7 @@ namespace X13.Data {
 
       var tmp = JsLib.GetField(this._manifest, "attr");
       if(tmp.IsNumber && (((int)tmp) & 0x0C) != 0 && this._state.Exists) {
-        xCur.Add(new XAttribute("s", JSL.JSON.stringify(this._state, null, null)));
+        xCur.Add(new XAttribute("s", JSL.JSON.stringify(this._state, null, null, null)));
       }
       tmp = JsLib.GetField(this._manifest, "version");
       string vs;
@@ -281,12 +281,12 @@ namespace X13.Data {
       if(tmp.ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(vs = tmp.Value as string) && vs.StartsWith("¤VR") && Version.TryParse(vs.Substring(3), out v)) {
         tmp = JsLib.Clone(this._manifest);
         tmp.DeleteProperty("version");
-        xCur.Add(new XAttribute("m", JSL.JSON.stringify(tmp, null, null)));
+        xCur.Add(new XAttribute("m", JSL.JSON.stringify(tmp, null, null, null)));
         if(!isRoot) {
           xCur.Add(new XAttribute("ver", v.ToString()));
         }
       } else {
-        xCur.Add(new XAttribute("m", JSL.JSON.stringify(this._manifest, null, null)));
+        xCur.Add(new XAttribute("m", JSL.JSON.stringify(this._manifest, null, null, null)));
       }
       if(isRoot) {
         var now = DateTime.Now;

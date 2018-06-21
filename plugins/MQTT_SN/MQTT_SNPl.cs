@@ -17,6 +17,7 @@ namespace X13.Periphery {
   public class MQTT_SNPl : IPlugModul {
     private Topic _owner;
     private Topic _verbose;
+    private Topic _stat;
     private Random _rand;
     private SubRec _subMs;
 
@@ -52,6 +53,12 @@ namespace X13.Periphery {
         _verbose.SetState(false);
 #endif
       }
+      _stat = _owner.Get("statistic");
+      if(_stat.GetState().ValueType != JSC.JSValueType.Boolean) {
+        _stat.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+        _stat.SetState(false);
+      }
+
       //var verV = _owner.GetField("ver");
       //string verS;
       //Version ver, verC = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
@@ -111,6 +118,11 @@ namespace X13.Periphery {
       }
     }
 
+    public bool Statistic {
+      get {
+        return _stat != null && (bool)_stat.GetState();
+      }
+    }
     #region RPC
     private void SendDisconnectRpc(JSC.JSValue[] obj) {
       string path;

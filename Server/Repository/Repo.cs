@@ -288,10 +288,10 @@ namespace X13.Repository {
       doc.Declaration = new XDeclaration("1.0", "utf-8", "yes");
       var s = t.GetState();
       if(s.Exists && (t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config) || (!configOnly && t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)))) {
-        doc.Root.Add(new XAttribute("s", JSL.JSON.stringify(s, null, null)));
+        doc.Root.Add(new XAttribute("s", JSL.JSON.stringify(s, null, null, null)));
       }
       var m = t.GetField(null);
-      doc.Root.Add(new XAttribute("m", JSL.JSON.stringify(m, null, null)));
+      doc.Root.Add(new XAttribute("m", JSL.JSON.stringify(m, null, null, null)));
       foreach(Topic c in t.children) {
         Export(doc.Root, c, configOnly);
       }
@@ -313,10 +313,10 @@ namespace X13.Repository {
       if(!configOnly || xCur.HasElements || t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config)) {
         var s = t.GetState();
         if(s.Exists && (t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config) || (!configOnly && t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)))) {
-          xCur.Add(new XAttribute("s", JSL.JSON.stringify(s, null, null)));
+          xCur.Add(new XAttribute("s", JSL.JSON.stringify(s, null, null, null)));
         }
         var m = t.GetField(null);
-        xCur.Add(new XAttribute("m", JSL.JSON.stringify(m, null, null)));
+        xCur.Add(new XAttribute("m", JSL.JSON.stringify(m, null, null, null)));
 
         x.Add(xCur);
       }

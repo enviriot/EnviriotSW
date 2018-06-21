@@ -288,14 +288,14 @@ namespace X13.Periphery {
       }
       //via = _gate.name;
 
-      //if(_statistic.value) {
-      //  Stat(false, MsMessageType.CONNECT, msg.CleanSession);
-      //}
+      if(_pl.Statistic) {
+        Stat(false, MsMessageType.CONNECT, msg.CleanSession);
+      }
     }
     public void ProcessInPacket(MsMessage msg) {
-      //if(_statistic.value && msg.MsgTyp != MsMessageType.EncapsulatedMessage && msg.MsgTyp != MsMessageType.PUBLISH) {
-      //  Stat(false, msg.MsgTyp);
-      //}
+      if(_pl.Statistic && msg.MsgTyp != MsMessageType.EncapsulatedMessage && msg.MsgTyp != MsMessageType.PUBLISH) {
+        Stat(false, msg.MsgTyp);
+      }
       switch(msg.MsgTyp) {
       case MsMessageType.WILLTOPIC: {
           var tmp = msg as MsWillTopic;
@@ -421,9 +421,9 @@ namespace X13.Periphery {
         break;
       case MsMessageType.PUBLISH: {
           var tmp = msg as MsPublish;
-          //    if(_statistic.value) {
-          //      Stat(false, msg.MsgTyp, tmp.Dup);
-          //    }
+          if(_pl.Statistic) {
+            Stat(false, msg.MsgTyp, tmp.Dup);
+          }
           TopicInfo ti = _topics.Find(z => z.TopicId == tmp.TopicId && z.it == tmp.topicIdType);
           if(ti == null && tmp.topicIdType != TopicIdType.Normal) {
             ti = GetTopicInfo(tmp.TopicId, tmp.topicIdType, false);
@@ -511,9 +511,9 @@ namespace X13.Periphery {
             ResetTimer();
             if(_gate != null) {
               _gate.SendGw(this, new MsMessage(MsMessageType.PINGRESP));
-              //if(_statistic.value) {
-              //  Stat(true, MsMessageType.PINGRESP, false);
-              //}
+              if(_pl.Statistic) {
+                Stat(true, MsMessageType.PINGRESP, false);
+              }
             }
           }
         }
@@ -638,6 +638,7 @@ namespace X13.Periphery {
         break;
       }
     }
+
     public void Tick() {
       if(_state != State.Lost && _state != State.Disconnected && _toActive < DateTime.Now) {
         MsMessage msg = null;
@@ -660,9 +661,9 @@ namespace X13.Periphery {
         state = State.Lost;
         if(owner != null) {
           Disconnect();
-          //if(_statistic.value) {
-          //  Stat(false, MsMessageType.GWINFO);
-          //}
+          if(_pl.Statistic) {
+            Stat(false, MsMessageType.GWINFO);
+          }
           Log.Warning("{0} Lost", owner.path);
         }
         lock(_sendQueue) {
@@ -670,9 +671,9 @@ namespace X13.Periphery {
         }
         if(_gate != null) {
           _gate.SendGw(this, new MsDisconnect());
-          //if(_statistic.value) {
-          //  Stat(true, MsMessageType.DISCONNECT, false);
-          //}
+          if(_pl.Statistic) {
+            Stat(true, MsMessageType.DISCONNECT, false);
+          }
         }
         return;
       }
@@ -1001,6 +1002,58 @@ namespace X13.Periphery {
       }
     }
 
+    private void Stat(bool send, MsMessageType t, bool dub = false) {
+      string n2;
+      switch(t) {
+      case MsMessageType.CONNECT:
+        n2 = "0_Connect";
+        break;
+      case MsMessageType.GWINFO:
+        n2 = "1_Lost";
+        break;
+      case MsMessageType.PUBLISH:
+        if(send) {
+          n2 = dub ? "6_sPublishDup" : "5_sPublish";
+        } else {
+          n2 = dub ? "3_rPublishDup" : "2_rPublish";
+        }
+        break;
+      case MsMessageType.PUBACK:
+        n2 = send ? "4_sPubAck" : "7_rPubAck";
+        break;
+      case MsMessageType.PINGREQ:
+        n2 = "8_PingReq";
+        break;
+      case MsMessageType.PINGRESP:
+        n2 = "9_PingResp";
+        break;
+      case MsMessageType.EncapsulatedMessage:
+        return;
+      default:
+        n2 = send ? "a_sOther" : "b_rOther";
+        break;
+      }
+      if(owner == null) {
+        return;
+      }
+      Topic ts = GetServiceTopic(owner, "stat"), pa = GetServiceTopic(ts, n2);
+      pa.SetState(JsLib.OfInt(pa.GetState(), 0)+1, owner);
+
+      if(t==MsMessageType.CONNECT && dub) {  // Connect with clean session
+        pa = GetServiceTopic(ts, "0_ConnectTime");
+        pa.SetState(JSC.JSValue.Marshal(DateTime.Now), owner);
+      }
+    }
+
+    private Topic GetServiceTopic(Topic parent, string name) {
+      Topic t;
+      if(!parent.Exist(name, out t)) {
+        t = parent.Get(name, true, owner);
+        t.SetField("MQTT-SN.tag", "---", owner);
+      }
+      return t;
+    }
+
     private void UpdateSuppressedInputs() {
       List<byte> si = new List<byte>();
       si.Add(0);
@@ -1073,9 +1126,9 @@ namespace X13.Periphery {
       while(state == State.AWake || (msg != null && (state != State.ASleep || msg.MsgTyp == MsMessageType.DISCONNECT))) {
         if(msg != null) {
           if(_gate != null) {
-            //if(_statistic.value) {
-            //  Stat(true, msg.MsgTyp, ((msg is MsPublish && (msg as MsPublish).Dup) || (msg is MsSubscribe && (msg as MsSubscribe).dup)));
-            //}
+            if(_pl.Statistic) {
+              Stat(true, msg.MsgTyp, ((msg is MsPublish && (msg as MsPublish).Dup) || (msg is MsSubscribe && (msg as MsSubscribe).dup)));
+            }
             try {
               if(msg.IsRequest) {
                 msg.tryCnt--;
@@ -1109,9 +1162,9 @@ namespace X13.Periphery {
           if(_sendQueue.Count == 0 && state == State.AWake) {
             if(_gate != null) {
               _gate.SendGw(this, new MsMessage(MsMessageType.PINGRESP));
-              //if(_statistic.value) {
-              //  Stat(true, MsMessageType.PINGRESP, false);
-              //}
+              if(_pl.Statistic) {
+                Stat(true, MsMessageType.PINGRESP, false);
+              }
             }
             var st = owner.GetField("MQTT-SN.SleepTime");
             ResetTimer(st.IsNumber && (int)st > 0 ? (3100 + (int)st * 1550) : _duration);  // t_wakeup

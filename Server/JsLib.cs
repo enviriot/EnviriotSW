@@ -18,7 +18,6 @@ namespace X13 {
     }
     private static JSC.JSValue CustomTypesRepl(JSC.JSValue thisBind, JSC.Arguments args) {
       if(args.Length == 2 && args[1].ValueType == JSC.JSValueType.String) {
-        // 2015-09-16T14:15:18.994Z
         var s = args[1].Value as string;
         if(s != null) {
           if(s.StartsWith("¤BA")) {
@@ -30,6 +29,7 @@ namespace X13 {
               return new ByteArray();
             }
           }
+          // 2015-09-16T14:15:18.994Z
           if(s.Length == 24 && s[4] == '-' && s[7] == '-' && s[10] == 'T' && s[13] == ':' && s[16] == ':' && s[19] == '.') {
             JSL.Date js_d = new JSL.Date(new JSC.Arguments() { args[1] });
             if(Math.Abs(( js_d.ToDateTime() - new DateTime(1001, 1, 1, 12, 0, 0) ).TotalDays) < 1) {
