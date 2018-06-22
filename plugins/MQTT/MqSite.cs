@@ -83,7 +83,7 @@ namespace X13.MQTT {
       }
       if((p.art == Perform.Art.subscribe || ((p.art == Perform.Art.changedState || p.art == Perform.Art.create) && p.prim != Owner)) && !p.src.CheckAttribute(Topic.Attribute.Internal)) {
         var rp = remotePrefix + p.src.path.Substring(Owner.path.Length);
-        var payload = JSL.JSON.stringify(p.src.GetState() ?? JSC.JSValue.Null, null, null, null);
+        var payload = JsLib.Stringify(p.src.GetState() ?? JSC.JSValue.Null);
         if(!string.IsNullOrEmpty(rp) && payload != null) {
           Client.Send(new MqPublish(rp, payload));
         }

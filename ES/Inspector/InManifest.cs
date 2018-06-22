@@ -128,7 +128,7 @@ namespace X13.UI {
             sb.Append("}");
           }
         } else {
-          sb.Append(", s=" + JSL.JSON.stringify(_value, null, null));
+          sb.Append(", s=" + JSL.JsLib.Stringify(_value, null, null));
         }
         sb.Append(")");
         Log.Debug("{0}", sb.ToString());

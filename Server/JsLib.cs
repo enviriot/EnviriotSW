@@ -12,11 +12,13 @@ namespace X13 {
   public static class JsLib {
 
     public static readonly char[] SPLITTER_OBJ = new char[] { '.' };
-    private static JSF.ExternalFunction _JSON_Replacer;
+    private static JSF.ExternalFunction _SJ_Replacer;
+    //private static JSF.ExternalFunction _JS_Replacer;
     static JsLib() {
-      _JSON_Replacer = new JSF.ExternalFunction(CustomTypesRepl);
+      _SJ_Replacer = new JSF.ExternalFunction(SJ_CustomTypesRepl);
+      //_JS_Replacer = new JSF.ExternalFunction(JS_CustomTypesRepl);
     }
-    private static JSC.JSValue CustomTypesRepl(JSC.JSValue thisBind, JSC.Arguments args) {
+    private static JSC.JSValue SJ_CustomTypesRepl(JSC.JSValue thisBind, JSC.Arguments args) {
       if(args.Length == 2 && args[1].ValueType == JSC.JSValueType.String) {
         var s = args[1].Value as string;
         if(s != null) {
@@ -31,18 +33,29 @@ namespace X13 {
           }
           // 2015-09-16T14:15:18.994Z
           if(s.Length == 24 && s[4] == '-' && s[7] == '-' && s[10] == 'T' && s[13] == ':' && s[16] == ':' && s[19] == '.') {
-            JSL.Date js_d = new JSL.Date(new JSC.Arguments() { args[1] });
-            if(Math.Abs(( js_d.ToDateTime() - new DateTime(1001, 1, 1, 12, 0, 0) ).TotalDays) < 1) {
-              return JSC.JSObject.Marshal(DateTime.UtcNow);
+            DateTimeOffset dto;
+            if(!DateTimeOffset.TryParseExact(s, "yyyy-MM-ddTH:mm:ss.fffK", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out dto) || 
+                Math.Abs(dto.Year-1001) < 1) {
+              return JSC.JSObject.Marshal(DateTime.Now);
             }
-            return JSC.JSValue.Marshal(js_d);
+            return JSC.JSValue.Marshal(dto.LocalDateTime);
           }
         }
       }
       return args[1];
     }
+    //private static JSC.JSValue JS_CustomTypesRepl(JSC.JSValue thisBind, JSC.Arguments args) {
+    //  if(args[1]!=null && args[1].ValueType== JSC.JSValueType.Date) {
+    //    var jd = args[1].Value as JSL.Date;
+    //    return jd.ToDateTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+    //  }
+    //  return args[1];
+    //}
     public static JSC.JSValue ParseJson(string json) {
-      return JSL.JSON.parse(json, _JSON_Replacer);
+      return JSL.JSON.parse(json, _SJ_Replacer);
+    }
+    public static string Stringify(JSC.JSValue jv) {
+      return JSL.JSON.stringify(jv, null, null, null);
     }
     public static JSC.JSValue SetField(JSC.JSValue oc, string path, JSC.JSValue val) {
       if(string.IsNullOrEmpty(path)) {

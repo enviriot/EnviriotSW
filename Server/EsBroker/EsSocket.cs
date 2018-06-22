@@ -38,7 +38,7 @@ namespace X13.EsBroker {
 
     }
     public void SendArr(JST.Array arr, bool rep = true) {
-      var ms = JST.JSON.stringify(arr, null, null, null);
+      var ms = JsLib.Stringify(arr);
       int len = Encoding.UTF8.GetByteCount(ms);
       int st = 1;
       int tmp = len;
