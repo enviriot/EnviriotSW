@@ -195,7 +195,14 @@ namespace X13.PersistentStorage {
         if(p.art == Perform.Art.remove) {
           return;
         }
-        a = new Stash { id = ObjectId.NewObjectId() };
+        var obj = _objects.FindOne(Query.EQ("p", t.path));
+        if(obj!=null) {
+          a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
+          Log.Warning("PersistentStorage. Reload "+t.path);
+        } else {
+          a = new Stash { id = ObjectId.NewObjectId() };
+          Log.Warning("PersistentStorage. Create "+t.path);
+        }
         _base[t] = a;
       }
 
