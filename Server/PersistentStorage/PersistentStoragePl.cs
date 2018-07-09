@@ -201,7 +201,7 @@ namespace X13.PersistentStorage {
           Log.Warning("PersistentStorage. Reload "+t.path);
         } else {
           a = new Stash { id = ObjectId.NewObjectId() };
-          Log.Warning("PersistentStorage. Create "+t.path);
+          Log.Info("PersistentStorage. Create "+t.path);
         }
         _base[t] = a;
       }

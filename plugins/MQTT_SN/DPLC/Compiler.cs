@@ -332,6 +332,18 @@ namespace X13.DevicePLC {
       case "Today":         //  (year[0..99]<<24) | (month[1..12]<<16) | (day[1..31]<<8) | (dayOfWeek[1-Monday..7-Sunday]) 
         m = new Merker() { type = EP_Type.API, Addr = 10, vd = v, pOut = 1 };
         break;
+      case "UartInit":  // void UartInit(port, speed)
+        m = new Merker() { type = EP_Type.API, Addr = 20, vd = v, pIn = 2 };
+        break;
+      case "UartBytesToRead":  // int UartBytesToRead(port)
+        m = new Merker() { type = EP_Type.API, Addr = 21, vd = v, pOut = 1, pIn = 1 };
+        break;
+      case "UartGetByte":  // int UartGetByte(port)
+        m = new Merker() { type = EP_Type.API, Addr = 22, vd = v, pOut = 1, pIn = 1 };
+        break;
+      case "UartPutByte":  // bool UartPutByte(port, data)
+        m = new Merker() { type = EP_Type.API, Addr = 23, vd = v, pOut = 1, pIn = 2 };
+        break;
       default:
         return null;
       }

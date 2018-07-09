@@ -306,6 +306,8 @@ namespace X13.Periphery {
       DivByZero = 0x86,
       SP_OutOfRange = 0x87,
       API_Unknown = 0x88,
+      ResourceBusy = 0x89,
+      ArgumentOutOfRange = 0x8A,
 
       LPM_OutOfRange = 0x90,
 
