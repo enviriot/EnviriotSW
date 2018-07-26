@@ -1037,6 +1037,9 @@ namespace X13.Periphery {
         return;
       }
       Topic ts = GetServiceTopic(owner, "stat"), pa = GetServiceTopic(ts, n2);
+      if(ts.GetState() == null || ts.GetState().ValueType!=JSC.JSValueType.Date) {
+        ts.SetState(JSC.JSValue.Marshal(DateTime.Now), owner);
+      }
       pa.SetState(JsLib.OfInt(pa.GetState(), 0)+1, owner);
 
       if(t==MsMessageType.CONNECT && dub) {  // Connect with clean session
@@ -1050,6 +1053,7 @@ namespace X13.Periphery {
       if(!parent.Exist(name, out t)) {
         t = parent.Get(name, true, owner);
         t.SetField("MQTT-SN.tag", "---", owner);
+        t.SetField("editor", "Integer", owner);
       }
       return t;
     }
