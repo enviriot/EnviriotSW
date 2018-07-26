@@ -159,11 +159,27 @@ namespace X13.Periphery {
       if(dev == null) {
         addr = IPAddress.Broadcast;
         foreach(var bc in _bcIps) {
-          _udp.Send(buf, buf.Length, new IPEndPoint(bc, 1883));
+          try {
+            _udp.Send(buf, buf.Length, new IPEndPoint(bc, 1883));
+          }
+          catch(Exception ex) {
+            if(_pl.verbose) {
+              Log.Warning("MsGUdp.SendGw({0}, {1}) - {2}", bc, msg, ex.Message);
+            }
+            return;
+          }
         }
       } else if(dev.addr != null && dev.addr.Length == 4) {
         addr = new IPAddress(dev.addr);
-        _udp.Send(buf, buf.Length, new IPEndPoint(addr, 1883));
+        try {
+          _udp.Send(buf, buf.Length, new IPEndPoint(addr, 1883));
+        }
+        catch(Exception ex) {
+          if(_pl.verbose) {
+            Log.Warning("MsGUdp.SendGw({0}, {1}) - {2}", addr, msg, ex.Message);
+          }
+          return;
+        }
       } else {
         return;
       }
