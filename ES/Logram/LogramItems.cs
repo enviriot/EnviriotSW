@@ -158,7 +158,7 @@ namespace X13.UI {
           br = Brushes.Black;
           break;
         }
-        bool ic = JsLib.ofBool(JsLib.GetField(model.Manifest, "Logram.trace"), false);
+        bool ic = (!(_owner is loVariable) || _mode==0) && JsLib.ofBool(JsLib.GetField(model.Manifest, "Logram.trace"), false);
         if(!ic && chLevel == 1 && this.brush == br) {
           return;
         }
@@ -221,11 +221,13 @@ namespace X13.UI {
           }
           if(ic) {
             var ft = new FormattedText(val_s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black);
+            Point p;
             if(_mode == 0) {
-              dc.DrawText(ft, new Point(2, 2 - CELL_SIZE));
+              p = new Point(2, 2 - CELL_SIZE);
             } else {
-              dc.DrawText(ft, new Point(-2-ft.WidthIncludingTrailingWhitespace, 2 - CELL_SIZE));
+              p = new Point(-2-ft.WidthIncludingTrailingWhitespace, 2 - CELL_SIZE);
             }
+            dc.DrawText(ft, p);
           }
         }
         if(_mode != 0 && _srcBinding != null && chLevel > 1) {
