@@ -380,7 +380,7 @@ namespace X13.UI {
         DTopic cur;
         if(selected != null && (cur = selected.GetModel()) != null) {
           var cm = (this as Canvas).ContextMenu;
-          cm.ItemsSource = MenuItems(cur);
+          cm.ItemsSource = MenuItems(cur, selected);
           cm.IsOpen = true;
         }
         /*
@@ -580,7 +580,7 @@ namespace X13.UI {
     }
 
     #region ContextMenu
-    public ObservableCollection<Control> MenuItems(DTopic t) {
+    public ObservableCollection<Control> MenuItems(DTopic t, loItem ctrl) {
       var l = new ObservableCollection<Control>();
       JSC.JSValue v1;
       MenuItem mi;
@@ -589,7 +589,13 @@ namespace X13.UI {
       mi.Click += miOpen_Click;
       l.Add(mi);
       l.Add(new Separator());
-      
+      if(ctrl is loPin) {
+        bool ic = JsLib.ofBool(JsLib.GetField(t.Manifest, "Logram.trace"), false);
+        mi = new MenuItem() { Header = "Trace", Tag = t, IsCheckable = true, IsChecked =  ic};
+        mi.Click += miTrace_Click;
+        l.Add(mi);
+        l.Add(new Separator());
+      }
       if(t.Manifest != null && (v1 = t.Manifest["Children"]).ValueType == JSC.JSValueType.Object) {
         var ad = new Dictionary<string, JSC.JSValue>();
         Jso2Acts(v1, ad);
@@ -601,6 +607,7 @@ namespace X13.UI {
       }
       return l;
     }
+
     private void Jso2Acts(JSC.JSValue obj, Dictionary<string, JSC.JSValue> act) {
       foreach(var kv in obj.Where(z => z.Value != null && z.Value.ValueType == JSC.JSValueType.Object && z.Value["default"].Defined)) {
         if(!act.ContainsKey(kv.Key)) {
@@ -779,6 +786,15 @@ namespace X13.UI {
       }
 
       App.Workspace.Open(t.fullPath);
+    }
+    private void miTrace_Click(object sender, RoutedEventArgs e) {
+      DTopic t;
+      var mi = sender as MenuItem;
+      if(mi == null || (t = mi.Tag as DTopic)==null) {
+        return;
+      }
+      bool ic = JsLib.ofBool(JsLib.GetField(t.Manifest, "Logram.trace"), false);
+      t.SetField("Logram.trace", !ic);
     }
     
     private void miAdd_Click(object sender, System.Windows.RoutedEventArgs e) {

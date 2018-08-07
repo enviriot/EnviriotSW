@@ -136,6 +136,10 @@ namespace X13 {
       return object.Equals(v1.Value, v2.Value);
     }
 
+    public static bool ofBool(JSC.JSValue v, bool def) {
+      return (v == null || v.ValueType != JSC.JSValueType.Boolean) ? def : ((bool)v);
+    }
+
     public static int OfInt(JSC.JSValue v, int def) {
       return (v == null || !v.IsNumber) ? def : ((int)v);
     }

@@ -116,7 +116,7 @@ namespace X13.UI {
           var src_s = JsLib.OfString(JsLib.GetField(model.Manifest, "cctor.LoBind"), null);
           if(src_s == null) {
             _mode = 1;
-          } else if(_source == null || _source.path != src_s || ( _mode == 2 && _srcBinding == null && lv._dataIsLoaded )) {
+          } else if(_source == null || _source.path != src_s || (_mode == 2 && _srcBinding == null && lv._dataIsLoaded)) {
             model.GetAsync(src_s).ContinueWith(SourceLoaded, TaskScheduler.FromCurrentSynchronizationContext());
             return;
           }
@@ -129,7 +129,7 @@ namespace X13.UI {
         this.Offset = _owner.Offset + _ownerOffset;
         if(chLevel == 3) {
           lv.MapRemove(this);
-          lv.MapSet(_mode == 0 ? 3 : 0, (int)( Offset.X / CELL_SIZE + 0.5 ), (int)( Offset.Y / CELL_SIZE + 0.5 ), this);
+          lv.MapSet(_mode == 0 ? 3 : 0, (int)(Offset.X / CELL_SIZE + 0.5), (int)(Offset.Y / CELL_SIZE + 0.5), this);
         }
 
         var tc = model.State.ValueType;
@@ -148,7 +148,7 @@ namespace X13.UI {
         case JSC.JSValueType.Double:
         case JSC.JSValueType.Integer: {
             double val = (double)model.State;
-            br = val > 0 ? ( val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen ) : ( val == 0 ? brValueFalse : Brushes.DodgerBlue );
+            br = val > 0 ? (val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen) : (val == 0 ? brValueFalse : Brushes.DodgerBlue);
           }
           break;
         case JSC.JSValueType.Boolean:
@@ -158,16 +158,74 @@ namespace X13.UI {
           br = Brushes.Black;
           break;
         }
-        if(chLevel == 1 && this.brush == br) {
+        bool ic = JsLib.ofBool(JsLib.GetField(model.Manifest, "Logram.trace"), false);
+        if(!ic && chLevel == 1 && this.brush == br) {
           return;
         }
         this.brush = br;
+        string val_s = string.Empty;
+        if(ic) {
+          var v = model.State;
+          if(v!=null) {
+            switch(v.ValueType) {
+            case JSC.JSValueType.Boolean:
+            case JSC.JSValueType.Integer:
+            case JSC.JSValueType.String:
+              val_s = v.Value.ToString();
+              break;
+            case JSC.JSValueType.Double: {
+                double d = (double)v;
+                int p = (int)Math.Log10(Math.Abs(d));
+                switch(p) {
+                case -2:
+                  val_s = d.ToString("0.000##");
+                  break;
+                case -1:
+                  val_s = d.ToString("0.00##");
+                  break;
+                case 0:
+                  val_s = d.ToString("0.0##");
+                  break;
+                case 1:
+                  val_s = d.ToString("0.##");
+                  break;
+                case 2:
+                  val_s = d.ToString("0.#");
+                  break;
+                case 3:
+                  val_s = d.ToString("0.#");
+                  break;
+                case 4:
+                  val_s = d.ToString("0");
+                  break;
+                default:
+                  val_s = d.ToString("G4");
+                  break;
 
+                }
+              }
+              break;
+            case JSC.JSValueType.Date: {
+                var dt = (v.Value as JSL.Date).ToDateTime();
+                val_s =  dt.ToString("yyMMdd HH:mm:ss");
+                break;
+              }
+            }
+          }
+        }
         using(DrawingContext dc = this.RenderOpen()) {
           if(_mode == 3) {
             dc.DrawRectangle(_selected ? brItemSelected : this.brush, null, new Rect(-2, -5, 4, 10));
           } else {
             dc.DrawEllipse(_selected ? brItemSelected : this.brush, null, new Point(0, 0), 3, 3);
+          }
+          if(ic) {
+            var ft = new FormattedText(val_s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black);
+            if(_mode == 0) {
+              dc.DrawText(ft, new Point(2, 2 - CELL_SIZE));
+            } else {
+              dc.DrawText(ft, new Point(-2-ft.WidthIncludingTrailingWhitespace, 2 - CELL_SIZE));
+            }
           }
         }
         if(_mode != 0 && _srcBinding != null && chLevel > 1) {
@@ -190,7 +248,7 @@ namespace X13.UI {
         if(_owner is loBlock && lo != null) {
           lo = lo.parent;
         }
-        if(tt.Result.parent == lo || ( tt.Result.parent != null && tt.Result.parent.parent == lo )) {
+        if(tt.Result.parent == lo || (tt.Result.parent != null && tt.Result.parent.parent == lo)) {
           _mode = 2;
           var src = lv._visuals.OfType<loPin>().FirstOrDefault(z => z.model == _source && !z.IsInput);
           if(src != null) {
@@ -220,7 +278,7 @@ namespace X13.UI {
       }
 
       public override string ToString() {
-        return model.path + ( _mode < 2 ? ( _mode == 0 ? "Out" : "InF" ) : ( _mode == 2 ? "InI" : "InE" ) );
+        return model.path + (_mode < 2 ? (_mode == 0 ? "Out" : "InF") : (_mode == 2 ? "InI" : "InE"));
       }
     }
 
@@ -269,9 +327,9 @@ namespace X13.UI {
           return;
         }
         if(chLevel > 1 && _track.Any()
-           && ( chLevel == ( _mapped ? 2 : 3 )
-             || _track[0].X != ( Input!=null?Input.Offset.X:_cur.X ) || _track[0].Y != ( Input!=null?Input.Offset.Y:_cur.Y ) 
-             || _track[_track.Count - 1].X != ( Output!=null?Output.Offset.X:_cur.X ) || _track[_track.Count - 1].Y != ( Output!=null?Output.Offset.Y:_cur.Y ) )) {
+           && (chLevel == (_mapped ? 2 : 3)
+             || _track[0].X != (Input!=null?Input.Offset.X:_cur.X) || _track[0].Y != (Input!=null?Input.Offset.Y:_cur.Y) 
+             || _track[_track.Count - 1].X != (Output!=null?Output.Offset.X:_cur.X) || _track[_track.Count - 1].Y != (Output!=null?Output.Offset.Y:_cur.Y))) {
           if(_mapped) {
             lv.MapRemove(this);
             _mapped = false;
@@ -297,7 +355,7 @@ namespace X13.UI {
         }
 
         using(DrawingContext dc = this.RenderOpen()) {
-          Pen pn = ( _selected || Input == null ) ? SelectionPen : new Pen(Input.brush, 2.0);
+          Pen pn = (_selected || Input == null) ? SelectionPen : new Pen(Input.brush, 2.0);
           for(int i = 0; i < _track.Count - 1; i++) {
             if(_track[i].X == _track[i + 1].X && _track[i].Y == _track[i + 1].Y) {
               dc.DrawEllipse(Input.brush, null, _track[i], 3, 3);
@@ -316,10 +374,10 @@ namespace X13.UI {
 
         PathFinderNode parentNode;
         bool found = false;
-        int startX = (int)( this.Input.Offset.X / CELL_SIZE + 0.5 );
-        int startY = (int)( this.Input.Offset.Y / CELL_SIZE + 0.5 );
-        int finishX = (int)( this.Output.Offset.X / CELL_SIZE + 0.5 );
-        int finishY = (int)( this.Output.Offset.Y / CELL_SIZE + 0.5 );
+        int startX = (int)(this.Input.Offset.X / CELL_SIZE + 0.5);
+        int startY = (int)(this.Input.Offset.Y / CELL_SIZE + 0.5);
+        int finishX = (int)(this.Output.Offset.X / CELL_SIZE + 0.5);
+        int finishY = (int)(this.Output.Offset.Y / CELL_SIZE + 0.5);
         mOpen.Clear();
         mClose.Clear();
 
@@ -411,10 +469,10 @@ namespace X13.UI {
               fNode = mClose[i];
               int dir = CalcDir(fNode.PX, fNode.X, fNode.PY, fNode.Y);
               int ndir = direction[dir, 2];
-              if(( lv.MapGet(ndir, fNode.PX, fNode.PY) ) == null) {
+              if((lv.MapGet(ndir, fNode.PX, fNode.PY)) == null) {
                 lv.MapSet(ndir, fNode.PX, fNode.PY, this);
               }
-              if(( cIt = lv.MapGet(dir, fNode.X, fNode.Y) ) == null) {
+              if((cIt = lv.MapGet(dir, fNode.X, fNode.Y)) == null) {
                 lv.MapSet(dir, fNode.X, fNode.Y, this);
               } else {
                 if(cIt == this || cIt == this.Input || cIt == this.Output) {
@@ -458,10 +516,10 @@ namespace X13.UI {
         if(it == null) {
           g = 6;
         } else if(it is loPin) {
-          g = ( it == this.Input || it == this.Output ) ? 1 : 101;
+          g = (it == this.Input || it == this.Output) ? 1 : 101;
         } else if(it is loBinding) {
           var w = it as loBinding;
-          g = ( w.Input == this.Input || w.Input == this.Output || w.Output == this.Input || w.Output == this.Output ) ? 1 : 101;
+          g = (w.Input == this.Input || w.Input == this.Output || w.Output == this.Input || w.Output == this.Output) ? 1 : 101;
         } else if(it is loElement) {
           g = 101;
         } else {
@@ -474,7 +532,7 @@ namespace X13.UI {
       }
 
       private int CalcDir(int PX, int X, int PY, int Y) {  // 0 - X+, 1 - Y-, 2 - Y+, 3 - X-
-        return ( PY == Y ) ? ( PX > X ? 3 : 0 ) : ( Y > PY ? 2 : 1 );
+        return (PY == Y) ? (PX > X ? 3 : 0) : (Y > PY ? 2 : 1);
       }
       private class ComparePFNode : IComparer<PathFinderNode> {
         public int Compare(PathFinderNode x, PathFinderNode y) {
@@ -499,7 +557,7 @@ namespace X13.UI {
         return null;
       }
       public override string ToString() {
-        return ( Input != null ? Input.GetModel().path : "nc" ) + " => " + ( Output != null ? Output.GetModel().path : "nc" );
+        return (Input != null ? Input.GetModel().path : "nc") + " => " + (Output != null ? Output.GetModel().path : "nc");
       }
 
       public override void Dispose() {
@@ -536,11 +594,11 @@ namespace X13.UI {
       }
 
       public override void SetLocation(Vector loc, bool save) {
-        int topCell = (int)( loc.Y / CELL_SIZE + 0.5 );
+        int topCell = (int)(loc.Y / CELL_SIZE + 0.5);
         if(topCell < 0) {
           topCell = 0;
         }
-        int leftCell = (int)( loc.X / CELL_SIZE );
+        int leftCell = (int)(loc.X / CELL_SIZE);
         if(leftCell < 0) {
           leftCell = 0;
         }
@@ -558,7 +616,7 @@ namespace X13.UI {
             model.SetField("Logram", lo);
           }
         } else {
-          this.Offset = new Vector(leftCell * CELL_SIZE, ( topCell - 0.5 ) * CELL_SIZE);
+          this.Offset = new Vector(leftCell * CELL_SIZE, (topCell - 0.5) * CELL_SIZE);
           ;
           Output.Render(2);
           Input.Render(2);
@@ -569,12 +627,12 @@ namespace X13.UI {
         y = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.top"), 0);
         x = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.left"), 0);
         double width = 0;
-        base.OriginalLocation = new Vector(x * CELL_SIZE, ( y - 0.5 ) * CELL_SIZE);
+        base.OriginalLocation = new Vector(x * CELL_SIZE, (y - 0.5) * CELL_SIZE);
         this.Offset = OriginalLocation;
 
         using(DrawingContext dc = this.RenderOpen()) {
           FormattedText ft = new FormattedText(model.name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LFont, CELL_SIZE * 0.7, Brushes.White);
-          width = Math.Ceiling(( ft.WidthIncludingTrailingWhitespace+11 ) / CELL_SIZE) * CELL_SIZE;
+          width = Math.Ceiling((ft.WidthIncludingTrailingWhitespace+11) / CELL_SIZE) * CELL_SIZE;
           dc.DrawRoundedRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, 1, width - 1, CELL_SIZE - 3), CELL_SIZE / 4, CELL_SIZE / 4);
           ft.MaxTextHeight = CELL_SIZE - 3;
           ft.MaxTextWidth = width - 11;
@@ -582,7 +640,7 @@ namespace X13.UI {
         }
         if(chLevel == 3) {
           lv.MapRemove(this);
-          for(int w = (int)( width / CELL_SIZE + 0.5 ); w >= 0; w--) {
+          for(int w = (int)(width / CELL_SIZE + 0.5); w >= 0; w--) {
             lv.MapSet(0, x + w, y, this);
             lv.MapSet(1, x + w, y, this);
             lv.MapSet(2, x + w, y, this);
@@ -659,7 +717,7 @@ namespace X13.UI {
       }
       private void PinLoaded(Task<DTopic> tt) {
         DTopic t;
-        if(tt.IsFaulted || !tt.IsCompleted || ( t = tt.Result ) == null) {
+        if(tt.IsFaulted || !tt.IsCompleted || (t = tt.Result) == null) {
           return;
         }
         loPin p;
@@ -671,7 +729,7 @@ namespace X13.UI {
         }
         var pd = chs[t.name];
         int ddr;
-        if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || ( ddr = JsLib.OfInt(pd, "ddr", 0) )==0) {
+        if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || (ddr = JsLib.OfInt(pd, "ddr", 0))==0) {
           lv.TopicLoaded(t);
           return;
         }
@@ -719,11 +777,11 @@ namespace X13.UI {
         int x, y;
         y = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.top"), 0);
         x = JsLib.OfInt(JsLib.GetField(model.Manifest, "Logram.left"), 0);
-        base.OriginalLocation = new Vector(x * CELL_SIZE, ( y - 0.5 ) * CELL_SIZE);
+        base.OriginalLocation = new Vector(x * CELL_SIZE, (y - 0.5) * CELL_SIZE);
         this.Offset = OriginalLocation;
 
 
-        FormattedText head = new FormattedText(model.name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black);
+        FormattedText head = new FormattedText(model.name, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black);
         FormattedText[] textIp = new FormattedText[MAX_PINS];
         loPin[] pinIp = new loPin[MAX_PINS];
         int cntIp = 0;
@@ -742,7 +800,7 @@ namespace X13.UI {
         foreach(var p in _pins) {
           var pd = chs[p.GetModel().name];
           int ddr;
-          if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || ( ddr = JsLib.OfInt(pd, "ddr", 0) )==0) {
+          if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || (ddr = JsLib.OfInt(pd, "ddr", 0))==0) {
             continue;
           }
           var ft = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White);
@@ -793,21 +851,21 @@ namespace X13.UI {
         using(DrawingContext dc = this.RenderOpen()) {
           dc.DrawRectangle(Brushes.White, null, new Rect(-2, 2, width + 4, height + CELL_SIZE - 2));
           dc.DrawRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, CELL_SIZE, width, height));
-          dc.DrawText(head, new Point(( width - head.WidthIncludingTrailingWhitespace ) / 2, 1));
+          dc.DrawText(head, new Point((width - head.WidthIncludingTrailingWhitespace) / 2, 1));
           int i;
           for(i = 0; i < cntIp; i++) {
             if(textIp[i] != null && pinIp[i] != null) {
               if(i==0) {
-                wi = Math.Max(( width-CELL_SIZE ) / 2, Math.Ceiling(( 2 * textIp[i].WidthIncludingTrailingWhitespace ) / CELL_SIZE) * CELL_SIZE / 2);
+                wi = Math.Max((width-CELL_SIZE) / 2, Math.Ceiling((2 * textIp[i].WidthIncludingTrailingWhitespace) / CELL_SIZE) * CELL_SIZE / 2);
               }
-              dc.DrawText(textIp[i], new Point(7, ( i + 1 ) * CELL_SIZE + 1));
+              dc.DrawText(textIp[i], new Point(7, (i + 1) * CELL_SIZE + 1));
             }
           }
           dc.DrawImage(App.GetIcon(JsLib.OfString(model.Manifest["icon"], null)), new Rect(wi, CELL_SIZE, CELL_SIZE, CELL_SIZE));
           int inW = (int)width / CELL_SIZE;
           for(i = 0; i < cntOp; i++) {
             if(textOp[i] != null && pinOp[i] != null) {
-              dc.DrawText(textOp[i], new Point(width - 7 - textOp[i].WidthIncludingTrailingWhitespace, ( i + 1 ) * CELL_SIZE + 1));
+              dc.DrawText(textOp[i], new Point(width - 7 - textOp[i].WidthIncludingTrailingWhitespace, (i + 1) * CELL_SIZE + 1));
             }
           }
         }
@@ -826,11 +884,11 @@ namespace X13.UI {
         }
       }
       public override void SetLocation(Vector loc, bool save) {
-        int topCell = (int)( loc.Y / CELL_SIZE + 0.5 );
+        int topCell = (int)(loc.Y / CELL_SIZE + 0.5);
         if(topCell < 0) {
           topCell = 0;
         }
-        int leftCell = (int)( loc.X / CELL_SIZE );
+        int leftCell = (int)(loc.X / CELL_SIZE);
         if(leftCell < 0) {
           leftCell = 0;
         }
@@ -849,7 +907,7 @@ namespace X13.UI {
             model.SetField("Logram", lo);
           }
         } else {
-          this.Offset = new Vector(leftCell * CELL_SIZE, ( topCell - 0.5 ) * CELL_SIZE);
+          this.Offset = new Vector(leftCell * CELL_SIZE, (topCell - 0.5) * CELL_SIZE);
           foreach(var p in _pins) {
             p.Render(2);
           }
