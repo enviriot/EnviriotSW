@@ -98,10 +98,10 @@ namespace X13.Logram {
         _links.Clear();
         _src_new = null;
       }
-
-      if(_src != _src_new || ( _src!=null && ( _src.Layer!=Math.Abs(_layer) || !Object.ReferenceEquals(_src.Route, Route) ) )) {
+      bool l_ch = _src != _src_new;
+      if(l_ch || ( _src!=null && ( _src.Layer!=Math.Abs(_layer) || !Object.ReferenceEquals(_src.Route, Route) ) )) {
         var svo = Interlocked.Exchange(ref _src, _src_new) as LoVariable;
-        if(svo != null) {
+        if(l_ch && svo != null) {
           svo.DeleteLink(this);
         }
         if(_src!=null) {
@@ -110,7 +110,7 @@ namespace X13.Logram {
           if(_owner.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
             _owner.ClearAttribute(Topic.Attribute.Saved);
           }
-          if(( svo = _src as LoVariable )!=null) {
+          if(l_ch && (svo = _src as LoVariable)!=null) {
             svo.AddLink(this);
             if(svo._value!=null && svo._value.Defined) {
               _value_new = svo._value;

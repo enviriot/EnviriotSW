@@ -133,7 +133,9 @@ namespace X13.Logram {
         v = new LoVariable(this, t);
         _items[t] = v;
       }
-      v.ManifestChanged();
+      if(v!=null) {
+        v.ManifestChanged();
+      }
     }
     private void BlockCh(Topic t, Perform.Art a) {
       ILoItem it;
