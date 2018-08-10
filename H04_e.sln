@@ -11,14 +11,16 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MQTT_SN", "plugins\MQTT_SN\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MQTT", "plugins\MQTT\MQTT.csproj", "{3A15F115-682E-474F-B682-F4A9E8B7DB9D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{E0D7DE35-9635-4F58-8D43-EF191363AB84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Logram", "plugins\Logram\Logram.csproj", "{61FCBADD-489E-4493-92D5-B607F28C25AC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebUI", "plugins\WebUI\WebUI.csproj", "{AAB84039-33D4-4A59-8023-99E7CC55F355}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7E70AF12-718E-4EFB-AD77-A0CD94A2EC6C}"
 	ProjectSection(SolutionItems) = preProject
 		data\base.xst = data\base.xst
 	EndProjectSection
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{E0D7DE35-9635-4F58-8D43-EF191363AB84}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Logram", "plugins\Logram\Logram.csproj", "{61FCBADD-489E-4493-92D5-B607F28C25AC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

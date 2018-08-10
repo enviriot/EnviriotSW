@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description" content="http://x13home.github.io/" />
+  <title>Enviriot simple WebUI</title>
+</head>
+<body>
+  <p id="p_1">
+    Hello
+  </p>
+  <button onmousedown="Lank.publish('/export/tst', true)" onmouseup="Lank.publish('/export/tst', false)">Test button</button>
+  <script type="text/javascript">
+    "use strict";
+    window.Lank = { 'f': {}, 'cb' : null };
+    Lank.publish = function (path, val) {
+      Lank.ws.send('P\t' + path + '\t' + JSON.stringify(val));
+    }
+    Lank.subscribe = function (path) {
+      Lank.ws.send('S\t' + path);
+    }
+    Lank.cb = function (p, v) {
+      switch (p) {
+        case "connected":
+          Lank.subscribe("/export/out/+");
+          break;
+        case "/export/out/01":
+          document.getElementById("p_1").innerHTML = v;
+          break;
+      }
+    };
+
+    Lank.f.onMessage = function (evt) {
+      var sa = evt.data.split('\t');
+      if (sa[0] == "P" && sa.length == 3) {
+        if (Lank.cb != null && typeof (Lank.cb) === "function") {
+          Lank.cb(sa[1], JSON.parse(sa[2]));
+        }
+      } else if (sa[0] == 'I' && sa.length == 3) {
+        document.cookie = 'sessionId=' + sa[1];
+        if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
+          document.title = 'online';
+          if (Lank.cb != null && typeof (Lank.cb) === "function") {
+            Lank.cb("connected", true);
+          }
+        }
+      }
+    };
+    Lank.f.createWS = function () {
+      if (Lank.ws == null || Lank.ws.readyState == Lank.ws.CLOSED) {
+        if (Lank.ws != null) {
+          Lank.ws.close();
+
+          document.title = 'offline';
+        }
+        Lank.ws = new WebSocket((window.location.protocol == "https:" ? "wss://" : "ws://") + window.location.host + "/api/v04");
+        Lank.ws.onopen = function (evt) {
+          Lank.ws.onmessage = Lank.f.onMessage;
+          Lank.ws.onclose = function (evt) {
+            document.title = 'offline';
+            setTimeout(Lank.f.createWS, 1500);
+          };
+          Lank.ws.onerror = function (evt) {
+            document.title = 'offline';
+            setTimeout(Lank.f.createWS, 1500);
+          };
+        };
+        setTimeout(Lank.f.createWS, 15000);
+      }
+    };
+
+    document.onreadystatechange = function () {
+      if (document.readyState === "complete") {
+        Lank.f.createWS();
+      }
+    };
+    window.unload = function (e) {
+      if (Lank.ws != null && Lank.ws.readyState == Lank.ws.OPEN) {
+        Lank.ws.close(1000);
+      }
+      Lank.ws = null;
+    };
+  </script>
+
+</body>
+</html>
+
