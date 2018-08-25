@@ -166,7 +166,6 @@ namespace X13.Periphery {
             if(_pl.verbose) {
               Log.Warning("MsGUdp.SendGw({0}, {1}) - {2}", bc, msg, ex.Message);
             }
-            return;
           }
         }
       } else if(dev.addr != null && dev.addr.Length == 4) {
@@ -178,7 +177,6 @@ namespace X13.Periphery {
           if(_pl.verbose) {
             Log.Warning("MsGUdp.SendGw({0}, {1}) - {2}", addr, msg, ex.Message);
           }
-          return;
         }
       } else {
         return;
