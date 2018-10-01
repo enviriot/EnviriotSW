@@ -57,6 +57,10 @@ namespace X13.Periphery {
             for(int i = 0; i < ip.Length; ++i) {
               result[i] = (Byte)(ip[i] | (mask[i] ^ 255));
             }
+            X13.Log.Info("{0} - {1}/{2} - {3}", nic.Name, addr.Address, addr.IPv4Mask, nic.OperationalStatus);
+            if(nic.NetworkInterfaceType == NetworkInterfaceType.Loopback || nic.OperationalStatus!=OperationalStatus.Up) {
+              continue;
+            }
             bc.Add(new IPAddress(result));
             if(wl != null) {
               wl.Add(new AddrWithMask(ip, mask, nic.Name));
