@@ -293,7 +293,7 @@ namespace X13.Repository {
       }
 
       public static void Fill(Topic t, JSValue state, JSValue manifest, Topic prim) {
-        t._manifest = manifest??JSObject.CreateObject();
+        t._manifest = (manifest==null || manifest.IsNull)?JSObject.CreateObject():manifest;
         if(!t._manifest["attr"].IsNumber) {
           t._manifest = JsLib.SetField(t._manifest, "attr", new JST.Number(0));
         }
@@ -363,7 +363,7 @@ namespace X13.Repository {
       public static void SetValue(Topic t, JSValue val) {
         t._state = val;
       }
-      public static bool SetField(Perform cmd){
+      public static bool SetField(Perform cmd) {
         Topic t = cmd.src;
         bool r;
         JSValue oc;
@@ -414,7 +414,7 @@ namespace X13.Repository {
           }
         } else {
           if(t._subRecords != null) {
-            for(int i = t._subRecords.Count-1; i >= 0 ; i--) {
+            for(int i = t._subRecords.Count-1; i >= 0; i--) {
               sb = t._subRecords[i];
               if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
                   && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
