@@ -47,7 +47,7 @@ namespace X13.Periphery {
       }
 
       if(scanAllPorts || !_pl._devs.Any() || _pl._devs.Where(z => z.state == State.Lost || z.state == State.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").Value as string).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
-        var pns = SerialPort.GetPortNames().Where(z => !z.Contains("tty")).ToArray();
+        var pns = SerialPort.GetPortNames().Where(z => !(z.StartsWith("tty") && z.Length>3 && char.IsNumber(z[3]))).ToArray();
         for(int i = 0; i < pns.Length; i++) {
           if(_pl._gates.Exists(z => z.name == pns[i])) {
             continue;
