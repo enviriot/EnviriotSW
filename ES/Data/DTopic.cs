@@ -367,7 +367,7 @@ namespace X13.Data {
             }
           } else {
             lock(_cur) {
-              if(_cur._req != null && _cur._req != this) {
+              if(_cur._req != null && _cur._req != this) { //-V3054
                 if(_cur._req._reqs == null) {
                   _cur._req._reqs = new List<TopicReq>();
                 }
@@ -390,7 +390,7 @@ namespace X13.Data {
 
         if(_cur._children == null && _cur._state == null) {
           lock(_cur) {
-            if(_cur._req != null && _cur._req != this) {
+            if(_cur._req != null && _cur._req != this) { //-V3054
               if(_cur._req._reqs == null) {
                 _cur._req._reqs = new List<TopicReq>();
               }
@@ -553,7 +553,7 @@ namespace X13.Data {
         if(noCreation) {
           if(_cmd == 10) {  // move
             DTopic parent = _root;
-            ps = (_p1.Value as string).Split(PATH_SEPARATOR, StringSplitOptions.RemoveEmptyEntries);
+            ps = (_p1.Value as string).Split(PATH_SEPARATOR, StringSplitOptions.RemoveEmptyEntries); //-V3095
             for(int i = 0; i < ps.Length; i++) {
               next = parent.GetChild(ps[i], false);
               if(next == null) {  // Topic not exist
@@ -561,7 +561,7 @@ namespace X13.Data {
               }
               parent = next;
             }
-            next = new DTopic(parent, _p2.Value as string);
+            next = new DTopic(parent, _p2.Value as string); //-V3095
             next._children = cur._children;
             next._state = cur._state;
             next._manifest = cur._manifest;

@@ -133,9 +133,6 @@ namespace X13 {
           view = null;
         }
         arg.Content = App.Workspace.Open(u.GetLeftPart(UriPartial.Path), view);
-        if(arg.Content == null) {
-          arg.Cancel = true;
-        }
       }
     }
 

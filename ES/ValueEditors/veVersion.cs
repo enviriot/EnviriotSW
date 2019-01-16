@@ -22,7 +22,7 @@ namespace X13.UI {
       return new veVersion(owner, type);
     }
 
-    public veVersion(InBase owner, JSC.JSValue type) {
+    public veVersion(InBase owner, JSC.JSValue type) { //-V3117
       base.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
       base.Padding = new System.Windows.Thickness(10, 0, 10, 0);
       ValueChanged(owner.value);

@@ -223,14 +223,14 @@ namespace X13.Data {
     }
 
     private void HelloComplete(Task<DTopic> dt) {
-      if(!dt.IsFaulted && dt.IsCompleted && dt!=null) {
+      if(!dt.IsFaulted && dt.IsCompleted && dt.Result!=null) {
         this.TypeManifest = dt.Result;
       }
       this.root.GetAsync("/$YS/TYPES/Core").ContinueWith(LoadCoreTypes);
     }
 
     private void LoadCoreTypes(Task<DTopic> tt) {
-      if(!tt.IsFaulted && tt.IsCompleted && tt != null) {
+      if(!tt.IsFaulted && tt.IsCompleted && tt.Result != null) {
         this.CoreTypes = tt.Result;
         foreach(var t in CoreTypes.children) {
           t.GetAsync(null);

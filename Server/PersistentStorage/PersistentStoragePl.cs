@@ -135,7 +135,7 @@ namespace X13.PersistentStorage {
       if(val == null) {
         return JSC.JSValue.Undefined;
       }
-      switch(val.Type) {
+      switch(val.Type) { //-V3002
       case BsonType.ObjectId: {
           var p = Id2Topic(val.AsObjectId);
           if(p != null) {

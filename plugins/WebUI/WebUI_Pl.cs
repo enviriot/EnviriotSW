@@ -24,9 +24,9 @@ namespace X13.WebUI {
       Topic cur=Topic.root.Get(path, true, ses==null?null:ses.owner);
       if(string.IsNullOrEmpty(json) || json=="null") {                      // Remove
         cur.Remove();
-        return 200;
+      } else {
+        cur.SetState(JsLib.ParseJson(json), ses==null?null:ses.owner);
       }
-      cur.SetState(JsLib.ParseJson(json), ses==null?null:ses.owner);
       return 200;
     }
 
@@ -144,8 +144,7 @@ namespace X13.WebUI {
         FileInfo f = new FileInfo(Path.Combine(_sv.RootPath, path.Substring(1)));
         if(f.Exists) {
           string eTag=f.LastWriteTimeUtc.Ticks.ToString("X8")+"-"+f.Length.ToString("X4");
-          string et;
-          if(req.Headers.Contains("If-None-Match") && (et=req.Headers["If-None-Match"])==eTag) {
+          if(req.Headers.Contains("If-None-Match") && req.Headers["If-None-Match"]==eTag) {
             res.Headers.Add("ETag", eTag);
             statusCode=HttpStatusCode.NotModified;
             res.StatusCode=(int)statusCode;

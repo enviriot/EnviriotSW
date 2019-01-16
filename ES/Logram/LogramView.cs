@@ -130,14 +130,14 @@ namespace X13.UI {
           if(a == DTopic.Art.addChild) {
             var b = _visuals.OfType<loBlock>().FirstOrDefault(z => z.GetModel() == t);
             if(b == null) {
-              b = new loBlock(t, this);
+              loBlock.Create(t, this);
             }
           }
         } else {
           if(a == DTopic.Art.addChild) {
             var p = _visuals.OfType<loVariable>().FirstOrDefault(z => z.GetModel() == t);
             if(p == null) {
-              p = new loVariable(t, this);
+              loVariable.Create(t, this);
               TopicLoaded(t);
             }
           }
@@ -383,36 +383,6 @@ namespace X13.UI {
           cm.ItemsSource = MenuItems(cur, selected);
           cm.IsOpen = true;
         }
-        /*
-        //TopicView tv;
-        if(_mSelected != null) {
-          var cm = (this.Parent as Grid).ContextMenu;
-          cm.Items.Clear();
-          MenuItem mi = new MenuItem();
-          mi.Header = "Copy";
-          mi.Click += new RoutedEventHandler(mi_Copy);
-          cm.Items.Add(mi);
-          cm.IsOpen = true;
-        } else if() {
-          if(selected is uiPin) {
-            MenuItem mi = new MenuItem();
-            mi.Header = "Trace";
-            mi.Click += new RoutedEventHandler(mi_Trace);
-            cm.Items.Add(mi);
-          }
-          if(cm.Items.Count > 0) {
-            cm.IsOpen = true;
-          }
-        } else if(Clipboard.ContainsText()) {
-          var cm = (this.Parent as Grid).ContextMenu;
-          cm.Items.Clear();
-          MenuItem mi = new MenuItem();
-          mi.Header = "Paste";
-          mi.Click += new RoutedEventHandler(mi_Paste);
-          cm.Items.Add(mi);
-          cm.IsOpen = true;
-        }
-        */
         e.Handled = true;
         return;
       } else
@@ -455,7 +425,7 @@ namespace X13.UI {
               }
             } else if((w = selected as loBinding) != null && (w.Output == null || w.Input == null)) {
               loPin finish = GetVisual(cp.X, cp.Y) as loPin;
-              if(finish != null && ((w.Output == null && finish.GetModel() != w.Input.GetModel() && finish.IsFreeInput) || (w.Input == null && finish.GetModel() != w.Output.GetModel() && !finish.IsInput))) {
+              if(finish != null && ((w.Output == null && finish.GetModel() != w.Input.GetModel() && finish.IsFreeInput) || (w.Input == null && finish.GetModel() != w.Output.GetModel() && !finish.IsInput))) { //-V3080 //-V3027
                 w.SetFinish(finish);
               } else {
                 this.DeleteVisual(w);

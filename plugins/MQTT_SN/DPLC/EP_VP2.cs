@@ -73,9 +73,8 @@ namespace X13.DevicePLC {
             _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.API, m, node), 0, m.pOut);
             return this;
           } else {  // m.type == EP_Type.FUNCTION
-            if(CallFunction(node, m, null)) {
-              return this;
-            }
+            CallFunction(node, m, null);
+            return this;
           }
         } else {
           throw new NotSupportedException("Call(" + node.Childs[0].ToString() + ") Mode: " + node.CallMode.ToString());
@@ -1060,7 +1059,7 @@ namespace X13.DevicePLC {
         _compiler.cur.AddInst(EP_InstCode.ADD, 2, 1);
       }
     }
-    private bool CallFunction(Call node, EP_Compiler.Merker m, Expression This) {
+    private void CallFunction(Call node, EP_Compiler.Merker m, Expression This) {
       EP_Compiler.Instruction d;
       EP_Compiler.Merker mt;
       Variable v;
@@ -1092,7 +1091,6 @@ namespace X13.DevicePLC {
           _compiler._sp.Pop();
           _compiler._sp.Push(d);
         }
-        return true;
       } else {
         throw new ApplicationException("undefined function: " + m.vd.Name);
       }

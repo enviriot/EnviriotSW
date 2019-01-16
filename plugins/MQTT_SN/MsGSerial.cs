@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using X13.Repository;
 
 namespace X13.Periphery {
-  internal class MsGSerial : IMsGate {
+  internal class MsGSerial : IMsGate { //-V3074
     private static byte[] _disconnectAll;
     private static int _scanBusy;
     private static AutoResetEvent _startScan;

@@ -128,7 +128,7 @@ namespace X13.UI {
     private void InsertItems(ReadOnlyCollection<DTopic> its) {
       bool pc_items = false;
       if(_items == null) {
-        lock(this) {
+        lock(this._sync) {
           if(_items == null) {
             _items = new List<InBase>();
             pc_items = true;
@@ -440,7 +440,7 @@ namespace X13.UI {
       if(tag != null) {
         if((bool)tag["willful"]) {
           if(_items == null) {
-            lock(this) {
+            lock(this._sync) {
               if(_items == null) {
                 _items = new List<InBase>();
                 pc_items = true;
@@ -540,7 +540,9 @@ namespace X13.UI {
       var o = System.Threading.Interlocked.Exchange(ref _owner, null);
       if(o != null) {
         o.changed -= _owner_PropertyChanged;
+#pragma warning disable 420
         var its = System.Threading.Interlocked.Exchange(ref base._items, null);
+#pragma warning restore 420
         if(its != null) {
           foreach(var it in its.ToArray()) {
             it.Dispose();

@@ -1,6 +1,4 @@
-﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
-// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -271,7 +269,7 @@ namespace X13.UI {
         bool pc_items = false;
         if((bool)decl["willful"]) {
           if(_items == null) {
-            lock(this) {
+            lock(this._sync) {
               if(_items == null) {
                 _items = new List<InBase>();
                 pc_items = true;

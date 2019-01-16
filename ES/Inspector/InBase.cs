@@ -19,8 +19,9 @@ namespace X13.UI {
     protected JSC.JSValue _manifest;
     protected string _editorName;
     protected bool _isExpanded;
-    protected List<InBase> _items;
+    protected volatile List<InBase> _items;
     protected Action<InBase, bool> _collFunc;
+    protected object _sync = new object();
 
     public double levelPadding { get; protected set; }
     public virtual bool IsExpanded {

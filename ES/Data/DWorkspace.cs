@@ -15,13 +15,14 @@ namespace X13.Data {
   internal class DWorkspace : NPC_UI {
     private string _cfgPath;
     private UIDocument _activeDocument;
+    private ObservableCollection<Client> _clients;
 
     public XmlDocument config;
-    public ObservableCollection<Client> Clients { get; private set; }
+    public ObservableCollection<Client> Clients { get { return _clients; } }
 
     public DWorkspace(string cfgPath) {
       this._cfgPath = cfgPath;
-      Clients = new ObservableCollection<Client>();
+      _clients = new ObservableCollection<Client>();
       Files = new ObservableCollection<UIDocument>();
       Tools = new ObservableCollection<BaseWindow>();
       _activeDocument = null;
@@ -63,7 +64,7 @@ namespace X13.Data {
                 if(tmp != null) {
                   cl.alias = tmp.Value;
                 }
-                Clients.Add(cl);
+                _clients.Add(cl);
               }
             }
           }
@@ -107,13 +108,13 @@ namespace X13.Data {
     public Task<DTopic> GetAsync(Uri url) {
       var up = Uri.UnescapeDataString(url.UserInfo).Split(':');
       string uName = (up.Length > 0 && !string.IsNullOrWhiteSpace(up[0])) ? up[0] : null;
-      Client cl = Clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port));
+      Client cl = _clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port));
       if(cl == null) {
-        lock(Clients) {
-          cl = Clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port));
+        lock(_clients) {
+          cl = _clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port));
           if(cl == null) {
             cl = new Client(url.DnsSafeHost, url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port, uName, up.Length == 2 ? up[1] : null);
-            Clients.Add(cl);
+            _clients.Add(cl);
           }
         }
       }
@@ -133,7 +134,7 @@ namespace X13.Data {
     public void Close() {
       var clx = config.CreateElement("Connections");
       XmlNode xc;
-      foreach(var cl in Clients) {
+      foreach(var cl in _clients) {
         xc = config.CreateElement("Server");
         var tmp = config.CreateAttribute("URL");
         tmp.Value = cl.server;

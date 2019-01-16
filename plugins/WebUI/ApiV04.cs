@@ -74,7 +74,7 @@ namespace X13.WebUI {
             if(sa[1]!=null && sa[1].StartsWith("/export/")) {
               WebUI_Pl.ProcessPublish(sa[1], sa[2], _ses);
             } else {
-              X13.Log.Warning("{0}.publish({1}) - bad path",   (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, sa[1]);
+              X13.Log.Warning("{0}.publish({1}) - bad path",   _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
             }
           } else if(sa[0]=="S" && sa.Length==2) {
             if(sa[1]!=null && sa[1].StartsWith("/export/")) {
@@ -88,16 +88,16 @@ namespace X13.WebUI {
                 mask |= p[idx] == '#'?SubRec.SubMask.All:SubRec.SubMask.Chldren;
                 p = p.Substring(0, p.Length-2);
               } else {
-                X13.Log.Warning("{0}.subscribe({1}) - bad path", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, sa[1]);
+                X13.Log.Warning("{0}.subscribe({1}) - bad path", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
                 return;
               }
               if(Topic.root.Exist(p, out t)) {
                 _subscriptions.Add(t.Subscribe(mask, SubChanged));
               } else {
-                X13.Log.Warning("{0}.subscribe({1}) - path not exist", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, sa[1]);
+                X13.Log.Warning("{0}.subscribe({1}) - path not exist", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
               }
             } else {
-              X13.Log.Warning("{0}.subscribe({1}) - bad path", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, sa[1]);
+              X13.Log.Warning("{0}.subscribe({1}) - bad path", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
             }
           }
         }
@@ -115,7 +115,7 @@ namespace X13.WebUI {
       if(_ses!=null) {
         _ses.Close();
         if(WebUI_Pl.verbose) {
-          X13.Log.Info("{0} Disconnect: [{1}]{2}", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, e.Code, e.Reason);
+          X13.Log.Info("{0} Disconnect: [{1}]{2}", _ses.owner==null?"UNK":_ses.owner.name, e.Code, e.Reason);
         }
         _ses=null;
       }
@@ -158,7 +158,7 @@ namespace X13.WebUI {
         var he=System.Net.Dns.GetHostEntry(this.ip);
         _host=string.Format("{0}[{1}]", he.HostName, this.ip.ToString());
         var tmp=he.HostName.Split('.');
-        if(tmp!=null && tmp.Length>0 && !string.IsNullOrEmpty(tmp[0])) {
+        if(tmp.Length>0 && !string.IsNullOrEmpty(tmp[0])) {
           i=1;
           while(r.Exist(tmp[0]+"-"+i.ToString())) {
             i++;

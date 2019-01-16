@@ -9,6 +9,7 @@ using System.Collections.Concurrent;
 
 namespace X13.Repository {
   public sealed class Topic : IComparable<Topic> {
+    private object _sync;
     private static Repo _repo;
     public static Topic root { get; private set; }
 
@@ -25,8 +26,8 @@ namespace X13.Repository {
     private Topic _parent;
     private string _name;
     private string _path;
-    private ConcurrentDictionary<string, Topic> _children;
-    private List<SubRec> _subRecords;
+    private volatile ConcurrentDictionary<string, Topic> _children;
+    private volatile List<SubRec> _subRecords;
 
     private JSValue _state;
     private JSValue _manifest;
@@ -35,6 +36,7 @@ namespace X13.Repository {
     #endregion Member variables
 
     private Topic(Topic parent, string name, bool fill) {
+      _sync = new object();
       _name = name;
       _parent = parent;
       _state = JSValue.Undefined;
@@ -124,7 +126,7 @@ namespace X13.Repository {
       SubRec sb;
       bool exist = true;
       if(_subRecords == null) {
-        lock(this) {
+        lock(this._sync) {
           if(_subRecords == null) {
             var srs = new List<SubRec>();
             _subRecords = srs;  // PVS V3054. Potentially unsafe double-checked locking.

@@ -26,7 +26,7 @@ namespace X13.UI {
     }
 
     private InBase _owner;
-    public veSliderBool(InBase owner, JSC.JSValue type) {
+    public veSliderBool(InBase owner, JSC.JSValue type) { //-V3117
       _owner = owner;
       InitializeComponent();
       ValueChanged(_owner.value);

@@ -148,11 +148,11 @@ namespace X13.UI {
         case JSC.JSValueType.Double:
         case JSC.JSValueType.Integer: {
             double val = (double)model.State;
-            br = val > 0 ? (val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen) : (val == 0 ? brValueFalse : Brushes.DodgerBlue);
+            br = val > 0 ? (val == 1 ? Brushes.LawnGreen : Brushes.LightSeaGreen) : (val == 0 ? brValueFalse : Brushes.DodgerBlue); //-V3024
           }
           break;
         case JSC.JSValueType.Boolean:
-          br = (bool)model.State.Value ? Brushes.LawnGreen : brValueFalse;
+          br = (bool)model.State.Value ? Brushes.LawnGreen : brValueFalse; //-V3095
           break;
         default:
           br = Brushes.Black;
@@ -285,6 +285,10 @@ namespace X13.UI {
     }
 
     internal class loBinding : loItem {
+      private static bool EqD(double a, double b) {
+        return Math.Abs(a-b)<0.5;
+      }
+
       private Point _cur;
       private List<Point> _track = new List<Point>();
       private bool _mapped;
@@ -330,8 +334,8 @@ namespace X13.UI {
         }
         if(chLevel > 1 && _track.Any()
            && (chLevel == (_mapped ? 2 : 3)
-             || _track[0].X != (Input!=null?Input.Offset.X:_cur.X) || _track[0].Y != (Input!=null?Input.Offset.Y:_cur.Y) 
-             || _track[_track.Count - 1].X != (Output!=null?Output.Offset.X:_cur.X) || _track[_track.Count - 1].Y != (Output!=null?Output.Offset.Y:_cur.Y))) {
+             || !EqD(_track[0].X, (Input!=null?Input.Offset.X:_cur.X)) || !EqD(_track[0].Y, (Input!=null?Input.Offset.Y:_cur.Y)) 
+             || !EqD(_track[_track.Count - 1].X, (Output!=null?Output.Offset.X:_cur.X)) || !EqD(_track[_track.Count - 1].Y, (Output!=null?Output.Offset.Y:_cur.Y)))) {
           if(_mapped) {
             lv.MapRemove(this);
             _mapped = false;
@@ -359,7 +363,7 @@ namespace X13.UI {
         using(DrawingContext dc = this.RenderOpen()) {
           Pen pn = (_selected || Input == null) ? SelectionPen : new Pen(Input.brush, 2.0);
           for(int i = 0; i < _track.Count - 1; i++) {
-            if(_track[i].X == _track[i + 1].X && _track[i].Y == _track[i + 1].Y) {
+            if(EqD(_track[i].X, _track[i + 1].X) && EqD(_track[i].Y, _track[i + 1].Y)) {
               dc.DrawEllipse(Input.brush, null, _track[i], 3, 3);
             } else {
               dc.DrawLine(pn, _track[i], _track[i + 1]);
@@ -414,11 +418,11 @@ namespace X13.UI {
             newNode.X = parentNode.X + direction[i, 0];
             newNode.Y = parentNode.Y + direction[i, 1];
             int newG = this.GetWeigt(newNode.X, newNode.Y, i);
-            if(newG > 100 || newG == 0) {
+            if(newG > 100) {
               continue;
             }
             newG = Math.Max(newG, this.GetWeigt(newNode.PX, newNode.PY, direction[i, 2]));
-            if(newG > 100 || newG == 0) {
+            if(newG > 100) {
               continue;
             }
             newG += parentNode.G;
@@ -485,14 +489,14 @@ namespace X13.UI {
                 track.Insert(0, new Point(fNode.X * CELL_SIZE, fNode.Y * CELL_SIZE));
                 track.Insert(0, new Point(fNode.X * CELL_SIZE, fNode.Y * CELL_SIZE));
                 //Log.Info("{0}: {1}; {2}, {3} - {4}; {5}, {6}", this.ToString(), pIt, fNode.X, fNode.Y, cIt, fNode.PX, fNode.PY);
-              } else if(track[0].X != fNode.PX * CELL_SIZE && track[0].Y != fNode.PY * CELL_SIZE) {
+              } else if(!EqD(track[0].X, fNode.PX * CELL_SIZE) && !EqD(track[0].Y, fNode.PY * CELL_SIZE)) {
                 track.Insert(0, new Point(fNode.X * CELL_SIZE, fNode.Y * CELL_SIZE));
               }
               //Log.Info("{0}: {1}; {2}, {3} - {4}; {5}, {6}", this.ToString(), pIt, fNode.X, fNode.Y, cIt, fNode.PX, fNode.PY);
               pIt = cIt;
             }
           }
-          if(track[0].X != startX * CELL_SIZE || track[0].Y != startY * CELL_SIZE) {
+          if(!EqD(track[0].X, startX * CELL_SIZE) || !EqD(track[0].Y, startY * CELL_SIZE)) {
             track.Insert(0, new Point(startX * CELL_SIZE, startY * CELL_SIZE));
           }
           _mapped = true;
@@ -545,6 +549,8 @@ namespace X13.UI {
           return 0;
         }
       }
+
+      
       private struct PathFinderNode {
         public int F;
         public int G;
@@ -578,21 +584,27 @@ namespace X13.UI {
     }
 
     internal class loVariable : loElement {
+      public static loVariable Create(DTopic model, LogramView lv) {
+        var el = new loVariable(model, lv);
+        lv.AddVisual(el);
+        lv.AddVisual(el.Input);
+        lv.AddVisual(el.Output);
+        model.changed += el.ModelChanged;
+
+        return el;
+      }
+
       public loPin Input { get; private set; }
       public loPin Output { get; private set; }
 
       public readonly DTopic model;
 
-      public loVariable(DTopic model, LogramView lv)
+      private loVariable(DTopic model, LogramView lv)
         : base(lv) {
         this.model = model;
         this.Output = new loPin(this, model, false);
         this.Input = new loPin(this, model, true);
         Render(3);
-        lv.AddVisual(this);
-        lv.AddVisual(Input);
-        lv.AddVisual(Output);
-        model.changed += ModelChanged;
       }
 
       public override void SetLocation(Vector loc, bool save) {
@@ -635,7 +647,7 @@ namespace X13.UI {
         using(DrawingContext dc = this.RenderOpen()) {
           FormattedText ft = new FormattedText(model.name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LFont, CELL_SIZE * 0.7, Brushes.White);
           width = Math.Ceiling((ft.WidthIncludingTrailingWhitespace+11) / CELL_SIZE) * CELL_SIZE;
-          dc.DrawRoundedRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, 1, width - 1, CELL_SIZE - 3), CELL_SIZE / 4, CELL_SIZE / 4);
+          dc.DrawRoundedRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, 1, width - 1, CELL_SIZE - 3), CELL_SIZE / 4, CELL_SIZE / 4); //-V3041
           ft.MaxTextHeight = CELL_SIZE - 3;
           ft.MaxTextWidth = width - 11;
           dc.DrawText(ft, new Point(5, 1));
@@ -651,8 +663,8 @@ namespace X13.UI {
         }
 
         if(chLevel > 1) {
-          Output.SetLocation(new Vector(width, CELL_SIZE / 2), chLevel);
-          Input.SetLocation(new Vector(0, CELL_SIZE / 2), chLevel);
+          Output.SetLocation(new Vector(width, CELL_SIZE / 2), chLevel); //-V3041
+          Input.SetLocation(new Vector(0, CELL_SIZE / 2), chLevel); //-V3041
         }
       }
 
@@ -692,17 +704,25 @@ namespace X13.UI {
     }
 
     internal class loBlock : loElement {
+      public static loBlock Create(DTopic model, LogramView owner) {
+        var lb = new loBlock(model, owner);
+        owner.AddVisual(lb);
+        model.GetAsync(null).ContinueWith(lb.ModelLoaded, TaskScheduler.FromCurrentSynchronizationContext());
+
+        return lb;
+      }
+
       private const int MAX_PINS = 10;
       private readonly DTopic model;
       private List<loPin> _pins;
 
-      public loBlock(DTopic model, LogramView owner)
+
+
+      private loBlock(DTopic model, LogramView owner)
         : base(owner) {
         this.model = model;
         _pins = new List<loPin>();
         this.model.changed += model_changed;
-        lv.AddVisual(this);
-        this.model.GetAsync(null).ContinueWith(ModelLoaded, TaskScheduler.FromCurrentSynchronizationContext());
       }
 
       private void ModelLoaded(Task<DTopic> tt) {
@@ -833,7 +853,7 @@ namespace X13.UI {
         }
         double width = Math.Ceiling(Math.Max(head.WidthIncludingTrailingWhitespace, wi + wo) / CELL_SIZE) * CELL_SIZE;
         double height = Math.Max(cntIp * CELL_SIZE, cntOp * CELL_SIZE);
-        if(height == 0) {
+        if(height == 0) { //-V3024
           return;
         }
         if(chLevel == 3) {

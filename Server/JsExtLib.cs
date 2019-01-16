@@ -30,7 +30,7 @@ namespace X13 {
 
     #region XMLHttpRequest
     [JSI.RequireNewKeyword]
-    private class XMLHttpRequest {
+    private class XMLHttpRequest : IDisposable {
       private HttpWebRequest _req;
       private IAsyncResult _resp_w;
       private HttpWebResponse _resp;
@@ -121,6 +121,14 @@ namespace X13 {
           readyState = 4;
         }
       }
+      #region IDisposable Member
+      public void Dispose() {
+        var resp = Interlocked.Exchange(ref _resp, null);
+        if(resp!=null) {
+          resp.Close();
+        }
+      }
+      #endregion IDisposable Member
     }
     #endregion XMLHttpRequest
 
@@ -210,7 +218,7 @@ namespace X13 {
       var idx = (int)oi;
       TimerContainer t = _timer, tp = null;
       while(t != null) {
-        if(t.idx == idx) {
+        if((long)t.idx == (long)idx) {
           if(tp == null) {
             _timer = t.next;
           } else {
@@ -246,7 +254,7 @@ namespace X13 {
     #endregion Tick
 
     #region Log
-    private class Console : JSL.JSConsole {
+    private class Console : JSL.JSConsole, IDisposable {
       private LogWriter _debug, _info, _warning, _error;
 
       public Console() {
@@ -266,6 +274,13 @@ namespace X13 {
           return _info;
         }
         return _debug;
+      }
+
+      public void Dispose() {
+        _debug.Dispose();
+        _info.Dispose();
+        _warning.Dispose();
+        _error.Dispose();
       }
     }
 

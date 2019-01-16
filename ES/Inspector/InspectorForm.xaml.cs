@@ -57,6 +57,7 @@ namespace X13.UI {
 
     private DTopic _data;
     private ObservableCollection<InBase> _valueVC;
+    private bool _disableDrag;
 
     internal InspectorForm(DTopic data) {
       this._data = data;
@@ -76,7 +77,7 @@ namespace X13.UI {
           int min = 0, mid = -1, max = _valueVC.Count - 1, cr;
 
           while(min <= max) {
-            mid = ( min + max ) / 2;
+            mid = (min + max) / 2;
             cr = item.CompareTo(_valueVC[mid]);
             if(cr > 0) {
               min = mid + 1;
@@ -125,7 +126,7 @@ namespace X13.UI {
     private void ListViewItem_ContextMenuOpening(object sender, ContextMenuEventArgs e) {
       FrameworkElement gr;
       InBase d;
-      if(( gr = sender as FrameworkElement ) != null && ( d = gr.DataContext as InBase ) != null) {
+      if((gr = sender as FrameworkElement) != null && (d = gr.DataContext as InBase) != null) {
         gr.ContextMenu.ItemsSource = d.MenuItems(gr);
         return;
       }
@@ -142,7 +143,8 @@ namespace X13.UI {
       if(e.ClickCount==2) {
         FrameworkElement gr;
         InTopic it;
-        if(( gr = sender as FrameworkElement ) != null && ( it = gr.DataContext as InTopic ) != null && it.Owner!=null && it.Owner!=_data) {
+        if((gr = sender as FrameworkElement) != null && (it = gr.DataContext as InTopic) != null && it.Owner!=null && it.Owner!=_data) {
+          _disableDrag = true;
           App.Workspace.Open(it.Owner.fullPath);
           e.Handled = true;
         }
@@ -152,19 +154,21 @@ namespace X13.UI {
     private void ListViewItem_MouseLeave(object sender, MouseEventArgs e) {
       ListViewItem gr;
       InTopic it;
-      if(e.LeftButton == MouseButtonState.Pressed && ( gr = sender as ListViewItem ) != null && ( it = gr.DataContext as InTopic ) != null) {
+      if(_disableDrag) {
+        _disableDrag = false;
+      } else if(e.LeftButton == MouseButtonState.Pressed && (gr = sender as ListViewItem) != null && (it = gr.DataContext as InTopic) != null) {
         DragDrop.DoDragDrop(gr, it.Owner, DragDropEffects.Link);
       }
     }
 
     private void tbItemName_Loaded(object sender, RoutedEventArgs e) {
-      ( sender as TextBox ).SelectAll();
-      ( sender as TextBox ).Focus();
+      (sender as TextBox).SelectAll();
+      (sender as TextBox).Focus();
     }
     private void tbItemName_PreviewKeyDown(object sender, KeyEventArgs e) {
       TextBox tb;
       InBase tv;
-      if(( tb = sender as TextBox ) == null || ( tv = tb.DataContext as InBase ) == null) {
+      if((tb = sender as TextBox) == null || (tv = tb.DataContext as InBase) == null) {
         return;
       }
       if(e.Key == Key.Escape) {
@@ -178,7 +182,7 @@ namespace X13.UI {
     private void tbItemName_LostFocus(object sender, RoutedEventArgs e) {
       TextBox tb;
       InTopic tv;
-      if(( tb = sender as TextBox ) == null || ( tv = tb.DataContext as InTopic ) == null) {
+      if((tb = sender as TextBox) == null || (tv = tb.DataContext as InTopic) == null) {
         return;
       }
       tv.FinishNameEdit(tb.Text);

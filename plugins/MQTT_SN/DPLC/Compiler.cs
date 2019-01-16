@@ -122,7 +122,7 @@ namespace X13.DevicePLC {
               continue;
             }
             if(m.Addr == uint.MaxValue) {
-              m.Addr = global.AllocateMemory(uint.MaxValue, mLen) / ( mLen >= 32 ? 32 : mLen );
+              m.Addr = global.AllocateMemory(uint.MaxValue, mLen) / ( mLen >= 32 ? 32 : mLen ); //-V3064
             }
             if(p == global) {
               if(vName != null) {
@@ -370,8 +370,9 @@ namespace X13.DevicePLC {
         Log.Debug("{0}", msg);
         break;
       }
-      if(CMsg != null) {
-        CMsg(level, coords, message);
+      var cm = CMsg;
+      if(cm != null) {
+        cm(level, coords, message);
       }
     }
 
@@ -960,7 +961,7 @@ namespace X13.DevicePLC {
             _code = new byte[3];
           }
           _code[0] = (byte)cmd;
-          _code[1] = (byte)_param.pOut;
+          _code[1] = (byte)_param.pOut; //-V3125
           _code[2] = (byte)( _param.pOut >> 8 );
           break;
         default:
@@ -1003,7 +1004,7 @@ namespace X13.DevicePLC {
           }
           return sb.ToString();
         } else {
-          return null;
+          return string.Empty;
         }
       }
     }

@@ -19,7 +19,6 @@ namespace X13.Periphery {
     private Topic _verbose;
     private Topic _stat;
     private Random _rand;
-    private SubRec _subMs;
 
     internal List<IMsGate> _gates;
     internal List<MsDevice> _devs;
@@ -70,7 +69,6 @@ namespace X13.Periphery {
       //  man.SetState(manJ);
       //  _owner.SetField("version", "¤VR" + verC.ToString());
       //}
-      //_subMs = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "MQTT-SN.phy1_addr", SubFunc);
       _gates.Add(new MsGUdp(this));
       MsGSerial.Init(this);
     }
@@ -82,10 +80,6 @@ namespace X13.Periphery {
     }
 
     public void Stop() {
-      var sr = Interlocked.Exchange(ref _subMs, null);
-      if(sr != null) {
-        sr.Dispose();
-      }
       foreach(var g in _gates.ToArray()) {
         try {
           g.Stop();

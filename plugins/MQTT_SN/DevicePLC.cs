@@ -243,7 +243,7 @@ namespace X13.Periphery {
           _pub(new byte[] { (byte)Cmd.PlcStopReq });
           _st = 4;
         } else if(_st == 5) {
-          int len = _curChunk.Data.Length - _offset;
+          int len = _curChunk.Data.Length - _offset; //-V3125
           if(len > 32) {
             len = 32;
           }

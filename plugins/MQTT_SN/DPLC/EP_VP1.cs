@@ -445,7 +445,6 @@ namespace X13.DevicePLC {
           cvs[j].Statement.Visit(this);
         }
       }
-      j = 0;
       for(i = 0; i < node.Body.Length; i++) {
         node.Body[i].Visit(this);
       }

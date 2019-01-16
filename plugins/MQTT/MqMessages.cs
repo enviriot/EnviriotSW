@@ -92,7 +92,7 @@ namespace X13.MQTT {
     /// <param name="header">The first byte of the fixed header of the message</param>
     /// <param name="len">Variable header length</param>
     /// <param name="str">Input stream</param>
-    protected MqMessage(byte header, uint len, Stream str) {
+    protected MqMessage(byte header, uint len, Stream str) { //-V3117
       this.MsgType = (MessageType)((header & 0xf0) >> 4);
       this.Duplicate = (header & 0x08) != 0;
       this.QualityOfService = (QoS)((header & 0x06)>>1);

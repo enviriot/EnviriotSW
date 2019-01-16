@@ -23,7 +23,7 @@ namespace X13.UI {
     }
 
 
-    public veTopicReference(InBase owner, JSC.JSValue type) {
+    public veTopicReference(InBase owner, JSC.JSValue type) { //-V3117
       base.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
       base.Padding = new System.Windows.Thickness(10, 0, 10, 0);
       ValueChanged(owner.value);

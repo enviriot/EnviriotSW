@@ -63,7 +63,7 @@ namespace X13.UI {
     private void Publish() {
       if(!_owner.IsReadonly) {
         if(base.Value.HasValue) {
-          if(_oldValue != base.Value.Value) {
+          if(_oldValue != base.Value.Value) { //-V3024
             _owner.value = new JSL.Number(base.Value.Value);
           }
         } else {

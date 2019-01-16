@@ -98,7 +98,7 @@ namespace X13.EsBroker {
               if(o != null) {
                 Log.Write -= Log_Write;
                 Log.Info("{0} connection dropped", o.path);
-                o.Remove(o);
+                o.Remove(o); //-V3062
                 lock(_subscriptions) {
                   foreach(var sr in _subscriptions) {
                     sr.Item1.Dispose();
@@ -301,7 +301,7 @@ namespace X13.EsBroker {
     }
 
     private void TopicChanged(Perform p, SubRec sb) {
-      switch(p.art) {
+      switch(p.art) { //-V3002
       case Perform.Art.create:
         if(sb.setTopic != p.src) {
           base.SendArr(new JSL.Array { 4, p.src.path });

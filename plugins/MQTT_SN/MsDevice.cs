@@ -1238,7 +1238,7 @@ namespace X13.Periphery {
       _waitAck = false;
     }
 
-    internal class TopicInfo : IDisposable {
+    internal class TopicInfo : IDisposable { //-V3073
       public MsDevice owner;
       public Topic topic;
       public ushort TopicId;
