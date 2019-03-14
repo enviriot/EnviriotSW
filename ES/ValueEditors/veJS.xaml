@@ -3,10 +3,13 @@
              xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:x13ui="clr-namespace:X13.UI"
              mc:Ignorable="d" 
-             d:DesignHeight="50" d:DesignWidth="600" GotFocus="UserControl_GotFocus_1" LostFocus="UserControl_LostFocus">
-  <Border Name="boBorder">
-    <ae:TextEditor Name="textEditor" FontFamily="Consolas" FontSize="10pt" SyntaxHighlighting="JavaScript" MinWidth="180" TextOptions.TextFormattingMode="Display" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Background="Transparent" LayoutUpdated="textEditor_LayoutUpdated" />
+             d:DesignHeight="50" d:DesignWidth="600" GotFocus="UserControl_GotFocus_1" LostFocus="UserControl_LostFocus" Loaded="UserControl_Loaded">
+  <Border Name="grJsEditor" >
+    <ae:TextEditor Name="textEditor" FontFamily="Consolas" FontSize="10pt" SyntaxHighlighting="JavaScript" MinWidth="180"
+                   TextOptions.TextFormattingMode="Display" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" 
+                   Background="Transparent" LayoutUpdated="textEditor_LayoutUpdated" />
   </Border>
 </UserControl>

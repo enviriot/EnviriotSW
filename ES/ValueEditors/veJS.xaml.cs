@@ -26,6 +26,8 @@ namespace X13.UI {
     }
 
     private InBase _owner;
+    private GridViewColumn _c2;
+    private InspectorForm _inspForm;
 
     private veJS(InBase owner, JSC.JSValue manifest) {
       _owner = owner;
@@ -72,7 +74,33 @@ namespace X13.UI {
     }
 
     private void textEditor_LayoutUpdated(object sender, EventArgs e) {
-      textEditor.MaxHeight = textEditor.ExtentHeight > 180?180:double.PositiveInfinity;
+      double mh = _inspForm==null?180:(_inspForm.ActualHeight - 90);
+      textEditor.MaxHeight = textEditor.ExtentHeight > mh?mh:double.PositiveInfinity;
+    }
+    private void UserControl_Loaded(object sender, RoutedEventArgs e) {
+      try {
+        var v = FindParent<GridViewRowPresenter>(this);
+        _c2 = v.Columns[1];
+        _inspForm = FindParent<InspectorForm>(v);
+
+        grJsEditor.Width = _c2.ActualWidth;
+        v.LayoutUpdated+=RowPresenter_LayoutUpdated;
+      }
+      catch(Exception) {
+      }
+    }
+    private void RowPresenter_LayoutUpdated(object sender, EventArgs e) {
+      grJsEditor.Width = _c2.ActualWidth;
+    }
+    private T FindParent<T>(DependencyObject obj) where T : DependencyObject {
+      T r;
+      while(obj!=null){
+        obj = VisualTreeHelper.GetParent(obj);
+        if((r = obj as T) != null) {
+          return r;
+        }
+      }
+      return null;
     }
   }
 }
