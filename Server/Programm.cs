@@ -238,7 +238,7 @@ namespace X13 {
         }
         catch(Exception ex) {
           Log.Error("Init plugin {0} failure - {1}", pName, ex.ToString());
-          i.Value.enabled = false;
+          //i.Value.enabled = false;
         }
       }
     }

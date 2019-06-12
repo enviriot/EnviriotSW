@@ -16,10 +16,16 @@ namespace X13.PersistentStorage {
   [System.ComponentModel.Composition.ExportMetadata("name", "PersistentStorage")]
   internal class PersistentStoragePl : IPlugModul {
     #region internal Members
-    private LiteDatabase _db;
+    private const string DB_PATH = "../data/persist.ldb";
+
+    private LiteDatabase _db, _dbHist;
     private LiteCollection<BsonDocument> _objects, _states, _history;
     private Topic _owner;
     private System.Collections.Generic.SortedDictionary<Topic, Stash> _base;
+    private System.Collections.Concurrent.ConcurrentQueue<Perform> _q;
+    private Thread _tr;
+    private bool _terminate;
+    private AutoResetEvent _tick;
 
     private static string EscapFieldName(string fn) {
       if(string.IsNullOrEmpty(fn)) {
@@ -183,7 +189,106 @@ namespace X13.PersistentStorage {
       throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
     }
 
-    private void SubFunc(Perform p) {
+    private void ThreadM() {
+      Perform p;
+      DateTime backupDT;
+      Load();
+      _tick.Set();
+      backupDT = DateTime.Now.AddMinutes(30);
+
+      do {
+        _tick.WaitOne(500);
+        while(_q.TryDequeue(out p)) {
+          try {
+            Save(p);
+          }
+          catch(Exception ex) {
+            Log.Warning("PersistentStorage(" + (p==null?"null":p.ToString()) + ") - " + ex.ToString());
+          }
+        }
+        if(backupDT < DateTime.Now) {
+          backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.5);
+          Log.Info("Backup started");
+          try {
+            Backup();
+            Log.Info("Backup finished");
+          }
+          catch(Exception ex) {
+            Log.Warning("Backup failed - " + ex.ToString());
+          }
+        }
+      } while(!_terminate);
+    }
+    private void Load() {
+      bool exist = File.Exists(DB_PATH);
+      _base = new SortedDictionary<Topic, Stash>();
+      _db = new LiteDatabase(new ConnectionString("Filename=" + DB_PATH) { CacheSize = 500, Mode = LiteDB.FileMode.Exclusive });
+      if(exist && !_db.GetCollectionNames().Any(z => z == "objects")) {
+        exist = false;
+      }
+      _objects = _db.GetCollection<BsonDocument>("objects");
+      _states = _db.GetCollection<BsonDocument>("states");
+      if(!exist) {
+        _objects.EnsureIndex("p", true);
+      } else {
+        Topic t;
+        Stash a;
+        JSC.JSValue jTmp;
+        bool saved;
+        string sTmp;
+        Version vRepo, vDB;
+        List<string> oldT = new List<string>();
+        List<ObjectId> oldId = new List<ObjectId>();
+
+        foreach(var obj in _objects.FindAll().OrderBy(z => z["p"])) {
+          sTmp = obj["p"].AsString;
+          if(oldT.Any(z => sTmp.StartsWith(z))) {
+            oldId.Add(obj["_id"]);
+            continue;  // skip load, old version
+          }
+          t = Topic.I.Get(Topic.root, sTmp, true, _owner, false, false);
+          a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
+          // check version
+          {
+            jTmp = t.GetField("version");
+
+            if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out vRepo)) {
+              jTmp = a.jm["version"];
+              if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out vDB) || vRepo > vDB) {
+                oldT.Add(t.path + "/");
+                oldId.Add(a.id);
+                continue; // skip load, old version
+              }
+            }
+          }
+          // check attribute
+          JSC.JSValue attr;
+          if(a.jm == null || a.jm.ValueType != JSC.JSValueType.Object || a.jm.Value == null || !(attr = a.jm["attr"]).IsNumber) {
+            saved = false;
+          } else {
+            saved = ((int)attr & (int)Topic.Attribute.Saved) == (int)Topic.Attribute.DB;
+          }
+
+          if(a.bs != null) {
+            if(saved) {
+              a.js = Bs2Js(a.bs["v"]);
+            } else {
+              _states.Delete(obj["_id"]);
+              a.bs = null;
+            }
+          }
+          _base.Add(t, a);
+          Topic.I.Fill(t, a.js, a.jm, _owner);
+        }
+        oldT.Clear();
+        foreach(var id in oldId) {
+          _states.Delete(id);
+          _objects.Delete(id);
+        }
+        oldId.Clear();
+      }
+    }
+    private void Save(Perform p) {
       if(p.art == Perform.Art.subscribe || p.art == Perform.Art.subAck || p.art == Perform.Art.setField || p.art == Perform.Art.setState || p.art == Perform.Art.unsubscribe || p.prim == _owner) {
         return;
       }
@@ -247,11 +352,42 @@ namespace X13.PersistentStorage {
         }
       }
     }
+    private void Backup() {
+      var db = Interlocked.Exchange(ref _db, null);
+      if(db != null) {
+        _objects = null;
+        _states = null;
+        db.Dispose();
+      }
+      File.Copy(DB_PATH, Path.GetDirectoryName(DB_PATH) + "\\" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak");
+      _db = new LiteDatabase(new ConnectionString("Filename=" + DB_PATH) { CacheSize = 500, Mode = LiteDB.FileMode.Exclusive });
+      _db.Shrink();
+      _objects = _db.GetCollection<BsonDocument>("objects");
+      _states = _db.GetCollection<BsonDocument>("states");
+
+      try {
+        DateTime now = DateTime.Now, fdt;
+        foreach(string f in Directory.GetFiles(Path.GetDirectoryName(DB_PATH), "*.bak", SearchOption.TopDirectoryOnly)) {
+          fdt = File.GetLastWriteTime(f);
+          if(fdt.AddDays(7) > now || (fdt.DayOfWeek == DayOfWeek.Thursday && fdt.Hour==3 && (fdt.AddMonths(1) > now || (fdt.AddMonths(6) > now && fdt.Day < 8)))) {
+            continue;
+          }
+          File.Delete(f);
+        }
+      }
+      catch(System.IO.IOException) {
+      }
+
+    }
+
+    private void SubFunc(Perform p) {
+      _q.Enqueue(p);
+    }
     #endregion internal Members
 
     public PersistentStoragePl() {
-      Log.History = History;
-      Log.Write += Log_Write;
+      _tick = new AutoResetEvent(false);
+      _q = new System.Collections.Concurrent.ConcurrentQueue<Perform>();
     }
 
     #region History
@@ -282,84 +418,43 @@ namespace X13.PersistentStorage {
       _owner = Topic.root.Get("/$YS/PersistentStorage", true);
     }
     public void Start() {
-      bool exist = File.Exists("../data/persist.ldb");
-      _base = new SortedDictionary<Topic, Stash>();
-      _db = new LiteDatabase(new ConnectionString("Filename=../data/persist.ldb") { CacheSize = 500, Mode = LiteDB.FileMode.Exclusive });
-      if(exist && !_db.GetCollectionNames().Any(z => z == "objects")) {
-        exist = false;
-      }
-      _objects = _db.GetCollection<BsonDocument>("objects");
-      _states = _db.GetCollection<BsonDocument>("states");
-      _history = _db.GetCollection<BsonDocument>("history");
+      _terminate = false;
+      bool exist = File.Exists("../data/history.ldb");
+      _dbHist = new LiteDatabase(new ConnectionString("Filename=../data/history.ldb") { CacheSize = 100, Mode = LiteDB.FileMode.Exclusive });
+      _history = _dbHist.GetCollection<BsonDocument>("history");
       if(!exist) {
-        _objects.EnsureIndex("p", true);
         _history.EnsureIndex("t");
-      } else {
-        Topic t;
-        Stash a;
-        JSC.JSValue jTmp;
-        bool saved;
-        string sTmp;
-        Version vRepo, vDB;
-        List<string> oldT = new List<string>();
-        List<ObjectId> oldId = new List<ObjectId>();
-
-        foreach(var obj in _objects.FindAll().OrderBy(z => z["p"])) {
-          sTmp = obj["p"].AsString;
-          if(oldT.Any(z => sTmp.StartsWith(z))) {
-            oldId.Add(obj["_id"]);
-            continue;  // skip load, old version
-          }
-          t = Topic.I.Get(Topic.root, sTmp, true, _owner, false, false);
-          a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
-          // check version
-          {
-            jTmp = t.GetField("version");
-
-            if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out vRepo)) {
-              jTmp = a.jm["version"];
-              if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out vDB) || vRepo > vDB) {
-                oldT.Add(t.path + "/");
-                oldId.Add(a.id);
-                continue; // skip load, old version
-              }
-            }
-          }
-          // check attribute
-          JSC.JSValue attr;
-          if(a.jm == null || a.jm.ValueType != JSC.JSValueType.Object || a.jm.Value == null || !(attr = a.jm["attr"]).IsNumber) {
-            saved = false;
-          } else {
-            saved = ((int)attr & (int)Topic.Attribute.Saved) == (int)Topic.Attribute.DB;
-          }
-
-          if(a.bs != null) {
-            if(saved) {
-              a.js = Bs2Js(a.bs["v"]);
-            } else {
-              _states.Delete(obj["_id"]);
-              a.bs = null;
-            }
-          }
-          _base.Add(t, a);
-          Topic.I.Fill(t, a.js, a.jm, _owner);
-        }
-        oldT.Clear();
-        foreach(var id in oldId) {
-          _states.Delete(id);
-          _objects.Delete(id);
-        }
-        oldId.Clear();
       }
+      Log.History = History;
+      Log.Write += Log_Write;
+
+      _tr = new Thread(new ThreadStart(ThreadM));
+      _tr.IsBackground = true;
+      _tr.Priority = ThreadPriority.BelowNormal;
+      _tr.Start();
+      _tick.WaitOne();  // wait load
       Topic.Subscribe(SubFunc);
     }
     public void Tick() {
+      if(_q.Any()) {
+        _tick.Set();
+      }
     }
     public void Stop() {
+      _terminate = true;
+      _tick.Set();
+      if(!_tr.Join(5000)) {
+        _tr.Abort();
+      }
       var db = Interlocked.Exchange(ref _db, null);
       if(db != null) {
         db.Dispose();
       }
+      var dbh = Interlocked.Exchange(ref _dbHist, null);
+      if(dbh != null) {
+        dbh.Dispose();
+      }
+      _tick.Dispose();
     }
 
     public bool enabled {
