@@ -162,12 +162,21 @@ namespace X13 {
         App.Workspace.Open(cl.ToString() + "/");
       }
     }
+    private void miCatatlog_Click(object sender, RoutedEventArgs e) {
+      Client cl;
+      var doc =App.Workspace.ActiveDocument as UI.UIDocument;
+      if(doc == null || doc.data == null || (cl = doc.data.Connection) == null || cl.Status!=ClientState.Ready) {
+        return;
+      }
+      App.Workspace.Open(cl.ToString(), "catatlog");
+    }
     private void miOpenLog(object sender, RoutedEventArgs e) {
       App.Workspace.Open("file://local/", "log");
     }
     private void miImport_Click(object sender, RoutedEventArgs e) {
       Client cl;
-      if(App.Workspace.ActiveDocument == null || App.Workspace.ActiveDocument.data == null || (cl = App.Workspace.ActiveDocument.data.Connection) == null) {
+      var doc =App.Workspace.ActiveDocument as UI.UIDocument;
+      if(doc == null || doc.data == null || (cl = doc.data.Connection) == null || cl.Status!=ClientState.Ready) {
         return;
       }
 
@@ -194,7 +203,8 @@ namespace X13 {
     }
     private void miExport_Click(object sender, RoutedEventArgs e) {
       DTopic t;
-      if(App.Workspace.ActiveDocument == null ||  (t = App.Workspace.ActiveDocument.data) == null) {
+      var doc =App.Workspace.ActiveDocument as UI.UIDocument;
+      if(doc == null || (t = doc.data) == null) {
         return;
       }
       var dlg = new Microsoft.Win32.SaveFileDialog();
@@ -215,5 +225,6 @@ namespace X13 {
         App.Workspace.Close(doc);
       }
     }
+
   }
 }

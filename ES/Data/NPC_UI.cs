@@ -16,6 +16,15 @@ namespace X13.Data {
         pc(this, new PropertyChangedEventArgs(propertyName));
       }
     }
+    protected void SetVal<T>(ref T v, T val, [System.Runtime.CompilerServices.CallerMemberName] string propertyName = "") where T : IEquatable<T> {
+      if(v==null?val!=null:!v.Equals(val)) {
+        v=val;
+        var pc = PropertyChanged;
+        if(pc != null) {
+          pc(this, new PropertyChangedEventArgs(propertyName));
+        }
+      }
+    }
     #endregion INotifyPropertyChanged Members
   }
 }

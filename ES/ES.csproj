@@ -149,6 +149,9 @@
     <Compile Include="UI\uiLog.xaml.cs">
       <DependentUpon>uiLog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\UiCatalog.xaml.cs">
+      <DependentUpon>UiCatalog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="ValueEditors\veByteArray.cs" />
     <Compile Include="ValueEditors\veEnum.cs" />
     <Compile Include="ValueEditors\veHexadecimal.cs" />
@@ -205,6 +208,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\uiLog.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\UiCatalog.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

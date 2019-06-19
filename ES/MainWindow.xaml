@@ -112,7 +112,7 @@
                         <Grid.ColumnDefinitions>
                           <ColumnDefinition/>
                           <ColumnDefinition Width="35"/>
-                        </Grid.ColumnDefinitions>                        
+                        </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Grid.Row="0" Text="{Binding alias}" FontWeight="Bold" FontSize="14" Margin="0,0,0,2" />
                         <TextBlock Grid.Column="0" Grid.Row="1" Text="{Binding}" Margin="0,2,0,0" />
                         <Button Grid.Column="1" Grid.Row="0" Grid.RowSpan="2" Padding="10,0,0,0" BorderThickness="0" IsEnabled="False">
@@ -148,6 +148,8 @@
                   </Style>
                 </MenuItem.ItemContainerStyle>
               </MenuItem>
+              <MenuItem Name="miCatatlog" Header="Catatlog" Click="miCatatlog_Click" />
+              <Separator />
               <MenuItem Name="miImport" Header="Import" Click="miImport_Click" />
               <MenuItem Name="miExport" Header="Export" Click="miExport_Click" />
               <Separator />

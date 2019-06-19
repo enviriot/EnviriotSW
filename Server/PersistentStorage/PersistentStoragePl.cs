@@ -192,9 +192,13 @@ namespace X13.PersistentStorage {
     private void ThreadM() {
       Perform p;
       DateTime backupDT;
+      string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
+      File.Copy(DB_PATH, fb);
+      Log.Info("backup {0} created", fb);
+
       Load();
       _tick.Set();
-      backupDT = DateTime.Now.AddMinutes(30);
+      backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.3);
 
       do {
         _tick.WaitOne(500);
@@ -207,7 +211,7 @@ namespace X13.PersistentStorage {
           }
         }
         if(backupDT < DateTime.Now) {
-          backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.5);
+          backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.3);
           Log.Info("Backup started");
           try {
             Backup();
@@ -359,7 +363,9 @@ namespace X13.PersistentStorage {
         _states = null;
         db.Dispose();
       }
-      File.Copy(DB_PATH, Path.GetDirectoryName(DB_PATH) + "\\" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak");
+      string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
+      File.Copy(DB_PATH, fb);
+      Log.Info("backup {0} created", fb);
       _db = new LiteDatabase(new ConnectionString("Filename=" + DB_PATH) { CacheSize = 500, Mode = LiteDB.FileMode.Exclusive });
       _db.Shrink();
       _objects = _db.GetCollection<BsonDocument>("objects");
@@ -367,12 +373,13 @@ namespace X13.PersistentStorage {
 
       try {
         DateTime now = DateTime.Now, fdt;
-        foreach(string f in Directory.GetFiles(Path.GetDirectoryName(DB_PATH), "*.bak", SearchOption.TopDirectoryOnly)) {
+        foreach(string f in Directory.GetFiles(Path.GetDirectoryName(DB_PATH), "??????_??????.bak", SearchOption.TopDirectoryOnly)) {
           fdt = File.GetLastWriteTime(f);
           if(fdt.AddDays(7) > now || (fdt.DayOfWeek == DayOfWeek.Thursday && fdt.Hour==3 && (fdt.AddMonths(1) > now || (fdt.AddMonths(6) > now && fdt.Day < 8)))) {
             continue;
           }
           File.Delete(f);
+          Log.Info("backup {0} deleted", Path.GetFileName(f));
         }
       }
       catch(System.IO.IOException) {

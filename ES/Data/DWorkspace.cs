@@ -14,7 +14,7 @@ using System.Windows.Controls;
 namespace X13.Data {
   internal class DWorkspace : NPC_UI {
     private string _cfgPath;
-    private UIDocument _activeDocument;
+    private BaseWindow _activeDocument;
     private ObservableCollection<Client> _clients;
 
     public XmlDocument config;
@@ -23,7 +23,7 @@ namespace X13.Data {
     public DWorkspace(string cfgPath) {
       this._cfgPath = cfgPath;
       _clients = new ObservableCollection<Client>();
-      Files = new ObservableCollection<UIDocument>();
+      Files = new ObservableCollection<BaseWindow>();
       Tools = new ObservableCollection<BaseWindow>();
       _activeDocument = null;
 
@@ -95,8 +95,16 @@ namespace X13.Data {
           Tools.Add(ui);
         }
         return ui;
+      } else if(view == "catatlog") {
+        var catalog = Files.OfType<UI.UiCatalog>().FirstOrDefault(z => z != null && z.ContentId == id);
+        if(catalog == null) {
+          catalog = new UI.UiCatalog(path);
+          Files.Add(catalog);
+        }
+        ActiveDocument = catalog;
+        return catalog;
       } else {
-        var doc = Files.FirstOrDefault(z => z != null && ((z.data != null && z.data.fullPath == path) || z.ContentId == id));
+        var doc = Files.OfType<UI.UIDocument>().FirstOrDefault(z => z != null && ((z.data != null && z.data.fullPath == path) || z.ContentId == id));
         if(doc==null){
           doc = new UI.UIDocument(path, view);
           Files.Add(doc);
@@ -122,10 +130,14 @@ namespace X13.Data {
     }
 
     public void Close(BaseWindow w) {
-      UIDocument doc= w as UIDocument;
-      if(doc != null) {
+      UIDocument doc;
+      UiCatalog catatlog;
+      if((doc = w as UIDocument) != null) {
         Files.Remove(doc);
         doc.Dispose();
+      } else if((catatlog = w as UiCatalog) != null){
+        Files.Remove(catatlog);
+        catatlog.Dispose();
       } else {
         Tools.Remove(w);
       }
@@ -167,7 +179,7 @@ namespace X13.Data {
     }
 
 
-    public UIDocument ActiveDocument {
+    public BaseWindow ActiveDocument {
       get { return _activeDocument; }
       set {
         if(_activeDocument != value) {
@@ -176,7 +188,7 @@ namespace X13.Data {
         }
       }
     }
-    public ObservableCollection<UIDocument> Files { get; private set; }
+    public ObservableCollection<BaseWindow> Files { get; private set; }
     public ObservableCollection<BaseWindow> Tools { get; private set; }
   }
 }
