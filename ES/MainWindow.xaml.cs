@@ -198,8 +198,6 @@ namespace X13 {
       catch(Exception ex) {
         Log.Warning("Import({0}) - {1}", dlg.FileName, ex.Message);
       }
-
-
     }
     private void miExport_Click(object sender, RoutedEventArgs e) {
       DTopic t;

@@ -100,16 +100,51 @@
               </DataTemplate>
             </GridViewColumn.CellTemplate>
           </GridViewColumn>
-          <GridViewColumn Header="value">
+          <GridViewColumn Header="info" DisplayMemberBinding="{Binding Hint}">
             <GridViewColumn.Width>
               <MultiBinding Converter="{StaticResource ColumnSpringConverter}">
                 <Binding ElementName="lvItems" Path="ActualWidth" Mode="OneWay"/>
                 <Binding ElementName="gcItemName" Path="ActualWidth" Mode="OneWay"/>
+                <Binding ElementName="gcAction" Path="ActualWidth" Mode="OneWay"/>
               </MultiBinding>
             </GridViewColumn.Width>
+          </GridViewColumn>
+          <GridViewColumn x:Name="gcAction" Width="240" Header="">
             <GridViewColumn.CellTemplate>
               <DataTemplate>
-                <Grid />
+                <Grid Visibility="{Binding ActionButtonsVisible}" MinWidth="120" Width="{Binding ElementName=gcAction, Path=ActualWidth}">
+                 
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="15"/>
+                  </Grid.ColumnDefinitions>
+                  <Button Grid.Column="0" IsEnabled="{Binding DownlodEnabled}" Background="LightGreen" Click="buDownload_Click">
+                    <Button.Content>
+                      <Grid>
+                        <Grid.RowDefinitions>
+                          <RowDefinition/>
+                          <RowDefinition/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Download" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Row="1" Text="{Binding SrcVer}" HorizontalAlignment="Center" />
+                      </Grid>
+                    </Button.Content>
+                  </Button>
+                  <Button Grid.Column="2" IsEnabled="{Binding RemoveEnabled}" Background="Orange">
+                    <Button.Content>
+                      <Grid>
+                        <Grid.RowDefinitions>
+                          <RowDefinition/>
+                          <RowDefinition/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Remove" HorizontalAlignment="Center" />
+                        <TextBlock Grid.Row="1" Text="{Binding ActVer}" HorizontalAlignment="Center" />
+                      </Grid>
+                    </Button.Content>
+                  </Button>
+                </Grid>
               </DataTemplate>
             </GridViewColumn.CellTemplate>
           </GridViewColumn>

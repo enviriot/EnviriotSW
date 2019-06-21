@@ -51,7 +51,7 @@ namespace X13.UI {
           _serverUrl = SERVER_URL;
           catPath = await catRoot.CreateAsync("uri", _serverUrl, manifest);
         }
-        _root = new CatalogItem(_serverUrl, CollectionChange);
+        _root = new CatalogItem(_serverUrl, root, CollectionChange);
       }
     }
     private void CollectionChange(CatalogItem item, bool visible) {
@@ -98,48 +98,138 @@ namespace X13.UI {
     public void Dispose() {
     }
     #endregion IDisposable Member
+
+    private void buDownload_Click(object sender, RoutedEventArgs e) {
+      var fe = sender as FrameworkElement;
+      CatalogItem item;
+      if(fe!=null && (item = fe.DataContext as CatalogItem)!=null){
+        item.Download();
+      }
+    }
   }
   public class CatalogItem : Data.NPC_UI, IComparable<CatalogItem> {
     private CatalogItem _parent;
-    private string _name, _path, _url;
-    private bool _isExpanded, _isVisible, _loaded;
+    private Data.DTopic _rootT, _checkTopic;
+    private string _name, _path, _url, _hint, _src, _checkPath;
+    private bool _isExpanded, _isVisible, _loaded, _downloadEnable, _removeEnable;
+    private Version _srcVersion, _actVersion;
     private List<CatalogItem> _items;
     private Action<CatalogItem, bool> _collFunc;
 
-    public CatalogItem(string serverUrl, Action<CatalogItem, bool> collFunc) {
+    public CatalogItem(string serverUrl, Data.DTopic root, Action<CatalogItem, bool> collFunc) {
       _loaded = false;
       _collFunc = collFunc;
       _url = serverUrl;
+      _rootT = root;
       _path = "/";
       _name = new Uri(_url).DnsSafeHost;
-      LevelPadding = 5;
+      _srcVersion = new Version(0, 0);
+      _actVersion = new Version(0, 0);
+      ActionButtonsVisible = Visibility.Collapsed;
       IsVisible = true;
       IsExpanded = true;
+
     }
     public CatalogItem(CatalogItem parent, JSC.JSValue inf) {
       _loaded = false;
       _parent = parent;
       _collFunc = _parent._collFunc;
+      _rootT = _parent._rootT;
       _name = inf["name"].Value as string;
-      var ch = inf["children"].Value as string;
-      if(string.IsNullOrEmpty(ch)) {
+      _hint = inf["hint"].Value as string;
+      var tmp_s = inf["children"].Value as string;
+      if(string.IsNullOrEmpty(tmp_s)) {
         _url = null;
-      } else if(ch.StartsWith("http")) {
-        _url = ch;
-      } else if(ch.StartsWith("/")) {
-        _url = (new Uri(_parent._url)).GetLeftPart(UriPartial.Authority) + ch + "/";
+      } else if(tmp_s.StartsWith("http")) {
+        _url = tmp_s;
+      } else if(tmp_s.StartsWith("/")) {
+        _url = (new Uri(_parent._url)).GetLeftPart(UriPartial.Authority) + tmp_s + "/";
       } else {
-        _url = _parent._url + ch + "/";
+        _url = _parent._url + tmp_s + "/";
       }
       _path = _parent._path+_name+"/";
+      _src = inf["src"].Value as string;
+      _checkPath = inf["path"].Value as string;
+      tmp_s = inf["ver"].Value as string;
+      _actVersion = new Version(0, 0);
+      if(string.IsNullOrWhiteSpace(tmp_s) || !Version.TryParse(tmp_s, out _srcVersion)) {
+        _srcVersion = new Version(0, 0);
+        ActionButtonsVisible = Visibility.Collapsed;
+      } else if(_src!=null && _checkPath!=null) {
+        _rootT.GetAsync(_checkPath).ContinueWith(CheckTopicLoaded);
+        ActionButtonsVisible = Visibility.Visible;
+      }
       _isExpanded = false;
-      LevelPadding = _parent.LevelPadding + 10;
       _items = null;
       IsVisible = _parent._isVisible && _parent._isExpanded;
     }
 
-    public string Name { get { return _name; } private set { base.SetVal(ref _name, value); } }
-    public double LevelPadding { get; protected set; }
+    private void CheckTopicLoaded(Task<Data.DTopic> tt) {
+      if(!tt.IsFaulted && tt.IsCompleted && tt.Result != null) {
+        _checkTopic = tt.Result;
+        Refresh();
+        _checkTopic.changed+=_checkTopic_changed;
+      } else {
+        DownlodEnabled = true;
+      }
+    }
+    private void _checkTopic_changed(Data.DTopic.Art art, Data.DTopic t) {
+      if(art == Data.DTopic.Art.type) {
+        Refresh();
+      }
+    }
+    private void Refresh() {
+      RemoveEnabled = true;
+      var ver = _checkTopic.Manifest["version"].Value as string;
+      if(ver==null || !ver.StartsWith("¤VR") || !Version.TryParse(ver.Substring(3), out _actVersion)) {
+        DownlodEnabled = true;
+      } else {
+        base.PropertyChangedReise("ActVer");
+        DownlodEnabled = _actVersion < _srcVersion;
+      }
+    }
+
+    public async void Download() {
+      string srcUrl;
+      if(string.IsNullOrEmpty(_src)) {
+        srcUrl = null;
+      } else if(_src.StartsWith("http")) {
+        srcUrl = _src;
+      } else if(_src.StartsWith("/")) {
+        srcUrl = (new Uri(_parent._url)).GetLeftPart(UriPartial.Authority) + _src;
+      } else {
+        srcUrl = _parent._url + _src;
+      }
+      if(srcUrl == null) {
+        return;
+      }
+      try {
+        var txt = await UiCatalog.GetHttpString(srcUrl);
+        var body = Encoding.UTF8.GetBytes(txt);
+        var payload = Convert.ToBase64String(body);
+
+        _rootT.Connection.SendCmd(16, srcUrl, payload);
+        if(_checkTopic==null) {
+          await Task.Delay(300);
+          var tt = _rootT.GetAsync(_checkPath).ContinueWith(CheckTopicLoaded);
+        }
+        Log.Info("Import({0})", srcUrl);
+      }
+      catch(Exception ex) {
+        Log.Warning("Import({0}) - {1}", srcUrl, ex.Message);
+      }
+    }
+
+
+    public string Name { get { return _name; } }
+    public string Hint { get { return _hint; } }
+    public string SrcVer { get { return _srcVersion.Minor>0?_srcVersion.ToString(4):string.Empty; } }
+    public string ActVer { get { return _actVersion.Minor>0?_actVersion.ToString(4):string.Empty; } }
+    public bool DownlodEnabled { get { return _downloadEnable; } set { base.SetVal(ref _downloadEnable, value); } }
+    public bool RemoveEnabled { get { return _removeEnable; } set { base.SetVal(ref _removeEnable, value); } }
+    public Visibility ActionButtonsVisible { get; private set; }
+
+    public double LevelPadding { get { return _parent==null?0:(_parent.LevelPadding+10);} }
     public bool IsExpanded { 
       get { 
         return _isExpanded; 
@@ -192,5 +282,6 @@ namespace X13.UI {
       return this._path.CompareTo(o._path);
     }
     #endregion IComparable<CatalogItem> Members
+
   }
 }

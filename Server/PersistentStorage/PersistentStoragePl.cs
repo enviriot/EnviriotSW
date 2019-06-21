@@ -192,10 +192,11 @@ namespace X13.PersistentStorage {
     private void ThreadM() {
       Perform p;
       DateTime backupDT;
-      string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
-      File.Copy(DB_PATH, fb);
-      Log.Info("backup {0} created", fb);
-
+      if(File.Exists(DB_PATH)) {
+        string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
+        File.Copy(DB_PATH, fb);
+        Log.Info("backup {0} created", fb);
+      }
       Load();
       _tick.Set();
       backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.3);
