@@ -132,7 +132,7 @@
                       </Grid>
                     </Button.Content>
                   </Button>
-                  <Button Grid.Column="2" IsEnabled="{Binding RemoveEnabled}" Background="Orange">
+                  <Button Grid.Column="2" IsEnabled="{Binding RemoveEnabled}" Background="Orange" Click="buRemove_Click">
                     <Button.Content>
                       <Grid>
                         <Grid.RowDefinitions>

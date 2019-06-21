@@ -106,6 +106,14 @@ namespace X13.UI {
         item.Download();
       }
     }
+
+    private void buRemove_Click(object sender, RoutedEventArgs e) {
+      var fe = sender as FrameworkElement;
+      CatalogItem item;
+      if(fe!=null && (item = fe.DataContext as CatalogItem)!=null){
+        item.Remove();
+      }
+    }
   }
   public class CatalogItem : Data.NPC_UI, IComparable<CatalogItem> {
     private CatalogItem _parent;
@@ -176,6 +184,11 @@ namespace X13.UI {
     private void _checkTopic_changed(Data.DTopic.Art art, Data.DTopic t) {
       if(art == Data.DTopic.Art.type) {
         Refresh();
+      } else if(art == Data.DTopic.Art.RemoveChild && t == _checkTopic) {
+        _checkTopic = null;
+        _actVersion = new Version(0, 0);
+        RemoveEnabled = false;
+        base.PropertyChangedReise("ActVer");
       }
     }
     private void Refresh() {
@@ -217,6 +230,11 @@ namespace X13.UI {
       }
       catch(Exception ex) {
         Log.Warning("Import({0}) - {1}", srcUrl, ex.Message);
+      }
+    }
+    public void Remove() {
+      if(_checkTopic!=null) {
+        _checkTopic.Delete();
       }
     }
 
@@ -282,6 +300,7 @@ namespace X13.UI {
       return this._path.CompareTo(o._path);
     }
     #endregion IComparable<CatalogItem> Members
+
 
   }
 }
