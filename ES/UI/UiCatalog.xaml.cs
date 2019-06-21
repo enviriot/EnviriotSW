@@ -283,12 +283,17 @@ namespace X13.UI {
     }
 
     private async void LoadChildren() {
-      _loaded = true;
-      var json = await UiCatalog.GetHttpString(_url + "index.json");
-      var arr = JSL.JSON.parse(json);
-      _items = new List<CatalogItem>();
-      foreach(var kv in arr) {
-        _items.Add(new CatalogItem(this, kv.Value));
+      try {
+        _loaded = true;
+        var json = await UiCatalog.GetHttpString(_url + "index.json");
+        var arr = JSL.JSON.parse(json);
+        _items = new List<CatalogItem>();
+        foreach(var kv in arr) {
+          _items.Add(new CatalogItem(this, kv.Value));
+        }
+      }
+      catch(Exception ex) {
+        Log.Warning("{0}.Load - {1}", _path, ex.Message);
       }
     }
 
