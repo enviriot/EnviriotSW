@@ -67,13 +67,13 @@ namespace X13.DevicePLC {
 
         var module = new Module(code, CompilerMessageCallback, Options.SuppressConstantPropogation | Options.SuppressUselessExpressionsElimination);
 
-        if(module.Root != null) {
+        if(module.Script.Root != null) {
           var p1 = new EP_VP1(this);
-          module.Root.Visit(p1);
+          module.Script.Root.Visit(p1);
 
           _sp.Clear();
           var p2 = new EP_VP2(this);
-          module.Root.Visit(p2);
+          module.Script.Root.Visit(p2);
         }
 
         varList = new SortedList<string, string>();

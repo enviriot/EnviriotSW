@@ -16,32 +16,51 @@ using JSL = NiL.JS.BaseLibrary;
 namespace X13.UI {
   internal class InTopic : InBase {
     private InTopic _parent;
-    private DTopic _owner;
+    private DTopic _owner, _current;
     private bool _populated;
     private JSC.JSValue _createTag;
 
-    public InTopic(DTopic owner, InTopic parent, Action<InBase, bool> collFunc) {
+    public InTopic(DTopic owner, InTopic parent, Action<InBase, bool> collFunc, DTopic cur = null) {
       _owner = owner;
       _parent = parent;
       _collFunc = collFunc;
+      _current = cur;
       IsGroupHeader = _parent == null;
       _owner.changed += _owner_PropertyChanged;
       if(IsGroupHeader) {
+        name = owner.Connection.alias;
         _manifest = _owner.Manifest;  // if(IsGroupHeader) don't use UpdateType(...)
-        name = "children";
         icon = App.GetIcon("children");
         editor = null;
         levelPadding = 1;
-        _populated = true;
-        if(_owner.children != null) {
-          InsertItems(_owner.children);
-        }
       } else {
         name = _owner.name;
         base.UpdateType(_owner.Manifest);
         levelPadding = _parent.levelPadding + 8;
       }
-      base._isExpanded = IsGroupHeader && _owner.children != null && _owner.children.Any();
+
+      // Expand node
+      bool exp = false;
+      if(IsGroupHeader && _owner.children != null && _owner.children.Any()) {
+        exp = true;
+      } else if(_current!=_owner){  // not open self
+        var c = _current;
+        while(c!=null) {
+          if(c==_owner) {
+            exp = true;
+            break;
+          }
+          c = c.parent;
+        }
+      }
+      if(exp) {
+        _populated = true;
+        if(_owner.children != null) {
+          InsertItems(_owner.children);
+        }
+      }
+      base._isExpanded = exp;
+      
       base._isVisible = IsGroupHeader || (_parent._isVisible && _parent._isExpanded);
     }
 
@@ -156,7 +175,7 @@ namespace X13.UI {
           _collFunc(tmp, false);
           tmp.RefreshOwner(tt);
         } else {
-          tmp = new InTopic(tt, this, _collFunc);
+          tmp = new InTopic(tt, this, _collFunc, _current);
         }
         int i;
         for(i = 0; i < _items.Count; i++) {

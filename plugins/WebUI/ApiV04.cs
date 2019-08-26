@@ -178,7 +178,9 @@ namespace X13.WebUI {
     private Topic _owner;
     public readonly string id;
     public readonly System.Net.IPAddress ip;
+#pragma warning disable 649
     public string userName;
+#pragma warning restore 649
     public Topic owner { get { return _owner; } }
     public void Close() {
       sessions.RemoveAll(z => !z.IsAlive || z.Target==this);

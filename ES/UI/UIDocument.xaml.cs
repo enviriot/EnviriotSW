@@ -41,6 +41,9 @@ namespace X13.UI {
         RequestData(url);
       }
     }
+    private void BaseWindow_Loaded(object sender, RoutedEventArgs e) {
+      tbShowTree.IsChecked = true;
+    }
 
     private DTopic _data;
     private BitmapSource _icon;
@@ -125,10 +128,23 @@ namespace X13.UI {
         }
 
         PropertyChangedReise("connected");
+        ccTree.Content = new InspectorForm(_data, false);
         UpdContent();
       }
       this.Focus();
       this.Cursor = Cursors.Arrow;
+    }
+
+    private void tbShowTree_Checked(object sender, RoutedEventArgs e) {
+      if(tbShowTree.IsChecked==true) {
+        ccTree.Visibility = Visibility.Visible;
+        gsSplinter.Visibility = Visibility.Visible;
+        grContent.ColumnDefinitions[0].Width = new GridLength(grContent.ActualWidth/5);
+      } else {
+        ccTree.Visibility = Visibility.Collapsed;
+        gsSplinter.Visibility = Visibility.Collapsed;
+        grContent.ColumnDefinitions[0].Width = new GridLength(0);
+      }
     }
 
     private void DataChanged(DTopic.Art a, DTopic t) {
@@ -179,7 +195,7 @@ namespace X13.UI {
     }
     private void buChangeView_Click(object sender, RoutedEventArgs e) {
       string nv = _view;
-      if(( ccMain.Content as InspectorForm ) != null && _altView!=null) {
+      if((ccMain.Content as InspectorForm) != null && _altView!=null) {
         nv = _altView;
       } else {
         nv = "IN";
@@ -190,17 +206,17 @@ namespace X13.UI {
       }
     }
     private void UpdContent() {
-      ContentId = _path + ( _view == null ? string.Empty : ( "?view=" + _view ) );
+      ContentId = _path + (_view == null ? string.Empty : ("?view=" + _view));
 
       if(_view == "IN") {
-        if(( ccMain.Content as InspectorForm ) == null) {
+        if((ccMain.Content as InspectorForm) == null) {
           if(contentForm != null) {
             contentForm.Dispose();
           }
-          contentForm = new InspectorForm(_data);
+          contentForm = new InspectorForm(_data, true);
         }
       } else if(_view == "LO") {
-        if(( ccMain.Content as LogramForm ) == null) {
+        if((ccMain.Content as LogramForm) == null) {
           if(contentForm != null) {
             contentForm.Dispose();
           }

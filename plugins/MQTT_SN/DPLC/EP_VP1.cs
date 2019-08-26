@@ -18,28 +18,28 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP1 Visit(Addition node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(BitwiseConjunction node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(ArrayDefinition node) {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(Assignment node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Call node) {
       for(int i = node.Arguments.Length - 1; i >= 0; i--) {
         node.Arguments[i].Visit(this);
       }
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(ClassDefinition node) {
@@ -65,7 +65,7 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP1 Visit(Decrement node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Delete node) {
@@ -75,13 +75,13 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(Division node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Equal node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Expression node) {
@@ -118,7 +118,7 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(Increment node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(InstanceOf node) {
@@ -128,51 +128,51 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(Less node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(LessOrEqual node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(LogicalConjunction node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(LogicalNegation node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(LogicalDisjunction node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Modulo node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(More node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(MoreOrEqual node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Multiplication node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Negation node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(New node) {
@@ -182,42 +182,42 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(BitwiseNegation node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(NotEqual node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(NumberAddition node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(NumberLess node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(NumberLessOrEqual node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(NumberMore node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(NumberMoreOrEqual node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(BitwiseDisjunction node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(RegExpExpression node) {
@@ -249,7 +249,7 @@ namespace X13.DevicePLC {
         throw new NotSupportedException(node.Source.ToString() + "." + node.FieldName.ToString() + " as FieldName");
       }
 
-      if((ca = node.Value as Call) != null && (f = ca.Childs[0] as Variable) != null) {
+      if((ca = node.Value as Call) != null && (f = ca.Children[0] as Variable) != null) {
         EP_Type t;
         switch(f.Name) {
         case "Boolean":
@@ -294,35 +294,35 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP1 Visit(SignedShiftLeft node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(SignedShiftRight node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(StrictEqual node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(StrictNotEqual node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(StringConcatenation node) {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(Substract node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Conditional node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       node.Threads[0].Visit(this);
       node.Threads[1].Visit(this);
       return this;
@@ -346,13 +346,13 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(UnsignedShiftRight node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(BitwiseExclusiveDisjunction node) {
-      node.Childs[1].Visit(this);
-      node.Childs[0].Visit(this);
+      node.Children[1].Visit(this);
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(Yield node) {
@@ -466,16 +466,16 @@ namespace X13.DevicePLC {
           m = _compiler.DefineMerker(v.Descriptor);
           continue;
         }
-        if((a1 = node.Initializers[i] as Assignment) != null && (v = a1.Childs[0] as Variable) != null) {
+        if((a1 = node.Initializers[i] as Assignment) != null && (v = a1.Children[0] as Variable) != null) {
           if(v.Descriptor.LexicalScope) {
             _compiler.DefineMerker(v.Descriptor);  // Local
-            a1.Childs[1].Visit(this);
+            a1.Children[1].Visit(this);
             continue;
           } else {
             Call ca;
             Variable f;
             Constant c;
-            if((ca = a1.Childs[1] as Call) != null && (f = ca.Childs[0] as Variable) != null) {
+            if((ca = a1.Children[1] as Call) != null && (f = ca.Children[0] as Variable) != null) {
               EP_Type t;
               switch(f.Name) {
               case "Boolean":
@@ -564,7 +564,7 @@ namespace X13.DevicePLC {
               } else {
                 m = _compiler.DefineMerker(v.Descriptor, t);
               }
-            } else if((c = a1.Childs[1] as Constant) != null && c.Value != null && c.Value.ValueType == JSValueType.Boolean) {
+            } else if((c = a1.Children[1] as Constant) != null && c.Value != null && c.Value.ValueType == JSValueType.Boolean) {
               m = _compiler.DefineMerker(v.Descriptor, EP_Type.BOOL);
             } else {
               m = _compiler.DefineMerker(v.Descriptor, EP_Type.SINT32);

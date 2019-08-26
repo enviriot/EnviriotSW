@@ -59,12 +59,16 @@ namespace X13.UI {
     private ObservableCollection<InBase> _valueVC;
     private bool _disableDrag;
 
-    internal InspectorForm(DTopic data) {
-      this._data = data;
+    internal InspectorForm(DTopic data, bool showContent) {
       _valueVC = new ObservableCollection<InBase>();
-      CollectionChange(new InValue(data, CollectionChange), true);
-      CollectionChange(new InManifest(data, CollectionChange), true);
-      CollectionChange(new InTopic(data, null, CollectionChange), true);
+      if(showContent) {
+        this._data = data;
+        CollectionChange(new InValue(_data, CollectionChange), true);
+        CollectionChange(new InManifest(_data, CollectionChange), true);
+      } else {
+        this._data = data.Connection.root;
+        CollectionChange(new InTopic(_data, null, CollectionChange, data), true);
+      }
       InitializeComponent();
       lvValue.ItemsSource = _valueVC;
     }

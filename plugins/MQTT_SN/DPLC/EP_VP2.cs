@@ -18,7 +18,7 @@ namespace X13.DevicePLC {
       throw new NotSupportedException("Visit(<" + node.GetType().Name + ">" + node.ToString() + ")");
     }
     protected override EP_VP2 Visit(Addition node) {
-      AddCommon(node, node.Childs[0] as Expression, node.Childs[1] as Expression);
+      AddCommon(node, node.Children[0] as Expression, node.Children[1] as Expression);
       return this;
     }
     protected override EP_VP2 Visit(BitwiseConjunction node) {
@@ -31,9 +31,9 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(Assignment node) {
       EP_Compiler.Instruction d2 = new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true };
       _compiler._sp.Push(d2);
-      node.Childs[1].Visit(this);
+      node.Children[1].Visit(this);
       _compiler.cur.AddInst(d2);
-      Store(node, node.Childs[0] as Expression);
+      Store(node, node.Children[0] as Expression);
       return this;
     }
     protected override EP_VP2 Visit(Call node) {
@@ -44,7 +44,7 @@ namespace X13.DevicePLC {
       EP_Compiler.Instruction d;
       EP_Compiler.Scope sc;
 
-      if((p = node.Childs[0] as Property) != null
+      if((p = node.Children[0] as Property) != null
         && (((f = p.Source as Variable) != null && (m = _compiler.GetMerker(f.Descriptor)) != null && (sc = m.scope) != null) || (p.Source is This && (sc = _compiler.cur) != null))
         && (c = p.FieldName as Constant) != null && c.Value != null && c.Value.ValueType == JSValueType.String) {
         EP_Compiler.Merker mf;
@@ -53,7 +53,7 @@ namespace X13.DevicePLC {
           return this;
         }
       }
-      f = node.Childs[0] as Variable;
+      f = node.Children[0] as Variable;
       if(f != null) {
         if(node.CallMode == CallMode.Regular) {
           m = _compiler.GetMerker(f.Descriptor);
@@ -77,7 +77,7 @@ namespace X13.DevicePLC {
             return this;
           }
         } else {
-          throw new NotSupportedException("Call(" + node.Childs[0].ToString() + ") Mode: " + node.CallMode.ToString());
+          throw new NotSupportedException("Call(" + node.Children[0].ToString() + ") Mode: " + node.CallMode.ToString());
         }
       }
 
@@ -85,7 +85,7 @@ namespace X13.DevicePLC {
         node.Arguments[i].Visit(this);
       }
       _compiler.cur.AddInst(EP_InstCode.LDI_0, 0, 1);
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       _compiler.cur.AddInst(EP_InstCode.SCALL, 1);
 
       for(int i = node.Arguments.Length - 1; i >= 0; i--) {
@@ -125,7 +125,7 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(Decrement node) {
       Expression a;
       EP_Compiler.Instruction d2;
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       _compiler._sp.Pop();
       if(node.Type == DecrimentType.Predecriment) {
         d2 = new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true };
@@ -137,7 +137,7 @@ namespace X13.DevicePLC {
         _compiler.cur.AddInst(EP_InstCode.DEC, 0, 1);
       }
 
-      if((a = node.Childs[0] as Expression) != null) {
+      if((a = node.Children[0] as Expression) != null) {
         Store(node, a);
       } else {
         throw new NotImplementedException();
@@ -324,7 +324,7 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(Increment node) {
       Expression a;
       EP_Compiler.Instruction d2;
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       _compiler._sp.Pop();
       if(node.Type == IncrimentType.Preincriment) {
         d2 = new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true };
@@ -336,7 +336,7 @@ namespace X13.DevicePLC {
         _compiler.cur.AddInst(EP_InstCode.INC, 0, 1);
       }
 
-      if((a = node.Childs[0] as Expression) != null) {
+      if((a = node.Children[0] as Expression) != null) {
         Store(node, a);
       } else {
         throw new NotImplementedException();
@@ -359,28 +359,28 @@ namespace X13.DevicePLC {
     }
     protected override EP_VP2 Visit(LogicalConjunction node) {
       EP_Compiler.Instruction j1, j2;
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       _compiler.cur.AddInst(EP_InstCode.DUP, 0, 1);
       _compiler.cur.AddInst(j1 = new EP_Compiler.Instruction(EP_InstCode.JZ), 1);
       _compiler.cur.AddInst(EP_InstCode.DROP, 1, 0);
-      node.Childs[1].Visit(this);
+      node.Children[1].Visit(this);
       _compiler.cur.AddInst(j2 = new EP_Compiler.Instruction(EP_InstCode.LABEL));
       j1._ref = j2;
       return this;
     }
     protected override EP_VP2 Visit(LogicalNegation node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       _compiler.cur.AddInst(EP_InstCode.CZE, 1, 1);
       return this;
 
     }
     protected override EP_VP2 Visit(LogicalDisjunction node) {
       EP_Compiler.Instruction j1, j2;
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       _compiler.cur.AddInst(EP_InstCode.DUP, 0, 1);
       _compiler.cur.AddInst(j1 = new EP_Compiler.Instruction(EP_InstCode.JNZ), 1, 0);
       _compiler.cur.AddInst(EP_InstCode.DROP, 1, 0);
-      node.Childs[1].Visit(this);
+      node.Children[1].Visit(this);
       _compiler.cur.AddInst(j2 = new EP_Compiler.Instruction(EP_InstCode.LABEL));
       j1._ref = j2;
       return this;
@@ -402,7 +402,7 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP2 Visit(Negation node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       _compiler.cur.AddInst(EP_InstCode.NEG, 1, 1);
       return this;
     }
@@ -413,7 +413,7 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP2 Visit(BitwiseNegation node) {
-      node.Childs[0].Visit(this);
+      node.Children[0].Visit(this);
       _compiler.cur.AddInst(EP_InstCode.NOT, 1, 1);
       return this;
     }
@@ -422,7 +422,7 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP2 Visit(NumberAddition node) {
-      AddCommon(node, node.Childs[0] as Expression, node.Childs[1] as Expression);
+      AddCommon(node, node.Children[0] as Expression, node.Children[1] as Expression);
       return this;
     }
     protected override EP_VP2 Visit(NumberLess node) {
@@ -457,7 +457,7 @@ namespace X13.DevicePLC {
       if((fd = node.Value as FunctionDefinition) == null) {
         EP_Compiler.Instruction d2 = new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true };
         _compiler._sp.Push(d2);
-        if((ca = node.Value as Call) != null && (f = ca.Childs[0] as Variable) != null && (new string[] { "Boolean", "Int8", "UInt8", "Int16", "UInt16", "Int32" }).Any(z => z == f.Name)) {
+        if((ca = node.Value as Call) != null && (f = ca.Children[0] as Variable) != null && (new string[] { "Boolean", "Int8", "UInt8", "Int16", "UInt16", "Int32" }).Any(z => z == f.Name)) {
           if(ca.Arguments.Length > 0) {
             ca.Arguments[0].Visit(this);
           } else {
@@ -480,21 +480,21 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP2 Visit(SignedShiftLeft node) {
-      var c = node.Childs[1] as Constant;
+      var c = node.Children[1] as Constant;
       if(c == null) {
         throw new NotImplementedException(node.ToString());
       } else {
-        node.Childs[0].Visit(this);
+        node.Children[0].Visit(this);
         _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LSL, null, c), 1, 1);
       }
       return this;
     }
     protected override EP_VP2 Visit(SignedShiftRight node) {
-      var c = node.Childs[1] as Constant;
+      var c = node.Children[1] as Constant;
       if(c == null) {
         throw new NotImplementedException(node.ToString());
       } else {
-        node.Childs[0].Visit(this);
+        node.Children[0].Visit(this);
         _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.ASR, null, c), 1, 1);
       }
       return this;
@@ -516,8 +516,8 @@ namespace X13.DevicePLC {
     }
     protected override EP_VP2 Visit(Conditional node) {
       EP_Compiler.Instruction j1, j2, j3;
-      node.Childs[0].Visit(this);
-      j1 = new EP_Compiler.Instruction(EP_InstCode.JZ, null, node.Childs[0]);
+      node.Children[0].Visit(this);
+      j1 = new EP_Compiler.Instruction(EP_InstCode.JZ, null, node.Children[0]);
       _compiler.cur.AddInst(j1);
       _compiler._sp.Pop();
       node.Threads[0].Visit(this);
@@ -558,11 +558,11 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP2 Visit(UnsignedShiftRight node) {
-      var c = node.Childs[1] as Constant;
+      var c = node.Children[1] as Constant;
       if(c == null) {
         throw new NotImplementedException(node.ToString());
       } else {
-        node.Childs[0].Visit(this);
+        node.Children[0].Visit(this);
         _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LSR, null, c), 1, 1);
       }
       return this;
@@ -613,9 +613,9 @@ namespace X13.DevicePLC {
         if(m.vd.Initializer != null) {
           m.vd.Initializer.Visit(this);
         } else if(m.type == EP_Type.LOCAL) {
-          var a2 = inList.FirstOrDefault(z => (z.Childs[0] as Variable) != null && (z.Childs[0] as Variable).Descriptor == m.vd);
+          var a2 = inList.FirstOrDefault(z => (z.Children[0] as Variable) != null && (z.Children[0] as Variable).Descriptor == m.vd);
           if(a2 != null) {
-            a2.Childs[1].Visit(this);
+            a2.Children[1].Visit(this);
             m.initialized = true;
             _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LABEL, null, a2));
           } else {
@@ -816,7 +816,7 @@ namespace X13.DevicePLC {
         if(node.Initializers[i] is Variable) {
           continue;
         }
-        if((a1 = node.Initializers[i] as Assignment) != null && (v = a1.Childs[0] as Variable) != null) {
+        if((a1 = node.Initializers[i] as Assignment) != null && (v = a1.Children[0] as Variable) != null) {
           Call ca;
           Variable f;
           m = _compiler.GetMerker(v.Descriptor);
@@ -826,7 +826,7 @@ namespace X13.DevicePLC {
           if(m.initialized) {
             continue;
           }
-          if((ca = a1.Childs[1] as Call) != null && ca.CallMode == CallMode.Construct && (f = ca.Childs[0] as Variable) != null) {
+          if((ca = a1.Children[1] as Call) != null && ca.CallMode == CallMode.Construct && (f = ca.Children[0] as Variable) != null) {
             if((new string[] { "Boolean", "Int8", "UInt8", "Int16", "UInt16", "Int32" }).Any(z => z == f.Name)) {
               mf = null;
             } else if((new string[] { "Uint8Array", "Uint16Array", "Int8Array", "Int16Array", "Int32Array"}).Any(z => z == f.Name)) {
@@ -1096,8 +1096,8 @@ namespace X13.DevicePLC {
       }
     }
     private void Arg2Op(Expression node, EP_InstCode c) {
-      node.Childs[0].Visit(this);
-      node.Childs[1].Visit(this);
+      node.Children[0].Visit(this);
+      node.Children[1].Visit(this);
       _compiler.cur.AddInst(c, 2, 1);
     }
     private void SafeCodeBlock(CodeNode node, int sp = -1) {
