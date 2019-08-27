@@ -159,6 +159,10 @@ namespace X13.Repository {
     public void SetState(JSValue val, Topic prim = null) {
       var c = Perform.Create(this, val, prim);
       _repo.DoCmd(c, false);
+      if(val!=null && val.ValueType==JSValueType.Date) {
+        c = Perform.Create(this, "editor", "Date", prim);
+        _repo.DoCmd(c, false);
+      }
     }
 
     public JSValue GetField(string fPath) {

@@ -14,12 +14,11 @@
         <i n='String' s='{"default":"","manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
       </i>
       <i n='Enum' m='{"attr":65}'>
-        <i n='DPlcStatus' s='[{"text":"unknown","BG":"LightGray"},{"text":"Run","BG":"MediumAquamarine"},{"text":"Stop","BG":"Tomato"}]'  m='{"attr":71}'  ver="0.4.1709.20010" />
         <i n='TwiStatus' s='[{"text":"Offline","BG":"Tomato"},{"text":"Online","BG":"MediumAquamarine"}]'  m='{"attr":71}' ver="0.4.1709.20010" />
       </i>
       <i n='Ext' m='{"attr":65}' >
         <i n='Connection' s='{"Children":{"default":{}},"Fields":{"Address":{"attr":3},"Dns":{"attr":3},"Port":{"attr":3}},"icon":"EsConnection"}' m='{"attr":69}' ver='0.4.1711.19004' />
-        <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Build","text":"Build programm"},{"name":"MQTT_SN.PLC.Run","text":"Run"},{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"Enum","enum":"DPlcStatus"}'  m='{"attr":69}' ver='0.4.1711.19004' />
+        <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Build","text":"Build programm"},{"name":"MQTT_SN.PLC.Run","text":"Run"},{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"DevicePLC","icon":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAACxMAAAsTAQCanBgAAAA5UExURQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAm/wCU/wD/kP8AAMNYIEMAAAAOdFJOUwAZGh9AaHJ7gMvc5ebo3msmjQAAAGBJREFUGNONj1sOgCAMBFcRKCAv739YCykYjYnOT5PJpt0C35jdABszRDwiQMwQNllQYqZJHMilZIKNpgumCR41SOglkVqCHjvk0HVFxOyhvFe9aZCmulZ9+2F1bvnxKk6PwgS5I8stGwAAAABJRU5ErkJggg=="}'  m='{"attr":69}' ver='0.4.1908.27006' />
         <i n='Manifest' s='{"mi":{"attr":{"editor":"Attribute","attr":1},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"uri":""},"mi":{"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","editor":"JS","hint":"value converter for input"},"convOut":{"default":"","editor":"JS","hint":"value converter for output"},"suppressed":{"default":true}}},"type":{"default":""}}}' m='{"attr":69}' ver='0.4.1712.6005' />
         <i n='LBDescr' s='{"Fields":{"Children":{},"src":{"default":"","editor":"JS","manifest":{"attr":68}},"type":{"default":""}}}' m='{"attr":69}' ver='0.4.1711.20005' />
         <i n='TwiDev' s='{"Fields":{"Children":{},"src":{"default":"","editor":"JS","manifest":{"attr":68}},"type":{"default":""}}}' m='{"attr":69}' ver='0.4.1711.19004' />

@@ -1,0 +1,47 @@
+﻿<UserControl x:Class="X13.UI.veDevicePLC"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="300" d:DesignWidth="800" Loaded="UserControl_Loaded" GotFocus="UserControl_GotFocus">
+    <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="30"/>
+      <RowDefinition/>
+    </Grid.RowDefinitions>
+    <Grid>
+      <Grid.Resources>
+        <Style TargetType="Button">
+          <Setter Property="Margin" Value="10, 5" />
+          <Setter Property="Background" Value="White" />
+          <Setter Property="Width" Value="70" />
+          <Setter Property="BorderBrush" Value="Black" />
+          <Setter Property="BorderThickness" Value="1,0" />
+        </Style>
+      </Grid.Resources>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="20"/>
+        <ColumnDefinition Width="auto"/>
+        <ColumnDefinition Width="auto"/>
+        <ColumnDefinition Width="auto"/>
+        <ColumnDefinition Width="auto"/>
+        <ColumnDefinition Width="auto"/>
+        <ColumnDefinition/>
+      </Grid.ColumnDefinitions>
+      <Image Name="imState" Grid.Column="0" Width="16" Height="16" Source="/ES;component/Images/log_deb.png" />
+      <TextBlock Name="tbState" Grid.Column="1" Text="unknown" VerticalAlignment="Center" Margin="10,0,0,0" />
+      <Button Name="buCompile" Grid.Column="2" Content="Build" Click="buCompile_Click" />
+      <Button Name="buExecute" Grid.Column="3" Content="Run" Click="buExecute_Click" />
+      <Button Name="buStart" Grid.Column="4" Content="Start" Click="buStart_Click" />
+      <Button Name="buStop" Grid.Column="5" Content="Stop" Click="buStop_Click" />
+    </Grid>
+    <Border Grid.Row="1" Name="grJsEditor" Padding="0" Background="White" BorderBrush="Black" BorderThickness="1,0" Margin="0,5,0,0" >
+      <ae:TextEditor Name="textEditor" FontFamily="Consolas" FontSize="10pt" SyntaxHighlighting="JavaScript" MinWidth="180"
+                   TextOptions.TextFormattingMode="Display" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" 
+                   Background="Transparent" LayoutUpdated="textEditor_LayoutUpdated" LostFocus="textEditor_LostFocus" />
+    </Border>
+
+  </Grid>
+</UserControl>

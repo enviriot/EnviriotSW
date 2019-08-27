@@ -23,6 +23,7 @@ namespace X13.UI {
     public InTopic(DTopic owner, InTopic parent, Action<InBase, bool> collFunc, DTopic cur = null) {
       _owner = owner;
       _parent = parent;
+      base._compactView = true;
       _collFunc = collFunc;
       _current = cur;
       IsGroupHeader = _parent == null;
@@ -66,6 +67,7 @@ namespace X13.UI {
 
     private InTopic(JSC.JSValue tag, InTopic parent) {
       _parent = parent;
+      base._compactView = true;
       _collFunc = parent._collFunc;
       name = string.Empty;
       IsEdited = true;

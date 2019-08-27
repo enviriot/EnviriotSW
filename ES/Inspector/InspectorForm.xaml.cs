@@ -29,6 +29,7 @@ namespace X13.UI {
       _editors["Boolean"] = veSliderBool.Create;
       _editors["ByteArray"] = veByteArray.Create;
       _editors["Date"] = veDateTimePicker.Create;
+      _editors["DevicePLC"] = veDevicePLC.Create;
       _editors["Double"] = veDouble.Create;
       _editors["Editor"] = veEditor.Create;
       _editors["Enum"] = veEnum.Create;

@@ -95,7 +95,9 @@ namespace X13 {
       LoadIcon("String", "ty_str.png");
       LoadIcon("Time", "ed_time.png");
       LoadIcon("Version", "ty_version.png");
-
+      LoadIcon("log_deb", "log_deb.png");
+      LoadIcon("log_ok", "log_ok.png");
+      LoadIcon("log_err", "log_err.png");
       mainWindow = new MainWindow(cfgPath);
       _msgProcessBusy = 1;
       mainWindow.Show();

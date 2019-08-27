@@ -26,6 +26,7 @@ namespace X13.UI {
       _signature = System.Threading.Interlocked.Increment(ref SIGNATURE_CNT);
       _data = data;
       _parent = null;
+      base._compactView = false;
       base._collFunc = collFunc;
       name = "Manifest";
       _path = string.Empty;
@@ -49,6 +50,7 @@ namespace X13.UI {
     private InManifest(InManifest parent, string name, JSC.JSValue value, JSC.JSValue type) {
       _signature = System.Threading.Interlocked.Increment(ref SIGNATURE_CNT);
       this._parent = parent;
+      base._compactView = false;
       this._data = _parent._data;
       base._collFunc = _parent._collFunc;
       base.name = name;
@@ -63,6 +65,7 @@ namespace X13.UI {
     private InManifest(JSC.JSValue manifest, InManifest parent) {
       _signature = System.Threading.Interlocked.Increment(ref SIGNATURE_CNT);
       this._parent = parent;
+      base._compactView = false;
       base._manifest = manifest;
       base._collFunc = parent._collFunc;
       base.name = string.Empty;

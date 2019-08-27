@@ -22,6 +22,7 @@ namespace X13.UI {
     protected volatile List<InBase> _items;
     protected Action<InBase, bool> _collFunc;
     protected object _sync = new object();
+    protected bool _compactView;
 
     public double levelPadding { get; protected set; }
     public virtual bool IsExpanded {
@@ -64,6 +65,7 @@ namespace X13.UI {
     public IValueEditor editor { get; protected set; }
     public bool IsReadonly { get; private set; }
     public bool IsRequired { get; private set; }
+    public bool CompactView { get { return _compactView; } }
 
     public abstract JSC.JSValue value { get; set; }
     public abstract ObservableCollection<Control> MenuItems(FrameworkElement src);

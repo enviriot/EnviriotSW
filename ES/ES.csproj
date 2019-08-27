@@ -153,6 +153,9 @@
       <DependentUpon>UiCatalog.xaml</DependentUpon>
     </Compile>
     <Compile Include="ValueEditors\veByteArray.cs" />
+    <Compile Include="ValueEditors\veDevicePLC.xaml.cs">
+      <DependentUpon>veDevicePLC.xaml</DependentUpon>
+    </Compile>
     <Compile Include="ValueEditors\veEnum.cs" />
     <Compile Include="ValueEditors\veHexadecimal.cs" />
     <Compile Include="ValueEditors\veEditor.cs" />
@@ -216,6 +219,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="ValueEditors\veAttribute.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="ValueEditors\veDevicePLC.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

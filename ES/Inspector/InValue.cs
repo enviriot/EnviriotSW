@@ -22,6 +22,7 @@ namespace X13.UI {
     public InValue(DTopic data, Action<InBase, bool> collFunc) {
       _data = data;
       _parent = null;
+      base._compactView = false;
       _collFunc = collFunc;
       name = "state";
       _path = string.Empty;
@@ -39,6 +40,7 @@ namespace X13.UI {
     private InValue(DTopic data, InValue parent, string name, JSC.JSValue value, JSC.JSValue type, Action<InBase, bool> collFunc) {
       _data = data;
       _parent = parent;
+      base._compactView = false;
       _collFunc = collFunc;
       _path = _parent._path + "." + name;
       base.name = name;
@@ -54,6 +56,7 @@ namespace X13.UI {
     }
     private InValue(JSC.JSValue manifest, InValue parent) {
       this._parent = parent;
+      base._compactView = false;
       base._manifest = manifest;
       base._collFunc = parent._collFunc;
       base.name = string.Empty;
@@ -62,6 +65,8 @@ namespace X13.UI {
       base._items = new List<InBase>();
       base.IsEdited = true;
     }
+
+    public DTopic Data { get { return _data; } }
 
     private void UpdateData(JSC.JSValue val) {
       bool o_hc = HasChildren;

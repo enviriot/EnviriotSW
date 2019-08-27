@@ -214,7 +214,7 @@ namespace X13.Periphery {
     public void Tick() {
       byte[] buf;
 
-      if(_st == 0) {
+      if(_st == 0 || _st == 9) {
         return;
       } else {
         if(_prg == null) {

@@ -19,6 +19,12 @@ namespace X13.UI {
     public veDateTimePicker(InBase owner, JSC.JSValue manifest) {
       _owner = owner;
       base.TabIndex = 5;
+      if(_owner.CompactView) {
+        base.Format = Xceed.Wpf.Toolkit.DateTimeFormat.Custom;
+        base.FormatString = "g";
+      } else {
+        base.Format = Xceed.Wpf.Toolkit.DateTimeFormat.FullDateTime;
+      }
       base.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
       base.Padding = new System.Windows.Thickness(10, 0, 10, 0);
       base.BorderThickness = new System.Windows.Thickness(1,0,1,0);

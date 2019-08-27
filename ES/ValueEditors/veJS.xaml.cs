@@ -74,7 +74,7 @@ namespace X13.UI {
     }
 
     private void textEditor_LayoutUpdated(object sender, EventArgs e) {
-      double mh = _inspForm==null?180:(_inspForm.ActualHeight - 90);
+      double mh = _owner.CompactView?90:(_inspForm==null?180:(_inspForm.ActualHeight - 90));
       textEditor.MaxHeight = textEditor.ExtentHeight > mh?mh:double.PositiveInfinity;
     }
     private void UserControl_Loaded(object sender, RoutedEventArgs e) {

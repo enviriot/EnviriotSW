@@ -135,7 +135,7 @@
         <ColumnDefinition Width="4*" />
       </Grid.ColumnDefinitions>
       <ContentControl Name="ccTree" BorderThickness="1" Margin="0,0,0,0" Focusable="False" />
-      <GridSplitter Name="gsSplinter" Grid.Column="1" Width="4" ShowsPreview="True" HorizontalAlignment="Center" HorizontalContentAlignment="Center" VerticalContentAlignment="Stretch" BorderBrush="Black" BorderThickness="1,0" Background="White" />
+      <GridSplitter Name="gsSplinter" Grid.Column="1" Width="4" ShowsPreview="True" HorizontalAlignment="Center" HorizontalContentAlignment="Center" VerticalContentAlignment="Stretch" BorderThickness="0,0" Background="#00FFFFFF" />
       <ContentControl Name="ccMain" Grid.Column="2" Margin="0,0,0,0" Focusable="False" TabIndex="3" Content='{Binding Path=contentForm, TargetNullValue="Loading.."}' >
       </ContentControl>
     </Grid>
