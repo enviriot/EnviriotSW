@@ -648,14 +648,15 @@ namespace X13.Periphery {
           }
         }
         _waitAck = false;
-        if(msg == null) {
-          ResetTimer();
-          return;
-        } else {
-          //Log.Debug("$ {0}.TimeOut try={1} msg={2}", owner.name, msg.tryCnt, msg);
+        if(msg != null) {
+          Log.Debug("$ {0}.TimeOut try={1} msg={2}", owner.name, msg.tryCnt, msg);
           if(!msg.IsRequest || msg.tryCnt > 0) {
             SendIntern(msg);
             return;
+          //} else {
+          //  Log.Debug("$ {0}.ResetTimer 1", owner.name);
+          //  ResetTimer();
+          //  return;
           }
         }
         state = State.Lost;
@@ -1172,7 +1173,6 @@ namespace X13.Periphery {
             }
             var st = owner.GetField("MQTT-SN.SleepTime");
             ResetTimer(st.IsNumber && (int)st > 0 ? (3100 + (int)st * 1550) : _duration);  // t_wakeup
-            ResetTimer(_duration);
             state = State.ASleep;
             break;
           }
@@ -1193,7 +1193,7 @@ namespace X13.Periphery {
           period = _duration;
         }
       }
-      //Log.Debug("$ {0}._activeTimer={1}", Owner.name, period);
+      //Log.Debug("$ {0}._activeTimer={1}", owner.name, period);
       _toActive = DateTime.Now.AddMilliseconds(period);
     }
     internal void Disconnect(ushort duration = 0) {
