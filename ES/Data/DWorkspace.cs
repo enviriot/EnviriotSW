@@ -105,7 +105,7 @@ namespace X13.Data {
         return catalog;
       } else {
         var doc = Files.OfType<UI.UIDocument>().FirstOrDefault(z => z != null && ((z.data != null && z.data.fullPath == path) || z.ContentId == id));
-        if(doc==null){
+        if(doc==null) {
           doc = new UI.UIDocument(path, view);
           Files.Add(doc);
         }
@@ -135,7 +135,7 @@ namespace X13.Data {
       if((doc = w as UIDocument) != null) {
         Files.Remove(doc);
         doc.Dispose();
-      } else if((catatlog = w as UiCatalog) != null){
+      } else if((catatlog = w as UiCatalog) != null) {
         Files.Remove(catatlog);
         catatlog.Dispose();
       } else {
@@ -143,41 +143,49 @@ namespace X13.Data {
       }
     }
 
-    public void Close() {
-      var clx = config.CreateElement("Connections");
+    public void Close(XmlDocument cfg) {
       XmlNode xc;
+      XmlAttribute tmp;
+
+      var clx = cfg.CreateElement("Connections");
       foreach(var cl in _clients) {
-        xc = config.CreateElement("Server");
-        var tmp = config.CreateAttribute("URL");
+        xc = cfg.CreateElement("Server");
+        tmp = cfg.CreateAttribute("URL");
         tmp.Value = cl.server;
         xc.Attributes.Append(tmp);
         if(cl.port != EsBroker.EsSocket.portDefault) {
-          tmp = config.CreateAttribute("Port");
+          tmp = cfg.CreateAttribute("Port");
           tmp.Value = cl.port.ToString();
           xc.Attributes.Append(tmp);
         }
         if(cl.userName != null) {
-          tmp = config.CreateAttribute("User");
+          tmp = cfg.CreateAttribute("User");
           tmp.Value = cl.userName;
           xc.Attributes.Append(tmp);
         }
         if(cl.password != null) {
-          tmp = config.CreateAttribute("Password");
+          tmp = cfg.CreateAttribute("Password");
           tmp.Value = cl.password;
           xc.Attributes.Append(tmp);
         }
         if(cl.alias != null) {
-          tmp = config.CreateAttribute("Alias");
+          tmp = cfg.CreateAttribute("Alias");
           tmp.Value = cl.alias;
           xc.Attributes.Append(tmp);
         }
         clx.AppendChild(xc);
         cl.Close();
       }
-      config.DocumentElement.AppendChild(clx);
-      config.Save(_cfgPath);
-    }
+      cfg.DocumentElement.AppendChild(clx);
 
+      var inx = cfg.CreateElement("Inspector");
+      tmp = cfg.CreateAttribute("TreeView");
+      tmp.Value = ReadConfig("/Config/Inspector.TreeView", 0).ToString();
+      inx.Attributes.Append(tmp);
+      cfg.DocumentElement.AppendChild(inx);
+
+      cfg.Save(_cfgPath);
+    }
 
     public BaseWindow ActiveDocument {
       get { return _activeDocument; }
@@ -190,5 +198,29 @@ namespace X13.Data {
     }
     public ObservableCollection<BaseWindow> Files { get; private set; }
     public ObservableCollection<BaseWindow> Tools { get; private set; }
+
+    public T ReadConfig<T>(string path, T defaultValue = default(T)) {
+      if(string.IsNullOrWhiteSpace(path)) {
+        throw new ArgumentNullException("path");
+      }
+      string attr;
+      int idx = path.LastIndexOf('.');
+      if(idx<0) {
+        attr = path;
+        path = "/Config/Common";
+      } else {
+        attr = path.Substring(idx+1);
+        path = path.Substring(0, idx);
+      }
+      XmlNode xTmp;
+      if(App.Workspace.config != null && (xTmp = App.Workspace.config.SelectSingleNode(path)) != null) {
+        var xAttr = xTmp.Attributes[attr];
+        if(xAttr != null && !string.IsNullOrWhiteSpace(xAttr.Value)) {
+          return (T)Convert.ChangeType(xAttr.Value, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
+        }
+      }
+      return defaultValue;
+    }
+
   }
 }

@@ -92,7 +92,7 @@
           </ItemsControl>
         </Grid>
       </Border>
-      <ToggleButton Name="tbShowTree" Grid.Column="1" Margin="7,0,7,0"  HorizontalAlignment="Center" VerticalAlignment="Center" Checked="tbShowTree_Checked" Unchecked="tbShowTree_Checked">
+      <ToggleButton Name="tbShowTree" Grid.Column="1" Margin="7,0,7,0"  HorizontalAlignment="Center" VerticalAlignment="Center" Checked="tbShowTree_Checked" Unchecked="tbShowTree_Checked" IsChecked="{x:Null}">
         <ToggleButton.Style>
           <Style TargetType="ToggleButton">
             <Setter Property="Background" Value="#00FFFFFF" />

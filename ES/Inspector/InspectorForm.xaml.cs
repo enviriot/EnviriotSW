@@ -66,6 +66,9 @@ namespace X13.UI {
         this._data = data;
         CollectionChange(new InValue(_data, CollectionChange), true);
         CollectionChange(new InManifest(_data, CollectionChange), true);
+        if(App.Workspace.ReadConfig("/Config/Inspector.TreeView", 0)!=0) {
+          CollectionChange(new InTopic(_data, null, CollectionChange, _data), true);
+        }
       } else {
         this._data = data.Connection.root;
         CollectionChange(new InTopic(_data, null, CollectionChange, data), true);

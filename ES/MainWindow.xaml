@@ -202,10 +202,19 @@
           </Style>
         </xcad:DockingManager.LayoutItemContainerStyle>
         <xcad:LayoutRoot>
-          <xcad:LayoutPanel Orientation="Vertical">
-            <xcad:LayoutDocumentPane />
-            <xcad:LayoutAnchorablePane  DockHeight="200">
-            </xcad:LayoutAnchorablePane>
+          <xcad:LayoutPanel Orientation="Horizontal">
+            <xcad:LayoutPanel Orientation="Horizontal">
+              <xcad:LayoutPanel Orientation="Vertical">
+                <xcad:LayoutDocumentPaneGroup Orientation="Horizontal">
+                  <xcad:LayoutDocumentPane DockWidth="1.32314410480349*">
+                  </xcad:LayoutDocumentPane>
+                </xcad:LayoutDocumentPaneGroup>
+                <xcad:LayoutAnchorablePaneGroup Orientation="Horizontal" DockHeight="220" FloatingWidth="1466" FloatingHeight="1176" FloatingLeft="-268" FloatingTop="695">
+                  <xcad:LayoutAnchorablePane DockHeight="220" FloatingWidth="1466" FloatingHeight="1176" FloatingLeft="-268" FloatingTop="695">
+                  </xcad:LayoutAnchorablePane>
+                </xcad:LayoutAnchorablePaneGroup>
+              </xcad:LayoutPanel>
+            </xcad:LayoutPanel>
           </xcad:LayoutPanel>
         </xcad:LayoutRoot>
       </xcad:DockingManager>

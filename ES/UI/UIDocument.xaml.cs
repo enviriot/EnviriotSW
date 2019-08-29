@@ -27,6 +27,7 @@ namespace X13.UI {
     private string _view;
     private IBaseForm _contentForm;
     private Client _cl;
+
     public UIDocument(string path, string view) {
       _path = path;
       _view = view;
@@ -42,7 +43,11 @@ namespace X13.UI {
       }
     }
     private void BaseWindow_Loaded(object sender, RoutedEventArgs e) {
-      tbShowTree.IsChecked = true;
+      var st = App.Workspace.ReadConfig("/Config/Inspector.TreeView", 0);
+      tbShowTree.IsChecked = st==0 || st==2;
+      if(tbShowTree.IsChecked==false) {
+        tbShowTree_Checked(null, null);
+      }
     }
 
     private DTopic _data;

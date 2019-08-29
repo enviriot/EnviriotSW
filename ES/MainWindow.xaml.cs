@@ -56,7 +56,6 @@ namespace X13 {
       try {
         XmlNode xlay;
         if(App.Workspace.config != null && (xlay = App.Workspace.config.SelectSingleNode("/Config/LayoutRoot")) != null) {
-
           var layoutSerializer = new Xceed.Wpf.AvalonDock.Layout.Serialization.XmlLayoutSerializer(this.dmMain);
           layoutSerializer.LayoutSerializationCallback += LSF;
           layoutSerializer.Deserialize(new System.IO.StringReader(xlay.OuterXml));
@@ -80,37 +79,37 @@ namespace X13 {
           layoutSerializer.Serialize(ix);
         }
 
-        App.Workspace.config = new XmlDocument();
-        var root = App.Workspace.config.CreateElement("Config");
-        var sign = App.Workspace.config.CreateAttribute("Signature");
+        var config = new XmlDocument();
+        var root = config.CreateElement("Config");
+        var sign = config.CreateAttribute("Signature");
         sign.Value = "X13.ES v.0.4";
         root.Attributes.Append(sign);
         App.Workspace.config.AppendChild(root);
-        var window = App.Workspace.config.CreateElement("Window");
+        var window = config.CreateElement("Window");
         {
-          var tmp = App.Workspace.config.CreateAttribute("State");
+          var tmp = config.CreateAttribute("State");
           tmp.Value = this.WindowState.ToString();
           window.Attributes.Append(tmp);
 
-          tmp = App.Workspace.config.CreateAttribute("Left");
+          tmp = config.CreateAttribute("Left");
           tmp.Value = this.Left.ToString();
           window.Attributes.Append(tmp);
 
-          tmp = App.Workspace.config.CreateAttribute("Top");
+          tmp = config.CreateAttribute("Top");
           tmp.Value = this.Top.ToString();
           window.Attributes.Append(tmp);
 
-          tmp = App.Workspace.config.CreateAttribute("Width");
+          tmp = config.CreateAttribute("Width");
           tmp.Value = this.Width.ToString();
           window.Attributes.Append(tmp);
 
-          tmp = App.Workspace.config.CreateAttribute("Height");
+          tmp = config.CreateAttribute("Height");
           tmp.Value = this.Height.ToString();
           window.Attributes.Append(tmp);
         }
         root.AppendChild(window);
-        root.AppendChild(App.Workspace.config.ImportNode(lDoc.FirstChild, true));
-        App.Workspace.Close();
+        root.AppendChild(config.ImportNode(lDoc.FirstChild, true));
+        App.Workspace.Close(config);
       }
       catch(Exception ex) {
         Log.Error("Save config - {0}", ex.Message);
