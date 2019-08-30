@@ -38,11 +38,12 @@ namespace X13.Data {
     public DTopic TypeManifest { get; private set; }
     public DTopic CoreTypes { get; private set; }
 
-    public Client(string server, int port, string userName, string password) {
+    public Client(string server, int port, string userName, string password, string alias = null) {
       this.server = server;
       this.port = port;
       this.userName = userName;
       this.password = password;
+      this.alias = alias;
       _connEvnt = new List<WaitConnect>();
       _reqs = new LinkedList<ClRequest>();
       root = new DTopic(this);

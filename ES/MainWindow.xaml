@@ -93,67 +93,12 @@
         <Button Name="buConfig" Grid.Column="0" Click="buConfig_Click">
           <Button.ContextMenu>
             <ContextMenu>
-              <MenuItem Name="miConnections" Header="Connections" ItemsSource="{Binding Clients}" >
-                <MenuItem.ItemTemplate>
-                  <DataTemplate DataType="{x:Type x13d:Client}">
-                    <Border Margin="0, 3" BorderThickness="0,1" MouseUp="miConfigOpen_Click">
-                      <Border.BorderBrush>
-                        <LinearGradientBrush EndPoint="1,0.5" StartPoint="0,0.5">
-                          <GradientStop Color="White" Offset="0"/>
-                          <GradientStop Color="Black" Offset="0.8"/>
-                          <GradientStop Color="White" Offset="1"/>
-                        </LinearGradientBrush>
-                      </Border.BorderBrush>
-                      <Grid MinHeight="35" MinWidth="250" Margin="3">
-                        <Grid.RowDefinitions>
-                          <RowDefinition/>
-                          <RowDefinition/>
-                        </Grid.RowDefinitions>
-                        <Grid.ColumnDefinitions>
-                          <ColumnDefinition/>
-                          <ColumnDefinition Width="35"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Grid.Row="0" Text="{Binding alias}" FontWeight="Bold" FontSize="14" Margin="0,0,0,2" />
-                        <TextBlock Grid.Column="0" Grid.Row="1" Text="{Binding}" Margin="0,2,0,0" />
-                        <Button Grid.Column="1" Grid.Row="0" Grid.RowSpan="2" Padding="10,0,0,0" BorderThickness="0" IsEnabled="False">
-                          <Image Stretch="None" Source="Images/trash.png" />
-                        </Button>
-                      </Grid>
-                    </Border>
-                  </DataTemplate>
-                </MenuItem.ItemTemplate>
-                <MenuItem.ItemContainerStyle>
-                  <Style TargetType="MenuItem">
-                    <Setter Property="Icon" Value="{StaticResource ImgLogDeb}" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding Status}">
-                        <DataTrigger.Value>
-                          <x13d:ClientState>Ready</x13d:ClientState>
-                        </DataTrigger.Value>
-                        <Setter Property="Icon" Value="{StaticResource ImgLogOk}" />
-                      </DataTrigger>
-                      <DataTrigger Binding="{Binding Status}">
-                        <DataTrigger.Value>
-                          <x13d:ClientState>Connecting</x13d:ClientState>
-                        </DataTrigger.Value>
-                        <Setter Property="Icon" Value="{StaticResource ImgLogWarn}" />
-                      </DataTrigger>
-                      <DataTrigger Binding="{Binding Status}">
-                        <DataTrigger.Value>
-                          <x13d:ClientState>BadAuth</x13d:ClientState>
-                        </DataTrigger.Value>
-                        <Setter Property="Icon" Value="{StaticResource ImgLogErr}" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </MenuItem.ItemContainerStyle>
-              </MenuItem>
-              <MenuItem Name="miCatatlog" Header="Catatlog" Click="miCatatlog_Click" />
+              <MenuItem Name="miCatatlog" Header="Catatlog Window" Click="miCatatlog_Click" />
+              <MenuItem Header="Workspace Window" Click="miWorkSpace_Click" />
+              <MenuItem Header="Output Window" Click="miOpenLog" />
               <Separator />
               <MenuItem Name="miImport" Header="Import" Click="miImport_Click" />
               <MenuItem Name="miExport" Header="Export" Click="miExport_Click" />
-              <Separator />
-              <MenuItem Header="Open Log" Style="{x:Null}" Click="miOpenLog" />
             </ContextMenu>
           </Button.ContextMenu>
           <Image x:Name="AppIcon" Width="32" Height="32" Source="logo48.ico" />
@@ -202,20 +147,6 @@
           </Style>
         </xcad:DockingManager.LayoutItemContainerStyle>
         <xcad:LayoutRoot>
-          <xcad:LayoutPanel Orientation="Horizontal">
-            <xcad:LayoutPanel Orientation="Horizontal">
-              <xcad:LayoutPanel Orientation="Vertical">
-                <xcad:LayoutDocumentPaneGroup Orientation="Horizontal">
-                  <xcad:LayoutDocumentPane DockWidth="1.32314410480349*">
-                  </xcad:LayoutDocumentPane>
-                </xcad:LayoutDocumentPaneGroup>
-                <xcad:LayoutAnchorablePaneGroup Orientation="Horizontal" DockHeight="220" FloatingWidth="1466" FloatingHeight="1176" FloatingLeft="-268" FloatingTop="695">
-                  <xcad:LayoutAnchorablePane DockHeight="220" FloatingWidth="1466" FloatingHeight="1176" FloatingLeft="-268" FloatingTop="695">
-                  </xcad:LayoutAnchorablePane>
-                </xcad:LayoutAnchorablePaneGroup>
-              </xcad:LayoutPanel>
-            </xcad:LayoutPanel>
-          </xcad:LayoutPanel>
         </xcad:LayoutRoot>
       </xcad:DockingManager>
     </Grid>

@@ -50,18 +50,19 @@ namespace X13 {
       }
       InitializeComponent();
       dmMain.DataContext = App.Workspace;
-      miConnections.DataContext = App.Workspace;
     }
     private void Window_Loaded(object sender, RoutedEventArgs e) {
       try {
         XmlNode xlay;
+        string lo;
         if(App.Workspace.config != null && (xlay = App.Workspace.config.SelectSingleNode("/Config/LayoutRoot")) != null) {
-          var layoutSerializer = new Xceed.Wpf.AvalonDock.Layout.Serialization.XmlLayoutSerializer(this.dmMain);
-          layoutSerializer.LayoutSerializationCallback += LSF;
-          layoutSerializer.Deserialize(new System.IO.StringReader(xlay.OuterXml));
+          lo = xlay.OuterXml;
         } else {
-          App.Workspace.Open("file://local/", "log");
+          lo = "<LayoutRoot><RootPanel Orientation=\"Vertical\"><LayoutPanel Orientation=\"Horizontal\"><LayoutDocumentPane /><LayoutAnchorablePaneGroup Orientation=\"Horizontal\" DockWidth=\"450\" DockHeight=\"584\"><LayoutAnchorablePane DockHeight=\"584\" ><LayoutAnchorable Title=\"Workspace\" IsSelected=\"True\" ContentId=\"file://local/?view=wks\" CanClose=\"False\" /></LayoutAnchorablePane></LayoutAnchorablePaneGroup></LayoutPanel><LayoutAnchorablePaneGroup Orientation=\"Horizontal\" DockHeight=\"225\"><LayoutAnchorablePane DockHeight=\"225\" ><LayoutAnchorable Title=\"Output\" IsSelected=\"True\" ContentId=\"file://local/?view=log\" CanClose=\"False\" /></LayoutAnchorablePane></LayoutAnchorablePaneGroup></RootPanel><TopSide /><RightSide /><LeftSide /><BottomSide /><FloatingWindows /><Hidden /></LayoutRoot>";
         }
+        var layoutSerializer = new Xceed.Wpf.AvalonDock.Layout.Serialization.XmlLayoutSerializer(this.dmMain);
+        layoutSerializer.LayoutSerializationCallback += LSF;
+        layoutSerializer.Deserialize(new System.IO.StringReader(lo));
       }
       catch(Exception ex) {
         Log.Error("Load layout - {0}", ex.Message);
@@ -79,37 +80,37 @@ namespace X13 {
           layoutSerializer.Serialize(ix);
         }
 
-        var config = new XmlDocument();
-        var root = config.CreateElement("Config");
-        var sign = config.CreateAttribute("Signature");
+        var cfg = new XmlDocument();
+        var root = cfg.CreateElement("Config");
+        var sign = cfg.CreateAttribute("Signature");
         sign.Value = "X13.ES v.0.4";
         root.Attributes.Append(sign);
-        App.Workspace.config.AppendChild(root);
-        var window = config.CreateElement("Window");
+        cfg.AppendChild(root);
+        var window = cfg.CreateElement("Window");
         {
-          var tmp = config.CreateAttribute("State");
+          var tmp = cfg.CreateAttribute("State");
           tmp.Value = this.WindowState.ToString();
           window.Attributes.Append(tmp);
 
-          tmp = config.CreateAttribute("Left");
+          tmp = cfg.CreateAttribute("Left");
           tmp.Value = this.Left.ToString();
           window.Attributes.Append(tmp);
 
-          tmp = config.CreateAttribute("Top");
+          tmp = cfg.CreateAttribute("Top");
           tmp.Value = this.Top.ToString();
           window.Attributes.Append(tmp);
 
-          tmp = config.CreateAttribute("Width");
+          tmp = cfg.CreateAttribute("Width");
           tmp.Value = this.Width.ToString();
           window.Attributes.Append(tmp);
 
-          tmp = config.CreateAttribute("Height");
+          tmp = cfg.CreateAttribute("Height");
           tmp.Value = this.Height.ToString();
           window.Attributes.Append(tmp);
         }
         root.AppendChild(window);
-        root.AppendChild(config.ImportNode(lDoc.FirstChild, true));
-        App.Workspace.Close(config);
+        root.AppendChild(cfg.ImportNode(lDoc.FirstChild, true));
+        App.Workspace.Close(cfg);
       }
       catch(Exception ex) {
         Log.Error("Save config - {0}", ex.Message);
@@ -154,13 +155,6 @@ namespace X13 {
       }
     }
 
-    private void miConfigOpen_Click(object sender, RoutedEventArgs e) {
-      var s = sender as FrameworkElement;
-      Client cl;
-      if(s != null && (cl = s.DataContext as Client) != null) {
-        App.Workspace.Open(cl.ToString() + "/");
-      }
-    }
     private void miCatatlog_Click(object sender, RoutedEventArgs e) {
       Client cl;
       var doc =App.Workspace.ActiveDocument as UI.UIDocument;
@@ -171,6 +165,9 @@ namespace X13 {
     }
     private void miOpenLog(object sender, RoutedEventArgs e) {
       App.Workspace.Open("file://local/", "log");
+    }
+    private void miWorkSpace_Click(object sender, RoutedEventArgs e) {
+      App.Workspace.Open("file://local/", "wks");
     }
     private void miImport_Click(object sender, RoutedEventArgs e) {
       Client cl;
@@ -222,6 +219,5 @@ namespace X13 {
         App.Workspace.Close(doc);
       }
     }
-
   }
 }

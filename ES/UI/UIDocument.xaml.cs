@@ -42,13 +42,6 @@ namespace X13.UI {
         RequestData(url);
       }
     }
-    private void BaseWindow_Loaded(object sender, RoutedEventArgs e) {
-      var st = App.Workspace.ReadConfig("/Config/Inspector.TreeView", 0);
-      tbShowTree.IsChecked = st==0 || st==2;
-      if(tbShowTree.IsChecked==false) {
-        tbShowTree_Checked(null, null);
-      }
-    }
 
     private DTopic _data;
     private BitmapSource _icon;
@@ -133,24 +126,12 @@ namespace X13.UI {
         }
 
         PropertyChangedReise("connected");
-        ccTree.Content = new InspectorForm(_data, false);
         UpdContent();
       }
       this.Focus();
       this.Cursor = Cursors.Arrow;
     }
 
-    private void tbShowTree_Checked(object sender, RoutedEventArgs e) {
-      if(tbShowTree.IsChecked==true) {
-        ccTree.Visibility = Visibility.Visible;
-        gsSplinter.Visibility = Visibility.Visible;
-        grContent.ColumnDefinitions[0].Width = new GridLength(grContent.ActualWidth/5);
-      } else {
-        ccTree.Visibility = Visibility.Collapsed;
-        gsSplinter.Visibility = Visibility.Collapsed;
-        grContent.ColumnDefinitions[0].Width = new GridLength(0);
-      }
-    }
 
     private void DataChanged(DTopic.Art a, DTopic t) {
       if(a == DTopic.Art.type) {
@@ -218,7 +199,7 @@ namespace X13.UI {
           if(contentForm != null) {
             contentForm.Dispose();
           }
-          contentForm = new InspectorForm(_data, true);
+          contentForm = new InspectorForm(_data);
         }
       } else if(_view == "LO") {
         if((ccMain.Content as LogramForm) == null) {

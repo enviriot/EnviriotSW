@@ -31,7 +31,7 @@
         <ColumnDefinition/>
       </Grid.ColumnDefinitions>
       <Image Name="imState" Grid.Column="0" Width="16" Height="16" Source="/ES;component/Images/log_deb.png" />
-      <TextBlock Name="tbState" Grid.Column="1" Text="unknown" VerticalAlignment="Center" Margin="10,0,0,0" />
+      <TextBlock Name="tbState" Grid.Column="1" Text="unknown" Margin="15,0" Foreground="Gray" VerticalAlignment="Center" />
       <Button Name="buCompile" Grid.Column="2" Content="Build" Click="buCompile_Click" />
       <Button Name="buExecute" Grid.Column="3" Content="Run" Click="buExecute_Click" />
       <Button Name="buStart" Grid.Column="4" Content="Start" Click="buStart_Click" />

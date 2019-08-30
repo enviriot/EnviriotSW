@@ -60,23 +60,20 @@ namespace X13.UI {
     private ObservableCollection<InBase> _valueVC;
     private bool _disableDrag;
 
-    internal InspectorForm(DTopic data, bool showContent) {
+    internal InspectorForm(DTopic data) {
       _valueVC = new ObservableCollection<InBase>();
-      if(showContent) {
-        this._data = data;
+      this._data = data;
+      if(_data!=null) {
         CollectionChange(new InValue(_data, CollectionChange), true);
         CollectionChange(new InManifest(_data, CollectionChange), true);
         if(App.Workspace.ReadConfig("/Config/Inspector.TreeView", 0)!=0) {
-          CollectionChange(new InTopic(_data, null, CollectionChange, _data), true);
+          CollectionChange(new InTopic(_data, null, CollectionChange), true);
         }
-      } else {
-        this._data = data.Connection.root;
-        CollectionChange(new InTopic(_data, null, CollectionChange, data), true);
       }
       InitializeComponent();
       lvValue.ItemsSource = _valueVC;
     }
-    private void CollectionChange(InBase item, bool visible) {
+    internal void CollectionChange(InBase item, bool visible) {
       if(item == null) {
         throw new ArgumentNullException("item");
       }
@@ -100,6 +97,12 @@ namespace X13.UI {
         }
       } else {
         _valueVC.Remove(item);
+      }
+    }
+    internal void RemoveItem(DTopic t) {
+      InBase item = _valueVC.OfType<InTopic>().First(z => z.Owner==t);
+      if(item!=null) {
+        CollectionChange(item, false);
       }
     }
 

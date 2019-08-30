@@ -60,6 +60,7 @@
       <HintPath>..\packages\AvalonEdit.6.0.0-preview1\lib\net45\ICSharpCode.AvalonEdit.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="NiL.JS, Version=2.5.1339.1, Culture=neutral, PublicKeyToken=fa941a7c2a4de689, processorArchitecture=MSIL">
       <HintPath>..\packages\NiL.JS.2.5.1339.1\lib\net45\NiL.JS.dll</HintPath>
       <Private>True</Private>
@@ -152,6 +153,9 @@
     <Compile Include="UI\UiCatalog.xaml.cs">
       <DependentUpon>UiCatalog.xaml</DependentUpon>
     </Compile>
+    <Compile Include="UI\uiWorkspace.xaml.cs">
+      <DependentUpon>uiWorkspace.xaml</DependentUpon>
+    </Compile>
     <Compile Include="ValueEditors\veByteArray.cs" />
     <Compile Include="ValueEditors\veDevicePLC.xaml.cs">
       <DependentUpon>veDevicePLC.xaml</DependentUpon>
@@ -215,6 +219,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="UI\UiCatalog.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="UI\uiWorkspace.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -350,9 +358,6 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Images\ed_time.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="Images\ic_tree.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

@@ -42,7 +42,7 @@ namespace X13.Data {
             if(cList != null) {
               int i;
               XmlNode xc;
-              string server, userName, password;
+              string server, userName, password, alias;
               int port;
               var xcl = cList.SelectNodes("Server");
               for(i = 0; i < xcl.Count; i++) {
@@ -59,11 +59,9 @@ namespace X13.Data {
                 userName = tmp != null ? tmp.Value : null;
                 tmp = xc.Attributes["Password"];
                 password = tmp != null ? tmp.Value : null;
-                var cl = new Client(server, port, userName, password);
                 tmp = xc.Attributes["Alias"];
-                if(tmp != null) {
-                  cl.alias = tmp.Value;
-                }
+                alias = tmp != null?tmp.Value:null;
+                var cl = new Client(server, port, userName, password, alias);
                 _clients.Add(cl);
               }
             }
@@ -88,7 +86,14 @@ namespace X13.Data {
           id = path;
         }
       }
-      if(view == "log") {
+      if(view == "wks") {
+        var ui = Tools.FirstOrDefault(z => z != null && z.ContentId == id);
+        if(ui == null) {
+          ui = new uiWorkspace();
+          Tools.Add(ui);
+        }
+        return ui;
+      } else if(view == "log") {
         var ui = Tools.FirstOrDefault(z => z != null && z.ContentId == id);
         if(ui == null) {
           ui = new uiLog();

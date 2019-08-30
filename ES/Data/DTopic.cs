@@ -60,7 +60,7 @@ namespace X13.Data {
     }
     internal DTopic(Client cl) {
       Connection = cl;
-      this.name = Connection.ToString();
+      this.name =  Connection.ToString();
       this.path = "/";
     }
 

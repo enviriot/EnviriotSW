@@ -8,136 +8,102 @@
              xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
              xmlns:x13ui="clr-namespace:X13.UI"
              mc:Ignorable="d" 
-             TextOptions.TextRenderingMode="ClearType" TextOptions.TextFormattingMode="Display" FontFamily="Arial" FontSize="14" Loaded="BaseWindow_Loaded">
+             TextOptions.TextRenderingMode="ClearType" TextOptions.TextFormattingMode="Display" FontFamily="Arial" FontSize="14">
   <Grid Margin="0">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
       <RowDefinition/>
     </Grid.RowDefinitions>
-    <Grid Margin="0" Grid.Row="0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition MinWidth="180" />
-        <ColumnDefinition Width="Auto" />
-        <ColumnDefinition Width="Auto" />
-      </Grid.ColumnDefinitions>
-      <Border Padding="5,0" CornerRadius="3" Margin="7,7,7,5">
-        <Border.Style>
-          <Style TargetType="Border" >
-            <Setter Property="Background" Value="White" />
-            <Style.Triggers>
-              <DataTrigger Binding="{Binding connected}" Value="False">
-                <Setter Property="Background" Value="#FFE2FCFF" />
-              </DataTrigger>
-            </Style.Triggers>
-          </Style>
-        </Border.Style>
-        <Grid Margin="0">
-          <TextBox Name="tbAddress" Text="{Binding data.fullPath, Mode=OneWay}" IsKeyboardFocusedChanged="TextBox_IsKeyboardFocusedChanged" IsReadOnlyCaretVisible="True" Padding="5,6" Margin="0,0,0,0" BorderThickness="0" KeyUp="TextBox_KeyUp" Loaded="tbAddress_Loaded" TabIndex="1">
-            <TextBox.Style>
-              <Style TargetType="TextBox">
-                <Setter Property="IsReadOnly" Value="True" />
-                <Style.Triggers>
-                  <DataTrigger Binding="{Binding connected}" Value="False">
-                    <Setter Property="IsReadOnly" Value="False" />
-                    <Setter Property="Background" Value="#FFE2FCFF" />
-                  </DataTrigger>
-                </Style.Triggers>
-              </Style>
-            </TextBox.Style>
-          </TextBox>
-          <ItemsControl Name="icPanel" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="7,0">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <Button Margin="0" Click="Button_Click" TabIndex="2" >
-                  <Button.Template>
-                    <ControlTemplate TargetType="{x:Type Button}">
-                      <Grid Name="grTopicName" Background="White">
-                        <Grid.ColumnDefinitions>
-                          <ColumnDefinition Width="Auto"/>
-                          <ColumnDefinition Width="7"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Name="tbNamePart" Text="{Binding name}" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="/" VerticalAlignment="Center" />
-                      </Grid>
-                      <ControlTemplate.Triggers>
-                        <Trigger Property="IsKeyboardFocused" Value="true">
-                        </Trigger>
-                        <Trigger Property="IsDefaulted" Value="true">
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="true">
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                          <Setter Property="Background" TargetName="tbNamePart" >
-                            <Setter.Value>
-                              <LinearGradientBrush EndPoint="0.5,1" StartPoint="0.5,0">
-                                <GradientStop Color="AliceBlue" Offset="0"/>
-                                <GradientStop Color="AliceBlue" Offset="0.85"/>
-                                <GradientStop Color="Blue" Offset="0.9"/>
-                                <GradientStop Color="White" Offset="0.97"/>
-                              </LinearGradientBrush>
-                            </Setter.Value>
-                          </Setter>
-                        </Trigger>
-                      </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                  </Button.Template>
-                </Button>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <StackPanel Orientation="Horizontal"/>
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-          </ItemsControl>
-        </Grid>
-      </Border>
-      <ToggleButton Name="tbShowTree" Grid.Column="1" Margin="7,0,7,0"  HorizontalAlignment="Center" VerticalAlignment="Center" Checked="tbShowTree_Checked" Unchecked="tbShowTree_Checked" IsChecked="{x:Null}">
-        <ToggleButton.Style>
-          <Style TargetType="ToggleButton">
-            <Setter Property="Background" Value="#00FFFFFF" />
-            <Style.Triggers>
-              <Trigger Property="IsChecked" Value="true">
-                <Setter Property="Background" Value="#FFD0FFFF" />
-              </Trigger>
-            </Style.Triggers>
-          </Style>
-        </ToggleButton.Style>
-        <ToggleButton.Template>
-          <ControlTemplate TargetType="ToggleButton">
-            <Border BorderThickness="0" Background="{TemplateBinding Background}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" >
-              <ContentPresenter Margin="2" />
-            </Border>
-          </ControlTemplate>
-        </ToggleButton.Template>
-        <ToggleButton.Content>
-          <Image Width="16" Height="16" Source="/ES;component/Images/ic_tree.png"  />
-        </ToggleButton.Content>
-      </ToggleButton>
-      <Button Name="buChangeView" Grid.Column="2" IsEnabled="{Binding ChangeViewEn}" Margin="7,0,7,0" Click="buChangeView_Click" HorizontalAlignment="Center" VerticalAlignment="Center">
-        <Button.Template>
-          <ControlTemplate TargetType="{x:Type Button}">
-            <aero:ButtonChrome BorderBrush="#00000000" Background="#FFD0FFFF" RenderMouseOver="{TemplateBinding IsMouseOver}" RenderPressed="{TemplateBinding IsPressed}" 
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition MinWidth="180" />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
+    <Border Padding="5,0" CornerRadius="3" Margin="7,7,7,5">
+      <Border.Style>
+        <Style TargetType="Border" >
+          <Setter Property="Background" Value="White" />
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding connected}" Value="False">
+              <Setter Property="Background" Value="#FFE2FCFF" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </Border.Style>
+      <Grid Margin="0">
+        <TextBox Name="tbAddress" Text="{Binding data.fullPath, Mode=OneWay}" IsKeyboardFocusedChanged="TextBox_IsKeyboardFocusedChanged" IsReadOnlyCaretVisible="True" Padding="5,6" Margin="0,0,0,0" BorderThickness="0" KeyUp="TextBox_KeyUp" Loaded="tbAddress_Loaded" TabIndex="1">
+          <TextBox.Style>
+            <Style TargetType="TextBox">
+              <Setter Property="IsReadOnly" Value="True" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding connected}" Value="False">
+                  <Setter Property="IsReadOnly" Value="False" />
+                  <Setter Property="Background" Value="#FFE2FCFF" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBox.Style>
+        </TextBox>
+        <ItemsControl Name="icPanel" VerticalAlignment="Center" VerticalContentAlignment="Center" Margin="7,0">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Button Margin="0" Click="Button_Click" TabIndex="2" >
+                <Button.Template>
+                  <ControlTemplate TargetType="{x:Type Button}">
+                    <Grid Name="grTopicName" Background="White">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="7"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Name="tbNamePart" Text="{Binding name}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" Text="/" VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsKeyboardFocused" Value="true">
+                      </Trigger>
+                      <Trigger Property="IsDefaulted" Value="true">
+                      </Trigger>
+                      <Trigger Property="IsPressed" Value="true">
+                      </Trigger>
+                      <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" TargetName="tbNamePart" >
+                          <Setter.Value>
+                            <LinearGradientBrush EndPoint="0.5,1" StartPoint="0.5,0">
+                              <GradientStop Color="AliceBlue" Offset="0"/>
+                              <GradientStop Color="AliceBlue" Offset="0.85"/>
+                              <GradientStop Color="Blue" Offset="0.9"/>
+                              <GradientStop Color="White" Offset="0.97"/>
+                            </LinearGradientBrush>
+                          </Setter.Value>
+                        </Setter>
+                      </Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </Button.Template>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal"/>
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+        </ItemsControl>
+      </Grid>
+    </Border>
+    <Button Name="buChangeView" Grid.Column="1" IsEnabled="{Binding ChangeViewEn}" Margin="7,0,7,0" Click="buChangeView_Click" HorizontalAlignment="Center" VerticalAlignment="Center">
+      <Button.Template>
+        <ControlTemplate TargetType="{x:Type Button}">
+          <aero:ButtonChrome BorderBrush="#00000000" Background="#FFD0FFFF" RenderMouseOver="{TemplateBinding IsMouseOver}" RenderPressed="{TemplateBinding IsPressed}" 
                              HorizontalAlignment="Stretch" VerticalAlignment="Stretch" RoundCorners="False" SnapsToDevicePixels="True">
-              <ContentPresenter Margin="2" />
-            </aero:ButtonChrome>
-          </ControlTemplate>
-        </Button.Template>
-        <Button.Content>
-          <Image Source="{Binding Icon}" Width="16" Height="16" />
-        </Button.Content>
-      </Button>
-    </Grid>
-    <Grid Name="grContent" Margin="0" Grid.Row="1">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition />
-        <ColumnDefinition Width="auto" />
-        <ColumnDefinition Width="4*" />
-      </Grid.ColumnDefinitions>
-      <ContentControl Name="ccTree" BorderThickness="1" Margin="0,0,0,0" Focusable="False" />
-      <GridSplitter Name="gsSplinter" Grid.Column="1" Width="4" ShowsPreview="True" HorizontalAlignment="Center" HorizontalContentAlignment="Center" VerticalContentAlignment="Stretch" BorderThickness="0,0" Background="#00FFFFFF" />
-      <ContentControl Name="ccMain" Grid.Column="2" Margin="0,0,0,0" Focusable="False" TabIndex="3" Content='{Binding Path=contentForm, TargetNullValue="Loading.."}' >
-      </ContentControl>
-    </Grid>
+            <ContentPresenter Margin="2" />
+          </aero:ButtonChrome>
+        </ControlTemplate>
+      </Button.Template>
+      <Button.Content>
+        <Image Source="{Binding Icon}" Width="16" Height="16" />
+      </Button.Content>
+    </Button>
+    <ContentControl Name="ccMain" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,0" Focusable="False" TabIndex="3" Content='{Binding Path=contentForm, TargetNullValue="Loading.."}' >
+    </ContentControl>
   </Grid>
 </x13ui:BaseWindow>
