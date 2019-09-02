@@ -649,14 +649,9 @@ namespace X13.Periphery {
         }
         _waitAck = false;
         if(msg != null) {
-          Log.Debug("$ {0}.TimeOut try={1} msg={2}", owner.name, msg.tryCnt, msg);
           if(!msg.IsRequest || msg.tryCnt > 0) {
             SendIntern(msg);
             return;
-          //} else {
-          //  Log.Debug("$ {0}.ResetTimer 1", owner.name);
-          //  ResetTimer();
-          //  return;
           }
         }
         state = State.Lost;

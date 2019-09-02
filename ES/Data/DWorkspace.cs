@@ -183,12 +183,6 @@ namespace X13.Data {
       }
       cfg.DocumentElement.AppendChild(clx);
 
-      var inx = cfg.CreateElement("Inspector");
-      tmp = cfg.CreateAttribute("TreeView");
-      tmp.Value = ReadConfig("/Config/Inspector.TreeView", 0).ToString();
-      inx.Attributes.Append(tmp);
-      cfg.DocumentElement.AppendChild(inx);
-
       cfg.Save(_cfgPath);
     }
 
