@@ -1,0 +1,87 @@
+.led-box {
+  height: 30px;
+  width: 30px;
+  margin: 10px 0;
+  float: left;
+}
+
+.led-box p {
+  font-size: 12px;
+  text-align: center;
+  margin: 1em;
+}
+
+.led-red {
+  margin: 0 auto;
+  width: 24px;
+  height: 24px;
+  background-color: #F00;
+  border-radius: 50%;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 -1px 7px 1px, inset #441313 0 -1px 9px, rgba(255, 0, 0, 0.5) 0 2px 12px;
+}
+
+.led-yellow {
+  margin: 0 auto;
+  width: 24px;
+  height: 24px;
+  background-color: #FF0;
+  border-radius: 50%;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 -1px 7px 1px, inset #808002 0 -1px 9px, #FF0 0 2px 12px;
+}
+
+.led-green {
+  margin: 0 auto;
+  width: 24px;
+  height: 24px;
+  background-color: #ABFF00;
+  border-radius: 50%;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 -1px 7px 1px, inset #304701 0 -1px 9px, #89FF00 0 2px 12px;
+}
+
+.led-blue {
+  margin: 0 auto;
+  width: 24px;
+  height: 24px;
+  background-color: #24E0FF;
+  border-radius: 50%;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 -1px 7px 1px, inset #006 0 -1px 9px, #3F8CFF 0 2px 14px;
+}
+
+.led-gray {
+  margin: 0 auto;
+  width: 24px;
+  height: 24px;
+  background-color: #808080;
+  border-radius: 50%;
+  box-shadow: rgba(0, 0, 0, 0.2) 0 -1px 7px 1px, inset #006 0 -1px 9px, #111111 0 2px 14px;
+}
+
+.button-gray {
+  width: 80%;
+  margin: 10%;
+}
+
+.button-green {
+  width: 80%;
+  margin: 10%;
+  background-color: #80FF80;
+}
+
+.button-red {
+  width: 80%;
+  margin: 10%;
+  background-color: #FF8080;
+}
+
+
+table {
+  display: table;
+  border-collapse: separate;
+  border-spacing: 1px;
+  border-color: gray;
+  border: 1px solid;
+}
+
+th, tr, td {
+   border: 1px solid gray;
+}

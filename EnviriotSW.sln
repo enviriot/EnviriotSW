@@ -17,8 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebUI", "plugins\WebUI\WebU
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7E70AF12-718E-4EFB-AD77-A0CD94A2EC6C}"
 	ProjectSection(SolutionItems) = preProject
-		data\base.xst = data\base.xst
-		www\index.html = www\index.html
+		Output\data\base.xst = Output\data\base.xst
+		Output\www\index.html = Output\www\index.html
 	EndProjectSection
 EndProject
 Global
