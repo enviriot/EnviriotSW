@@ -559,6 +559,11 @@ namespace X13.DevicePLC {
               }
               if(t == EP_Type.NONE && ca.CallMode == CallMode.Construct) {
                 m = _compiler.DefineMerker(v.Descriptor, EP_Type.REFERENCE);
+                Variable cl = ca.LeftOperand as Variable;
+                EP_Compiler.Merker m1;
+                if(cl!=null && (m1 = _compiler.GetMerker(cl.Descriptor))!=null){
+                  m.scope = m1.scope;
+                }
                 m.type = EP_Type.REFERENCE;
                 continue;
               } else {
