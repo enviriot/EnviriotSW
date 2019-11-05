@@ -8,15 +8,15 @@ using System.Threading;
 
 namespace X13 {
   public static class Log {
-    private static bool _useDiagnostic;
-    private static bool _useConsole;
+    private readonly static bool _useDiagnostic;
+    private readonly static bool _useConsole;
     public static bool useFile;
-    private static AutoResetEvent _kickEv;
-    private static RegisteredWaitHandle _wh;
-    private static System.Collections.Concurrent.ConcurrentQueue<LogRecord> _records;
+    private readonly static AutoResetEvent _kickEv;
+    private readonly static RegisteredWaitHandle _wh;
+    private readonly static System.Collections.Concurrent.ConcurrentQueue<LogRecord> _records;
     private static string _lfPath;
     private static DateTime _firstDT;
-    private static string _lfMask;
+    private readonly static string _lfMask;
     private static int _busy;
 
     static Log() {
@@ -34,26 +34,23 @@ namespace X13 {
       _wh = ThreadPool.RegisterWaitForSingleObject(_kickEv, Process, null, -1, false);
     }
     public static void Debug(string format, params object[] arg) {
-      onWrite(LogLevel.Debug, format, arg);
+      OnWrite(LogLevel.Debug, format, arg);
     }
     public static void Info(string format, params object[] arg) {
-      onWrite(LogLevel.Info, format, arg);
+      OnWrite(LogLevel.Info, format, arg);
     }
     public static void Warning(string format, params object[] arg) {
-      onWrite(LogLevel.Warning, format, arg);
+      OnWrite(LogLevel.Warning, format, arg);
     }
     public static void Error(string format, params object[] arg) {
-      onWrite(LogLevel.Error, format, arg);
+      OnWrite(LogLevel.Error, format, arg);
     }
-    public static void onWrite(LogLevel ll, string format, params object[] arg) {
+    public static void OnWrite(LogLevel ll, string format, params object[] arg) {
       _records.Enqueue(new LogRecord() { ll = ll, dt = DateTime.Now, format = format, args = arg });
       _kickEv.Set();
     }
     public static void AddEntry(LogLevel ll, DateTime dt, string msg){
-      var wr = Write;
-      if(wr != null) {
-        wr(ll, dt, msg, false);
-      }
+      Write?.Invoke(ll, dt, msg, false);
     }
     public static event Action<LogLevel, DateTime, string, bool> Write;
     public static Func<DateTime, int, IEnumerable<Log.LogRecord>> History;
@@ -68,9 +65,9 @@ namespace X13 {
       if(Interlocked.CompareExchange(ref _busy, 2, 1) != 1) {
         return;
       }
-      LogRecord r;
+      
       string msg;
-      while(_records.TryDequeue(out r)) {
+      while(_records.TryDequeue(out LogRecord r)) {
         try {
           msg = string.Format(r.format, r.args);
         }
@@ -78,10 +75,7 @@ namespace X13 {
           r.ll = LogLevel.Error;
           msg = "Bad format: " + r.format;
         }
-        var wr = Write;
-        if(wr != null) {
-          wr(r.ll, r.dt, msg, true);
-        }
+        Write?.Invoke(r.ll, r.dt, msg, true);
         string msgA;
         ConsoleColor cc;
         switch(r.ll) {

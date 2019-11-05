@@ -12,7 +12,7 @@ namespace X13 {
   public static class JsLib {
 
     public static readonly char[] SPLITTER_OBJ = new char[] { '.' };
-    private static JSF.ExternalFunction _SJ_Replacer;
+    private static readonly JSF.ExternalFunction _SJ_Replacer;
     //private static JSF.ExternalFunction _JS_Replacer;
     static JsLib() {
       _SJ_Replacer = new JSF.ExternalFunction(SJ_CustomTypesRepl);
@@ -33,8 +33,7 @@ namespace X13 {
           }
           // 2015-09-16T14:15:18.994Z
           if(s.Length == 24 && s[4] == '-' && s[7] == '-' && s[10] == 'T' && s[13] == ':' && s[16] == ':' && s[19] == '.') {
-            DateTimeOffset dto;
-            if(!DateTimeOffset.TryParseExact(s, "yyyy-MM-ddTH:mm:ss.fffK", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out dto) || 
+            if(!DateTimeOffset.TryParseExact(s, "yyyy-MM-ddTH:mm:ss.fffK", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTimeOffset dto) || 
                 Math.Abs(dto.Year-1001) < 1) {
               return JSC.JSObject.Marshal(DateTime.Now);
             }
@@ -136,7 +135,7 @@ namespace X13 {
       return object.Equals(v1.Value, v2.Value);
     }
 
-    public static bool ofBool(JSC.JSValue v, bool def) {
+    public static bool OfBool(JSC.JSValue v, bool def) {
       return (v == null || v.ValueType != JSC.JSValueType.Boolean) ? def : ((bool)v);
     }
 
@@ -170,7 +169,7 @@ namespace X13 {
     }
   }
   public class ByteArray : JSI.CustomType {
-    private byte[] _val;
+    private readonly byte[] _val;
 
     public ByteArray() {
       _val = new byte[0];
@@ -213,7 +212,9 @@ namespace X13 {
     }
 
     [JSI.DoNotEnumerate]
+#pragma warning disable IDE1006  // Naming Styles
     public JSC.JSValue toJSON(JSC.JSValue obj) {
+#pragma warning restore IDE1006 // Naming Styles
       return new JSL.String("¤BA" + Convert.ToBase64String(_val));
     }
     /*

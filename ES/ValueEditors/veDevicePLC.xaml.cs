@@ -25,8 +25,9 @@ namespace X13.UI {
       return new veDevicePLC(owner, manifest);
     }
 
-    private InBase _owner;
-    private X13.Data.DTopic _stateT, _srcT;
+    private readonly InBase _owner;
+    private readonly X13.Data.DTopic _stateT;
+    private X13.Data.DTopic _srcT;
     private GridViewColumn _c2;
     private InspectorForm _inspForm;
 
@@ -54,7 +55,7 @@ namespace X13.UI {
     private void SrcLoaded(Task<Data.DTopic> tt) {
       if(tt.IsCompleted && !tt.IsFaulted && tt.Result!=null) {
         _srcT = tt.Result;
-        _srcT.changed+=_srcT_changed;
+        _srcT.Changed+=_srcT_changed;
         Dispatcher.BeginInvoke(new Action<Data.DTopic.Art, Data.DTopic>(_srcT_changed), Data.DTopic.Art.value, _srcT);
       }
     }
@@ -124,16 +125,16 @@ namespace X13.UI {
       }
     }
     private void buCompile_Click(object sender, RoutedEventArgs e) {
-      _stateT.Call("MQTT_SN.PLC.Build", _stateT.path);
+      _stateT.Call("MQTT_SN.PLC.Build", _stateT.Path);
     }
     private void buExecute_Click(object sender, RoutedEventArgs e) {
-      _stateT.Call("MQTT_SN.PLC.Run", _stateT.path);
+      _stateT.Call("MQTT_SN.PLC.Run", _stateT.Path);
     }
     private void buStart_Click(object sender, RoutedEventArgs e) {
-      _stateT.Call("MQTT_SN.PLC.Start", _stateT.path);
+      _stateT.Call("MQTT_SN.PLC.Start", _stateT.Path);
     }
     private void buStop_Click(object sender, RoutedEventArgs e) {
-      _stateT.Call("MQTT_SN.PLC.Stop", _stateT.path);
+      _stateT.Call("MQTT_SN.PLC.Stop", _stateT.Path);
     }
   }
 }

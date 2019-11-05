@@ -15,12 +15,12 @@ namespace X13.UI {
   internal class InManifest : InBase {
     private static int SIGNATURE_CNT = 0;
 
-    private DTopic _data;
+    private readonly DTopic _data;
     private DTopic _tManifest;
-    private InManifest _parent;
+    private readonly InManifest _parent;
     private JSC.JSValue _value;
-    private string _path;
-    private int _signature;
+    private readonly string _path;
+    private readonly int _signature;
 
     public InManifest(DTopic data, Action<InBase, bool> collFunc) {
       _signature = System.Threading.Interlocked.Increment(ref SIGNATURE_CNT);
@@ -35,14 +35,14 @@ namespace X13.UI {
       base.IsGroupHeader = true;
       base.levelPadding = 1;
       base._items = new List<InBase>();
-      _data.changed += _data_PropertyChanged;
+      _data.Changed += Data_PropertyChanged;
       _data.GetAsync("/$YS/TYPES/Ext/Manifest").ContinueWith(ManifestLoaded, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     private void ManifestLoaded(Task<DTopic> td) {
       if(td.IsCompleted && !td.IsFaulted && td.Result != null) {
         _tManifest = td.Result;
-        _tManifest.changed += Manifest_changed;
+        _tManifest.Changed += Manifest_changed;
         UpdateType(_tManifest.State, _data.Manifest);
         base._isExpanded = this.HasChildren;
       }
@@ -75,22 +75,22 @@ namespace X13.UI {
       base.IsEdited = true;
     }
     
-    private void _data_PropertyChanged(DTopic.Art art, DTopic child) {
+    private void Data_PropertyChanged(DTopic.Art art, DTopic child) {
       if(art == DTopic.Art.type) {
         _value = _data.Manifest;
-        UpdateType(_tManifest != null ? _tManifest.State : null, _data.Manifest);
+        UpdateType(_tManifest?.State, _data.Manifest);
       }
     }
     private void Manifest_changed(DTopic.Art art, DTopic src) {
       if(art == DTopic.Art.value) {
-        UpdateType(_tManifest != null ? _tManifest.State : null, _value);
+        UpdateType(_tManifest?.State, _value);
       }
     }
     private void SetFieldResp(Task<JSC.JSValue> r) {
       if(r.IsCompleted) {
         if(r.IsFaulted) {
-          UpdateType(_tManifest != null ? _tManifest.State : null, value);
-          Log.Warning("{0}.{1} - {2}", _data.fullPath, _path, r.Exception.InnerException);
+          UpdateType(_tManifest?.State, value);
+          Log.Warning("{0}.{1} - {2}", _data.FullPath, _path, r.Exception.InnerException);
         }
       }
     }
@@ -217,7 +217,7 @@ namespace X13.UI {
       }
     }
     public override DTopic Root {
-      get { return _data.Connection.root; }
+      get { return _data.Connection.Root; }
     }
     public override int CompareTo(InBase other) {
       var o = other as InManifest;
@@ -247,34 +247,32 @@ namespace X13.UI {
             if(_items.Any(z => z.name == kv.Key)) {
               continue;
             }
-            mi = new MenuItem();
-            mi.Header = kv.Key;
+            mi = new MenuItem() { Header = kv.Key, Tag = kv.Value };
             if((v2 = kv.Value["icon"]).ValueType == JSC.JSValueType.String) {
               mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
             }
             if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
               mi.ToolTip = v2.Value;
             }
-            mi.Tag = kv.Value;
-            mi.Click += miAdd_Click;
+            mi.Click += MiAdd_Click;
             ma.Items.Add(mi);
           }
         } else {
           if(_data.Connection.CoreTypes != null) {
-            foreach(var t in _data.Connection.CoreTypes.children) {
+            foreach(var t in _data.Connection.CoreTypes.Children) {
               if((v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null || !v1["default"].Defined) {
                 continue;
               }
-              mi = new MenuItem() { Header = t.name, Tag = v1 };
+              mi = new MenuItem() { Header = t.Name, Tag = v1 };
               if((v2 = v1["icon"]).ValueType == JSC.JSValueType.String) {
                 mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
               } else {
-                mi.Icon = new Image() { Source = App.GetIcon(t.name), Height = 16, Width = 16 };
+                mi.Icon = new Image() { Source = App.GetIcon(t.Name), Height = 16, Width = 16 };
               }
               if((v2 = v1["hint"]).ValueType == JSC.JSValueType.String) {
                 mi.ToolTip = v2.Value;
               }
-              mi.Click += miAdd_Click;
+              mi.Click += MiAdd_Click;
               ma.Items.Add(mi);
             }
           }
@@ -286,12 +284,12 @@ namespace X13.UI {
       }
       mi = new MenuItem() { Header = "Delete", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Delete.png"), Width = 16, Height = 16 } };
       mi.IsEnabled = _parent != null && !IsRequired;
-      mi.Click += miDelete_Click;
+      mi.Click += MiDelete_Click;
       l.Add(mi);
       return l;
     }
 
-    private void miAdd_Click(object sender, RoutedEventArgs e) {
+    private void MiAdd_Click(object sender, RoutedEventArgs e) {
       var mi = sender as MenuItem;
       JSC.JSValue decl;
       if(!IsReadonly && mi != null && (decl = mi.Tag as JSC.JSValue) != null) {
@@ -314,7 +312,7 @@ namespace X13.UI {
         }
       }
     }
-    private void miDelete_Click(object sender, RoutedEventArgs e) {
+    private void MiDelete_Click(object sender, RoutedEventArgs e) {
       if(!IsRequired && _parent != null) {
         _data.SetField(_path, null);
       }
@@ -324,16 +322,16 @@ namespace X13.UI {
     #region IDisposable Member
     public override void Dispose() {
       if(_parent == null) {
-        _data.changed -= _data_PropertyChanged;
+        _data.Changed -= Data_PropertyChanged;
         if(_tManifest != null) {
-          _tManifest.changed -= Manifest_changed;
+          _tManifest.Changed -= Manifest_changed;
         }
       }
     }
     #endregion IDisposable Member
 
     public override string ToString() {
-      return "/" + _signature.ToString("X4") + "/ " + (_data != null ? _data.fullPath : "<new>") + "." + _path;
+      return "/" + _signature.ToString("X4") + "/ " + (_data != null ? _data.FullPath : "<new>") + "." + _path;
     }
   }
 }

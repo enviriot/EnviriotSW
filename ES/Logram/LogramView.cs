@@ -23,16 +23,16 @@ namespace X13.UI {
     private double _zoom;
     private Point ScreenStartPoint;
     private Point startOffset;
-    private TransformGroup _transformGroup;
-    private TranslateTransform _translateTransform;
-    private ScaleTransform _zoomTransform;
+    private readonly TransformGroup _transformGroup;
+    private readonly TranslateTransform _translateTransform;
+    private readonly ScaleTransform _zoomTransform;
 
-    private DrawingVisual _backgroundVisual;
-    private List<Visual> _visuals;
-    private SortedList<uint, loItem> _map;
-    private DrawingVisual _mSelectVisual;
-    private loItem _selected;
-    private loElement[] _mSelected;
+    private readonly DrawingVisual _backgroundVisual;
+    private readonly List<Visual> _visuals;
+    private readonly SortedList<uint, LO_Item> _map;
+    private readonly DrawingVisual _mSelectVisual;
+    private LO_Item _selected;
+    private LO_Element[] _mSelected;
     private bool _multipleSelection;
     private bool move;
     private bool _dataIsLoaded;
@@ -51,7 +51,7 @@ namespace X13.UI {
       _transformGroup.Children.Add(_translateTransform);
       RenderTransform = _transformGroup;
       AddVisualChild(_backgroundVisual);
-      _map = new SortedList<uint, loItem>();
+      _map = new SortedList<uint, LO_Item>();
       _topicsToLoad = new List<DTopic>();
       this.ContextMenu = new ContextMenu();
       this.AllowDrop = true;
@@ -63,11 +63,11 @@ namespace X13.UI {
       Topic2Load(_model);
       _map.Clear();
 
-      _model.changed += ModelChanged;
+      _model.Changed += ModelChanged;
       ModelChanged(DTopic.Art.type, _model);
 
-      if(_model.children != null) {
-        foreach(var ch in _model.children) {
+      if(_model.Children != null) {
+        foreach(var ch in _model.Children) {
           Topic2Load(ch);
           ch.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
         }
@@ -76,7 +76,7 @@ namespace X13.UI {
     }
 
     #region Loading data
-    private List<DTopic> _topicsToLoad;
+    private readonly List<DTopic> _topicsToLoad;
     private Action _onDataLoadedAction;
     private void Topic2Load(DTopic t) {
       //Log.Debug("+$ "+t.path);
@@ -93,7 +93,7 @@ namespace X13.UI {
     private void LoadComplet() {
       _dataIsLoaded = true;
       //Log.Debug(" $ "+Model.ToString());
-      foreach(var p in _visuals.OfType<loPin>().Where(z => z.IsInput && !z.IsFreeInput).ToArray()) {
+      foreach(var p in _visuals.OfType<LO_Pin>().Where(z => z.IsInput && !z.IsFreeInput).ToArray()) {
         p.Render(3);  // Draw loBinding's
       }
       _onDataLoadedAction();
@@ -105,7 +105,7 @@ namespace X13.UI {
       if(tt.IsFaulted || !tt.IsCompleted || (t = tt.Result) == null) {
         return;
       }
-      t.changed += ChildChanged;
+      t.Changed += ChildChanged;
       ChildChanged(DTopic.Art.addChild, t);
     }
     private void ModelChanged(DTopic.Art a, DTopic t) {
@@ -114,30 +114,34 @@ namespace X13.UI {
           this.Width = JsLib.OfInt(JsLib.GetField(_model.Manifest, "Logram.width"), 32 * CELL_SIZE);
           this.Height = JsLib.OfInt(JsLib.GetField(_model.Manifest, "Logram.height"), 18 * CELL_SIZE);
         }
-      } else if(t.parent == _model) {
+      } else if(t.Parent == _model) {
         if(a == DTopic.Art.addChild) {
           t.GetAsync(null).ContinueWith(MChildrenLoad, TaskScheduler.FromCurrentSynchronizationContext());
         } else if(a == DTopic.Art.RemoveChild) {
-          foreach(var it in _visuals.OfType<loElement>().Where(z => z.GetModel() == t).ToArray()) {
+          foreach(var it in _visuals.OfType<LO_Element>().Where(z => z.GetModel() == t).ToArray()) {
             it.Dispose();
           }
         }
       }
     }
     private void ChildChanged(DTopic.Art a, DTopic t) {
-      if(t.parent == _model) {
+      if(t.Parent == _model) {
         if(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBlock"), null) != null) {
           if(a == DTopic.Art.addChild) {
-            var b = _visuals.OfType<loBlock>().FirstOrDefault(z => z.GetModel() == t);
+            var b = _visuals.OfType<LO_Block>().FirstOrDefault(z => z.GetModel() == t);
             if(b == null) {
-              loBlock.Create(t, this);
+#pragma warning disable IDE0067 // Dispose objects before losing scope
+              LO_Block.Create(t, this);
+#pragma warning restore IDE0067 // Dispose objects before losing scope
             }
           }
         } else {
           if(a == DTopic.Art.addChild) {
-            var p = _visuals.OfType<loVariable>().FirstOrDefault(z => z.GetModel() == t);
+            var p = _visuals.OfType<LO_Variable>().FirstOrDefault(z => z.GetModel() == t);
             if(p == null) {
-              loVariable.Create(t, this);
+#pragma warning disable IDE0067 // Dispose objects before losing scope
+              LO_Variable.Create(t, this);
+#pragma warning restore IDE0067 // Dispose objects before losing scope
               TopicLoaded(t);
             }
           }
@@ -158,8 +162,7 @@ namespace X13.UI {
     private void RenderBackground() {
       using(DrawingContext dc = _backgroundVisual.RenderOpen()) {
         dc.DrawRectangle(Brushes.White, new Pen(Brushes.Black, 1), new Rect(-8, -8, this.Width + 8, this.Height + 8));
-        Pen pen = new Pen(Brushes.LightGray, 0.5d);
-        pen.DashStyle = new DashStyle(new double[] { 3, CELL_SIZE * 2 - 3 }, 1.5);
+        Pen pen = new Pen(Brushes.LightGray, 0.5d){ DashStyle = new DashStyle(new double[] { 3, CELL_SIZE * 2 - 3 }, 1.5) };
         for(double x = 0; x < this.Width - CELL_SIZE; x += CELL_SIZE) {
           dc.DrawLine(pen, new Point(x, 0), new Point(x, this.Height - CELL_SIZE));
         }
@@ -188,7 +191,7 @@ namespace X13.UI {
       }
     }
 
-    private void MapRemove(loItem val) {
+    private void MapRemove(LO_Item val) {
       lock(_map) {
         foreach(var i in _map.Where(z => z.Value == val).ToArray()) {
           _map.Remove(i.Key);
@@ -200,7 +203,7 @@ namespace X13.UI {
     /// <param name="x">X</param>
     /// <param name="y">Y</param>
     /// <param name="val">item</param>
-    private void MapSet(int dir, int x, int y, loItem val) {
+    private void MapSet(int dir, int x, int y, LO_Item val) {
       uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0x7FFF) << 2) | (dir & 0x03));
       lock(_map) {
         if(val == null) {
@@ -210,39 +213,39 @@ namespace X13.UI {
         }
       }
     }
-    private loItem MapGet(int dir, int x, int y) {
+    private LO_Item MapGet(int dir, int x, int y) {
       uint idx = (uint)(((y & 0x7FFF) << 17) | ((x & 0x7FFF) << 2) | (dir & 0x03));
-      loItem ret;
+      LO_Item ret;
       lock(_map) {
         _map.TryGetValue(idx, out ret);
       }
       return ret;
     }
-    private loItem GetVisual(double x, double y) {
-      List<loItem> objs = new List<loItem>();
+    private LO_Item GetVisual(double x, double y) {
+      List<LO_Item> objs = new List<LO_Item>();
       GeometryHitTestParameters parameters = new GeometryHitTestParameters(new RectangleGeometry(new Rect(x - CELL_SIZE / 4, y - CELL_SIZE / 4, CELL_SIZE / 2, CELL_SIZE / 2)));
       VisualTreeHelper.HitTest(this, null, new HitTestResultCallback((hr) => {
         var rez = (GeometryHitTestResult)hr;
-        var vis = hr.VisualHit as loItem;
+        var vis = hr.VisualHit as LO_Item;
         if(vis != null) {
           objs.Add(vis);
         }
         return HitTestResultBehavior.Continue;
       }), parameters);
-      loItem ret = null;
+      LO_Item ret = null;
       if(objs.Count > 0) {
-        ret = objs.FirstOrDefault(z => z is loPin);
+        ret = objs.FirstOrDefault(z => z is LO_Pin);
         if(ret == null) {
-          ret = objs.FirstOrDefault(z => z is loBinding);
+          ret = objs.FirstOrDefault(z => z is LO_Binding);
           if(ret == null) {
-            ret = objs.FirstOrDefault(z => z is loElement);
+            ret = objs.FirstOrDefault(z => z is LO_Element);
           }
         }
       }
       return ret;
     }
 
-    public loItem selected {
+    public LO_Item Selected {
       get { return _selected; }
       private set {
         if(_selected != null) {
@@ -265,8 +268,8 @@ namespace X13.UI {
           el.Select(false);
         }
         _mSelected = null;
-      } else if(selected != null) {
-        selected = null;
+      } else if(Selected != null) {
+        Selected = null;
       }
     }
 
@@ -278,9 +281,9 @@ namespace X13.UI {
             DeleteLI(el);
           }
           _mSelected = null;
-        } else if(selected != null) {
-          DeleteLI(selected);
-          selected = null;
+        } else if(Selected != null) {
+          DeleteLI(Selected);
+          Selected = null;
         }
         //} else if(e.Key == Key.C && Keyboard.IsKeyDown(Key.LeftCtrl)) {
         //  mi_Copy(null, null);
@@ -315,15 +318,15 @@ namespace X13.UI {
         ScreenStartPoint = e.GetPosition(this);
         if(_mSelected == null) {
           var sel = GetVisual(ScreenStartPoint.X, ScreenStartPoint.Y);
-          if(e.ClickCount==2 && sel==selected) {
+          if(e.ClickCount==2 && sel==Selected) {
             DTopic t;
             if(sel!=null && (t = sel.GetModel())!=null) {
-              App.Workspace.Open(t.fullPath);
+              App.Workspace.Open(t.FullPath);
             }
             e.Handled = true;
           } else {
-            selected = sel;
-            if(selected == null) {
+            Selected = sel;
+            if(Selected == null) {
               base.OnMouseDown(e);
             } else {
               e.Handled = true;
@@ -345,17 +348,17 @@ namespace X13.UI {
         _translateTransform.Y = toY;
       } else if(e.LeftButton == MouseButtonState.Pressed && (move || (Math.Abs(cp.X - ScreenStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance || Math.Abs(cp.Y - ScreenStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance))) {
         move = true;
-        if(selected != null) {
-          loElement el;
-          loBinding w;
-          loPin pin;
-          if((el = selected as loElement) != null) {
+        if(Selected != null) {
+          LO_Element el;
+          LO_Binding w;
+          LO_Pin pin;
+          if((el = Selected as LO_Element) != null) {
             el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), false);
-          } else if((pin = selected as loPin) != null && (pin.IsFreeInput || !pin.IsInput)) {
-            w = new loBinding(selected as loPin, this);
+          } else if((pin = Selected as LO_Pin) != null && (pin.IsFreeInput || !pin.IsInput)) {
+            w = new LO_Binding(Selected as LO_Pin, this);
             w.Update(ScreenStartPoint);
-            selected = w;
-          } else if((w = selected as loBinding) != null && (w.Input == null || w.Output == null)) {
+            Selected = w;
+          } else if((w = Selected as LO_Binding) != null && (w.Input == null || w.Output == null)) {
             w.Update(cp);
           }
         } else if(_mSelected != null) {
@@ -378,9 +381,9 @@ namespace X13.UI {
     protected override void OnMouseUp(MouseButtonEventArgs e) {
       if(e.ChangedButton == MouseButton.Right && e.RightButton == MouseButtonState.Released) {
         DTopic cur;
-        if(selected != null && (cur = selected.GetModel()) != null) {
+        if(Selected != null && (cur = Selected.GetModel()) != null) {
           var cm = (this as Canvas).ContextMenu;
-          cm.ItemsSource = MenuItems(cur, selected);
+          cm.ItemsSource = MenuItems(cur, Selected);
           cm.IsOpen = true;
         }
         e.Handled = true;
@@ -411,20 +414,20 @@ namespace X13.UI {
           if(IsMouseCaptured) {
             Cursor = Cursors.Arrow;
             ReleaseMouseCapture();
-          } else if(selected != null) {
-            loElement el;
-            loBinding w;
+          } else if(Selected != null) {
+            LO_Element el;
+            LO_Binding w;
             var cp = e.GetPosition(this);
-            if((el = selected as loElement) != null && move) {
+            if((el = Selected as LO_Element) != null && move) {
               el.SetLocation(new Vector(el.OriginalLocation.X + (cp.X - ScreenStartPoint.X), el.OriginalLocation.Y + (cp.Y - ScreenStartPoint.Y)), true);
-              if(selected.Offset.Y + selected.ContentBounds.Bottom + CELL_SIZE > this.Height) {
-                _model.SetField("Logram.height", (int)(selected.Offset.Y + selected.ContentBounds.Bottom + CELL_SIZE));
+              if(Selected.Offset.Y + Selected.ContentBounds.Bottom + CELL_SIZE > this.Height) {
+                _model.SetField("Logram.height", (int)(Selected.Offset.Y + Selected.ContentBounds.Bottom + CELL_SIZE));
               }
-              if(selected.Offset.X + selected.ContentBounds.Right + CELL_SIZE > this.Width) {
-                _model.SetField("Logram.width", (int)(selected.Offset.X + selected.ContentBounds.Right + CELL_SIZE));
+              if(Selected.Offset.X + Selected.ContentBounds.Right + CELL_SIZE > this.Width) {
+                _model.SetField("Logram.width", (int)(Selected.Offset.X + Selected.ContentBounds.Right + CELL_SIZE));
               }
-            } else if((w = selected as loBinding) != null && (w.Output == null || w.Input == null)) {
-              loPin finish = GetVisual(cp.X, cp.Y) as loPin;
+            } else if((w = Selected as LO_Binding) != null && (w.Output == null || w.Input == null)) {
+              LO_Pin finish = GetVisual(cp.X, cp.Y) as LO_Pin;
               if(finish != null && ((w.Output == null && finish.GetModel() != w.Input.GetModel() && finish.IsFreeInput) || (w.Input == null && finish.GetModel() != w.Output.GetModel() && !finish.IsInput))) { //-V3080 //-V3027
                 w.SetFinish(finish);
               } else {
@@ -435,7 +438,7 @@ namespace X13.UI {
             var cp = e.GetPosition(this);
             _multipleSelection = false;
             base.RemoveVisualChild(_mSelectVisual);
-            var objs = new List<loElement>();
+            var objs = new List<LO_Element>();
             GeometryHitTestParameters parameters;
             {
               double l, t, w, h;
@@ -458,7 +461,7 @@ namespace X13.UI {
 
             VisualTreeHelper.HitTest(this, null, new HitTestResultCallback((hr) => {
               var rez = (GeometryHitTestResult)hr;
-              var vis = hr.VisualHit as loElement;
+              var vis = hr.VisualHit as LO_Element;
               if(vis != null && rez.IntersectionDetail == IntersectionDetail.FullyInside) {
                 objs.Add(vis);
               }
@@ -466,7 +469,7 @@ namespace X13.UI {
             }), parameters);
             if(objs.Count > 0) {
               if(objs.Count == 1) {
-                selected = objs[0];
+                Selected = objs[0];
               } else {
                 _mSelected = objs.ToArray();
                 foreach(var el in _mSelected) {
@@ -499,26 +502,26 @@ namespace X13.UI {
           if(t.State.ValueType == JSC.JSValueType.Object && t.State.Value != null) {
             string name;
             string prefix = JsLib.OfString(t.State["namePrefix"], "U");
-            if(Model.children != null) {
+            if(Model.Children != null) {
               int i = 1;
               do {
                 name = prefix + i.ToString("D02");
                 i++;
-              } while(Model.children.Any(z => z.name == name));
+              } while(Model.Children.Any(z => z.Name == name));
             } else {
               name = prefix + "01";
             }
             Model.CreateAsync(name, t.State["default"], JsLib.SetField(JsLib.SetField(t.State["manifest"], "Logram.top", y), "Logram.left", x));
           }
         } else if((e.AllowedEffects & DragDropEffects.Link) == DragDropEffects.Link) {
-          string name = t.name;
-          if(Model.children!=null && Model.children.Any(z => z.name == name)) {
-            if(t.parent == null || (name = t.parent.name + "_" + t.name) == null || Model.children.Any(z => z.name == name)) {
+          string name = t.Name;
+          if(Model.Children!=null && Model.Children.Any(z => z.Name == name)) {
+            if(t.Parent == null || (name = t.Parent.Name + "_" + t.Name) == null || Model.Children.Any(z => z.Name == name)) {
               int i = 1;
               do {
-                name = string.Format("{0}_{1}", t.name, i);
+                name = string.Format("{0}_{1}", t.Name, i);
                 i++;
-              } while(Model.children.Any(z => z.name == name));
+              } while(Model.Children.Any(z => z.Name == name));
             }
           }
           var m = JSC.JSObject.CreateObject();
@@ -527,19 +530,19 @@ namespace X13.UI {
           ml["left"] = x;
           m["Logram"] = ml;
           var mc = JSC.JSObject.CreateObject();
-          mc["LoBind"] = t.path;
+          mc["LoBind"] = t.Path;
           m["cctor"] = mc;
           m["attr"] = 0;
           Model.CreateAsync(name, t.State, m);
           if(string.IsNullOrEmpty(JsLib.OfString(JsLib.GetField(t.Manifest, "cctor.LoBind"), null))) {
-            t.SetField("cctor.LoBind", Model.path+"/"+name);
+            t.SetField("cctor.LoBind", Model.Path+"/"+name);
           }
         }
       }
     }
 
-    private void DeleteLI(loItem el) {
-      loBinding b = el as loBinding;
+    private void DeleteLI(LO_Item el) {
+      LO_Binding b = el as LO_Binding;
       DTopic t;
 
       if(b != null && (t = b.Output.GetModel()) != null) {
@@ -550,19 +553,19 @@ namespace X13.UI {
     }
 
     #region ContextMenu
-    public ObservableCollection<Control> MenuItems(DTopic t, loItem ctrl) {
+    public ObservableCollection<Control> MenuItems(DTopic t, LO_Item ctrl) {
       var l = new ObservableCollection<Control>();
       JSC.JSValue v1;
       MenuItem mi;
 
       mi = new MenuItem() { Header = "Open in new tab", Tag = t };
-      mi.Click += miOpen_Click;
+      mi.Click += MiOpen_Click;
       l.Add(mi);
       l.Add(new Separator());
-      if(ctrl is loPin) {
-        bool ic = JsLib.ofBool(JsLib.GetField(t.Manifest, "Logram.trace"), false);
+      if(ctrl is LO_Pin) {
+        bool ic = JsLib.OfBool(JsLib.GetField(t.Manifest, "Logram.trace"), false);
         mi = new MenuItem() { Header = "Trace", Tag = t, IsCheckable = true, IsChecked =  ic};
-        mi.Click += miTrace_Click;
+        mi.Click += MiTrace_Click;
         l.Add(mi);
         l.Add(new Separator());
       }
@@ -591,10 +594,10 @@ namespace X13.UI {
     private async void FillContextMenuFromChildren(DTopic owner, ObservableCollection<Control> l, Task<DTopic> tt) {
       var acts = new Dictionary<string, JSC.JSValue>();
       if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
-        foreach(var t in tt.Result.children) {
+        foreach(var t in tt.Result.Children) {
           var z = await t.GetAsync(null);
           if(z.State.ValueType == JSC.JSValueType.Object && z.State.Value != null && z.State["default"].Defined) {
-            acts.Add(z.name, z.State);
+            acts.Add(z.Name, z.State);
           }
         }
       }
@@ -612,18 +615,17 @@ namespace X13.UI {
         KeyValuePair<string, JSC.JSValue> rca;
         string rcs;
         // fill used resources
-        if(owner.children != null) {
-          foreach(var ch in owner.children) {
+        if(owner.Children != null) {
+          foreach(var ch in owner.Children) {
             if((tmp1 = JsLib.GetField(ch.Manifest, "MQTT-SN.tag")).ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(rName = tmp1.Value as string)) {
-              rName = ch.name;
+              rName = ch.Name;
             }
             rca = _acts.FirstOrDefault(z => z.Key == rName);
             if(rca.Value == null || (tmp1 = rca.Value["rc"]).ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(rcs = tmp1.Value as string)) {
               continue;
             }
             foreach(string curRC in rcs.Split(',').Where(z => !string.IsNullOrWhiteSpace(z) && z.Length > 1)) {
-              int pos;
-              if(!int.TryParse(curRC.Substring(1), out pos)) {
+              if(!int.TryParse(curRC.Substring(1), out int pos)) {
                 continue;
               }
               for(int i = pos - resource.Count; i >= 0; i--) {
@@ -643,8 +645,7 @@ namespace X13.UI {
           bool busy = false;
           if((tmp1 = kv.Value["rc"]).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(rcs = tmp1.Value as string)) { // check used resources
             foreach(string curRC in rcs.Split(',').Where(z => !string.IsNullOrWhiteSpace(z) && z.Length > 1)) {
-              int pos;
-              if(!int.TryParse(curRC.Substring(1), out pos)) {
+              if(!int.TryParse(curRC.Substring(1), out int pos)) {
                 continue;
               }
               if(pos < resource.Count && ((curRC[0] == (char)RcUse.Exclusive && resource[pos] != RcUse.None) || (curRC[0] == (char)RcUse.Shared && resource[pos] != RcUse.None && resource[pos] != RcUse.Shared))) {
@@ -656,7 +657,7 @@ namespace X13.UI {
           if(busy) {
             continue;
           }
-          mi = new MenuItem() { Header = kv.Key.Replace("_", "__"), Tag = JsLib.SetField(kv.Value, "mi_path", owner.name+"/"+kv.Key) };
+          mi = new MenuItem() { Header = kv.Key.Replace("_", "__"), Tag = JsLib.SetField(kv.Value, "mi_path", owner.Name+"/"+kv.Key) };
           if((v2 = kv.Value["icon"]).ValueType == JSC.JSValueType.String) {
             mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
           } else {
@@ -665,7 +666,7 @@ namespace X13.UI {
           if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
             mi.ToolTip = v2.Value;
           }
-          mi.Click += miAdd_Click;
+          mi.Click += MiAdd_Click;
           if((v2 = kv.Value["menu"]).ValueType == JSC.JSValueType.String && kv.Value.Value != null) {
             AddSubMenu(ma, v2.Value as string, mi);
           } else {
@@ -699,7 +700,7 @@ namespace X13.UI {
       //mi.Click += miCut_Click;
       //l.Add(mi);
       mi = new MenuItem() { Header = "Delete", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Delete.png"), Width = 16, Height = 16 }, Tag = owner };
-      mi.Click += miDelete_Click;
+      mi.Click += MiDelete_Click;
       mi.IsEnabled = ( owner.Manifest==null || ( JsLib.OfInt(owner.Manifest["attr"], 0) & 1 )!=1 );
       l.Add(mi);
     }
@@ -739,8 +740,7 @@ namespace X13.UI {
       for(int j = 0; j < lvls.Length; j++) {
         mn = mm.Items.OfType<MenuItem>().FirstOrDefault(z => z.Header as string == lvls[j]);
         if(mn == null) {
-          mn = new MenuItem();
-          mn.Header = lvls[j];
+          mn = new MenuItem() { Header = lvls[j] };
           mm.Items.Add(mn);
         }
         mm = mn;
@@ -748,26 +748,26 @@ namespace X13.UI {
       mm.Items.Add(mi);
     }
     
-    private void miOpen_Click(object sender, System.Windows.RoutedEventArgs e) {
+    private void MiOpen_Click(object sender, System.Windows.RoutedEventArgs e) {
       DTopic t;
       var mi = sender as MenuItem;
       if(mi == null || (t = mi.Tag as DTopic)==null) {
         return;
       }
 
-      App.Workspace.Open(t.fullPath);
+      App.Workspace.Open(t.FullPath);
     }
-    private void miTrace_Click(object sender, RoutedEventArgs e) {
+    private void MiTrace_Click(object sender, RoutedEventArgs e) {
       DTopic t;
       var mi = sender as MenuItem;
       if(mi == null || (t = mi.Tag as DTopic)==null) {
         return;
       }
-      bool ic = JsLib.ofBool(JsLib.GetField(t.Manifest, "Logram.trace"), false);
+      bool ic = JsLib.OfBool(JsLib.GetField(t.Manifest, "Logram.trace"), false);
       t.SetField("Logram.trace", !ic);
     }
     
-    private void miAdd_Click(object sender, System.Windows.RoutedEventArgs e) {
+    private void MiAdd_Click(object sender, System.Windows.RoutedEventArgs e) {
       var mi = sender as MenuItem;
       if(mi == null) {
         return;
@@ -804,7 +804,7 @@ namespace X13.UI {
     //  }
     //}
 
-    private void miDelete_Click(object sender, System.Windows.RoutedEventArgs e) {
+    private void MiDelete_Click(object sender, System.Windows.RoutedEventArgs e) {
       DTopic t;
       var mi = sender as MenuItem;
       if(mi == null || (t = mi.Tag as DTopic) == null) {
@@ -812,13 +812,13 @@ namespace X13.UI {
       }
       t.Delete();
     }
-
+    /*
     private void IconFromTypeLoaded(Task<DTopic> td, object o) {
       var img = o as Image;
       if(img != null && td.IsCompleted && td.Result != null) {
         //img.Source = App.GetIcon(td.Result.GetField<string>("icon"));
       }
-    }
+    }*/
     private enum RcUse : ushort {
       None = '0',
       Baned = 'B',
@@ -831,11 +831,11 @@ namespace X13.UI {
     #region IDisposable Member
     public void Dispose() {
       if(System.Threading.Interlocked.Exchange(ref this._disposed, 1)==0) {
-        _model.changed -= ModelChanged;
+        _model.Changed -= ModelChanged;
         DTopic t;
-        foreach(var it in _visuals.OfType<loItem>().ToArray()) {
+        foreach(var it in _visuals.OfType<LO_Item>().ToArray()) {
           if((t = it.GetModel()) != null) {
-            t.changed -= ChildChanged;
+            t.Changed -= ChildChanged;
           }
           it.Dispose();
         }

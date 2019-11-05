@@ -9,7 +9,7 @@ using System.Text;
 namespace X13.EsBroker {
   internal class EsMessage {
     public readonly EsSocket _conn;
-    private JST.Array _request;
+    private readonly JST.Array _request;
 
     public EsMessage(EsSocket conn, JST.Array req) {
       this._conn = conn;

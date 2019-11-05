@@ -12,12 +12,12 @@ using System.Windows;
 
 namespace X13.UI {
   public partial class LogramForm : UserControl, IBaseForm {
-    private ObservableCollection<LBDesc> _blocks;
+    private readonly ObservableCollection<LBDesc> _blocks;
 
     internal LogramForm(DTopic data) {
       _blocks = new ObservableCollection<LBDesc>();
       InitializeComponent();
-      uiLogram.Attach(data, new Action(() => data.Connection.root.GetAsync("/$YS/TYPES/LoBlock").ContinueWith(this.LoBlockLoad, TaskScheduler.FromCurrentSynchronizationContext())));
+      uiLogram.Attach(data, new Action(() => data.Connection.Root.GetAsync("/$YS/TYPES/LoBlock").ContinueWith(this.LoBlockLoad, TaskScheduler.FromCurrentSynchronizationContext())));
       icBlocks.ItemsSource = _blocks;
     }
 
@@ -26,9 +26,9 @@ namespace X13.UI {
       if(tt.IsFaulted || !tt.IsCompleted || (t=tt.Result)==null) {
         return;        
       }
-      t.changed += LBDescrChanged;
-      if(t.children != null) {
-        foreach(var ch in t.children) {
+      t.Changed += LBDescrChanged;
+      if(t.Children != null) {
+        foreach(var ch in t.Children) {
           ch.GetAsync(null).ContinueWith(this.LoBlockLoad, TaskScheduler.FromCurrentSynchronizationContext());
         }
       }
@@ -54,7 +54,7 @@ namespace X13.UI {
           bl = new LBDesc(t);
           lock(_blocks) {
             int i = 0;
-            while(_blocks.Count > i && _blocks[i].owner.path.CompareTo(t.path)<=0) {
+            while(_blocks.Count > i && _blocks[i].owner.Path.CompareTo(t.Path)<=0) {
               i++;
             }
             _blocks.Insert(i, bl);
@@ -95,12 +95,12 @@ namespace X13.UI {
         if(uiLogram.Model!=null) {
           string name;
           string prefix = JsLib.OfString(tag.owner.State["namePrefix"], "U");
-          if(uiLogram.Model.children != null) {
+          if(uiLogram.Model.Children != null) {
             int i = 1;
             do {
               name = prefix+i.ToString("D02");
               i++;
-            } while(uiLogram.Model.children.Any(z => z.name == name));
+            } while(uiLogram.Model.Children.Any(z => z.Name == name));
           } else {
             name = prefix + "01";
           }
@@ -114,7 +114,7 @@ namespace X13.UI {
     #region IDisposable Member
     public void Dispose() {
       foreach(var b in _blocks.ToArray()) {
-        b.owner.changed -= LBDescrChanged;
+        b.owner.Changed -= LBDescrChanged;
       }
       _blocks.Clear();
       uiLogram.Dispose();

@@ -25,7 +25,7 @@ namespace X13.UI {
       return new veJS(owner, manifest);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
     private GridViewColumn _c2;
     private InspectorForm _inspForm;
 

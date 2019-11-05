@@ -10,9 +10,10 @@ using X13.Repository;
 
 namespace X13.Logram {
   internal class LoBlock : ILoItem {
-    private LogramPl _pl;
-    private Topic _owner, _typeT;
-    private List<LoVariable> _pins;
+    private readonly LogramPl _pl;
+    private readonly Topic _owner;
+    private Topic _typeT;
+    private readonly List<LoVariable> _pins;
     private int _layer;
     private Topic _prim;
 
@@ -26,7 +27,7 @@ namespace X13.Logram {
       this._owner = owner;
       _pins = new List<LoVariable>();
       ManifestChanged();
-      foreach(var ch in _owner.children) {
+      foreach(var ch in _owner.Children) {
         GetPin(ch);
       }
       _pl.EnqueueIn(this);
@@ -34,8 +35,7 @@ namespace X13.Logram {
     public void ManifestChanged() {
       JSC.JSValue jSrc;
       var jType = _owner.GetField("type");
-      Topic tt;
-      if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out tt)
+      if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.Root.Get("$YS/TYPES", false).Exist(jType.Value as string, out Topic tt)
         && _typeT!=tt && ( jSrc = JsLib.GetField(tt.GetState(), "src") ).ValueType == JSC.JSValueType.String) {
         _typeT = tt;
       } else {
@@ -71,11 +71,11 @@ namespace X13.Logram {
           }
         }
         catch(Exception ex) {
-          Log.Warning("{0}.ctor() - {1}", _owner.path, ex.Message);
+          Log.Warning("{0}.ctor() - {1}", _owner.Path, ex.Message);
         }
       } else {
-        if(!_owner.disposed) {
-          Log.Warning("{0} constructor is not defined", _owner.path);
+        if(!_owner.IsDisposed) {
+          Log.Warning("{0} constructor is not defined", _owner.Path);
         }
       }
     }
@@ -85,8 +85,8 @@ namespace X13.Logram {
       v = _pins.FirstOrDefault(z => z.Owner==t);
       if(v==null) {
         v = _pl.GetVariable(t);
-        var ddr = _typeT!=null?JsLib.OfInt(_typeT.GetState(), "Children."+t.name+".ddr", 0):0;
-        if(t.parent!=_owner || ddr<=0) {
+        var ddr = _typeT!=null?JsLib.OfInt(_typeT.GetState(), "Children."+t.Name+".ddr", 0):0;
+        if(t.Parent!=_owner || ddr<=0) {
           v.AddLink(this);
         } else {
           v.Source = this;
@@ -112,9 +112,9 @@ namespace X13.Logram {
     }
     public ILoItem[] Route { get; set; }
     public void Tick1() {
-      if(_owner.disposed && !Disposed) {
+      if(_owner.IsDisposed && !Disposed) {
         Disposed = true;
-        foreach(var p in _pins.Where(z => z.Owner.parent!=_owner)) {
+        foreach(var p in _pins.Where(z => z.Owner.Parent!=_owner)) {
           p.DeleteLink(this);
         }
         _pins.Clear();
@@ -151,14 +151,14 @@ namespace X13.Logram {
     }
     public void Tick2() {
       if(_prim!=null) {
-        string pr = _prim.parent == _owner ? _prim.name : _prim.path;
+        string pr = _prim.Parent == _owner ? _prim.Name : _prim.Path;
         _prim = null;
         if(_calcFunc != null) {
           try {
             _calcFunc.Call(_self, new JSC.Arguments { pr });
           }
           catch(Exception ex) {
-            Log.Warning("{0}.Calculate({1}) - {2}", _owner.path, pr, ex.Message);
+            Log.Warning("{0}.Calculate({1}) - {2}", _owner.Path, pr, ex.Message);
           }
         }
       }
@@ -174,7 +174,7 @@ namespace X13.Logram {
       if(this._layer!=other.Layer) {
         return this._layer.CompareTo(other.Layer);
       }
-      return this._owner.path.CompareTo(other.Owner.path);
+      return this._owner.Path.CompareTo(other.Owner.Path);
     }
     #endregion IComparable<ILoItem> Members
 
@@ -195,36 +195,25 @@ namespace X13.Logram {
     }
 
     private JSC.JSValue GetState(string path) {
-      Topic t;
-      LoVariable v;
-      if(_owner.Exist(path, out t)) {
-        v=GetPin(t);
-        return v.GetValue();
-      }
-      return JSC.JSValue.NotExists;
+      return _owner.Exist(path, out Topic t)?GetPin(t).GetValue(): JSC.JSValue.NotExists;
     }
     private void SetState(string path, JSC.JSValue value) {
-      if(!_owner.disposed) {
+      if(!_owner.IsDisposed) {
         Topic t = _owner.Get(path, true, _owner);
         var v=GetPin(t);
-        if(t.parent == _owner) {
+        if(t.Parent == _owner) {
           v.SetValue(value, _owner);
         }
       }
     }
     private JSC.JSValue GetField(string path, string field) {
-      Topic t;
-      if(_owner.Exist(path, out t)) {
-        return t.GetField(field);
-      }
-      return JSC.JSValue.NotExists;
-
+      return _owner.Exist(path, out Topic t) ? t.GetField(field) : JSC.JSValue.NotExists;
     }
 
     #endregion JsFunctions
 
     public override string ToString() {
-      return "["+_layer.ToString("000") + "] " + _owner.path;
+      return "["+_layer.ToString("000") + "] " + _owner.Path;
     }
   }
 }

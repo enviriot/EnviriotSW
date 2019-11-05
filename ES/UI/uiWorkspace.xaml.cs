@@ -18,16 +18,18 @@ namespace X13.UI {
   /// <summary>
   /// Interaction logic for uiWorkspace.xaml
   /// </summary>
-  public partial class uiWorkspace : BaseWindow {
-    private InspectorForm _content;
-    public uiWorkspace() {
+  public partial class UI_Workspace : BaseWindow {
+    private readonly InspectorForm _content;
+    public UI_Workspace() {
       ContentId = "file://local/?view=wks";
       Title = "Workspace";
       InitializeComponent();
       _content = new InspectorForm(null);
       ccWorkspace.Content = _content;
       foreach(var cl in App.Workspace.Clients) {
-        _content.CollectionChange(new InTopic(cl.root, null, _content.CollectionChange), true);
+#pragma warning disable IDE0068 // Use recommended dispose pattern
+        _content.CollectionChange(new InTopic(cl.Root, null, _content.CollectionChange), true);
+#pragma warning restore IDE0068 // Use recommended dispose pattern
       }
       App.Workspace.Clients.CollectionChanged+=Clients_CollectionChanged;
     }
@@ -47,26 +49,27 @@ namespace X13.UI {
       switch(e.Action) {
       case System.Collections.Specialized.NotifyCollectionChangedAction.Add:
         foreach(var cl in e.NewItems.OfType<Data.Client>()) {
-          _content.CollectionChange(new InTopic(cl.root, null, _content.CollectionChange), true);
+#pragma warning disable IDE0068 // Use recommended dispose pattern
+          _content.CollectionChange(new InTopic(cl.Root, null, _content.CollectionChange), true);
+#pragma warning restore IDE0068 // Use recommended dispose pattern
         }
         break;
       case System.Collections.Specialized.NotifyCollectionChangedAction.Remove:
         foreach(var cl in e.OldItems.OfType<Data.Client>()) {
-          _content.RemoveItem(cl.root);
+          _content.RemoveItem(cl.Root);
         }
         break;
       }
     }
-    private void buAddConnection_Click(object sender, RoutedEventArgs e) {
+    private void BuAddConnection_Click(object sender, RoutedEventArgs e) {
 
       string url = Microsoft.VisualBasic.Interaction.InputBox("input server address", "Add connection");
       if(string.IsNullOrEmpty(url)){
         return;
       }
-      Uri uri;
       string server, user, pass;
       int port;
-      if(Uri.TryCreate(url, UriKind.Absolute, out uri)) {
+      if(Uri.TryCreate(url, UriKind.Absolute, out Uri uri)) {
         server = uri.DnsSafeHost;
         port = uri.IsDefaultPort?EsBroker.EsSocket.portDefault:uri.Port;
         if(string.IsNullOrWhiteSpace(uri.UserInfo)){
@@ -90,7 +93,7 @@ namespace X13.UI {
       }
       Data.Client cl = new Data.Client(server, port, user, pass);
       App.Workspace.Clients.Add(cl);
-      App.Workspace.Open(cl.root.fullPath);
+      App.Workspace.Open(cl.Root.FullPath);
     }
   }
 }

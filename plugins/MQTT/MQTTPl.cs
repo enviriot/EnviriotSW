@@ -17,8 +17,8 @@ namespace X13.MQTT {
     private Topic _owner;
     private Topic _verbose;
     private SubRec _subMq;
-    private List<MqSite> _sites;
-    private List<MqClient> _clients;
+    private readonly List<MqSite> _sites;
+    private readonly List<MqClient> _clients;
 
     public MQTTPl() {
       _sites = new List<MqSite>();
@@ -29,7 +29,7 @@ namespace X13.MQTT {
     public void Init() {
     }
     public void Start() {
-      _owner = Topic.root.Get("/$YS/MQTT");
+      _owner = Topic.Root.Get("/$YS/MQTT");
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -39,7 +39,7 @@ namespace X13.MQTT {
         _verbose.SetState(false);
 //#endif
       }
-      _subMq = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "MQTT.uri", SubFunc);
+      _subMq = Topic.Root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "MQTT.uri", SubFunc);
     }
     public void Tick() {
     }
@@ -55,7 +55,7 @@ namespace X13.MQTT {
     }
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/MQTT", true);
+        var en = Topic.Root.Get("/$YS/MQTT", true);
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -64,7 +64,7 @@ namespace X13.MQTT {
         return (bool)en.GetState();
       }
       set {
-        var en = Topic.root.Get("/$YS/MQTT", true);
+        var en = Topic.Root.Get("/$YS/MQTT", true);
         en.SetState(value);
       }
     }
@@ -77,7 +77,7 @@ namespace X13.MQTT {
     }
 
     private void SubFunc(Perform p, SubRec sr) {
-      if(p.art == Perform.Art.create) {
+      if(p.Art == Perform.ArtEnum.create) {
         return;
       }
       MqSite ms = _sites.FirstOrDefault(z => z.Owner == p.src);
@@ -86,7 +86,7 @@ namespace X13.MQTT {
         ms.Dispose();
         _sites.Remove(ms);
       }
-      if(p.art == Perform.Art.changedField || p.art==Perform.Art.subscribe) {
+      if(p.Art == Perform.ArtEnum.changedField || p.Art==Perform.ArtEnum.subscribe) {
         var uri = p.src.GetField("MQTT.uri").Value as string;
         if(string.IsNullOrEmpty(uri)) {
           return;
@@ -96,7 +96,7 @@ namespace X13.MQTT {
           uUri = new Uri(uri, UriKind.Absolute);
         }
         catch(Exception ex) {
-          Log.Warning("{0}.MQTT.uri = {1} - {2}", p.src.path, uri, ex.Message);
+          Log.Warning("{0}.MQTT.uri = {1} - {2}", p.src.Path, uri, ex.Message);
           return;
         }
         string uName, uPass;

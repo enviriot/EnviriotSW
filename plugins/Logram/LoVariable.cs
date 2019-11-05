@@ -10,12 +10,12 @@ using System.Threading;
 
 namespace X13.Logram {
   internal class LoVariable : ILoItem {
-    private LogramPl _pl;
-    private Topic _owner;
+    private readonly LogramPl _pl;
+    private readonly Topic _owner;
     private ILoItem _src, _src_new;
     private JSC.JSValue _value, _value_new;
     private int _layer;
-    private List<ILoItem> _links;
+    private readonly List<ILoItem> _links;
     private Topic _prim;
 
     public LoVariable(LogramPl pl, Topic owner) {
@@ -29,9 +29,8 @@ namespace X13.Logram {
 
     public void ManifestChanged() {
       string ss = JsLib.OfString(_owner.GetField("cctor.LoBind"), null);
-      Topic st;
       LoVariable sv;
-      if(ss!=null && _owner.Exist(ss, out st)) {
+      if(ss!=null && _owner.Exist(ss, out Topic st)) {
         sv = _src as LoVariable;
         if(sv==null || sv._owner!=st) {
           sv = _pl.GetVariable(st);
@@ -86,7 +85,7 @@ namespace X13.Logram {
 
     public void Tick1() {
       LoBlock bl;
-      if(_owner.disposed && !Disposed) {
+      if(_owner.IsDisposed && !Disposed) {
         Disposed = true;
         for(int i = _links.Count-1; i>=0; i--) {
           if(( bl = _links[i] as LoBlock )!=null) {
@@ -125,7 +124,7 @@ namespace X13.Logram {
         } else {
           _layer = 0;
           Route = null;
-          if(!_owner.disposed) {
+          if(!_owner.IsDisposed) {
             _owner.SetAttribute(Topic.Attribute.DB);
           }
           if(!_links.Any()) {
@@ -162,12 +161,12 @@ namespace X13.Logram {
       if(this._layer!=other.Layer) {
         return this._layer.CompareTo(other.Layer);
       }
-      return this._owner.path.CompareTo(other.Owner.path);
+      return this._owner.Path.CompareTo(other.Owner.Path);
     }
     #endregion IComparable<ILoItem> Members
 
     public override string ToString() {
-      return "["+_layer.ToString("000") + "] " + _owner.path;
+      return "["+_layer.ToString("000") + "] " + _owner.Path;
     }
   }
 }

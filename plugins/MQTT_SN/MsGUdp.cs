@@ -11,17 +11,17 @@ using X13.Repository;
 
 namespace X13.Periphery {
   internal class MsGUdp : IMsGate {
-    private MQTT_SNPl _pl;
-    private byte[][] _myIps;
-    private IPAddress[] _bcIps;
+    private readonly MQTT_SNPl _pl;
+    private readonly byte[][] _myIps;
+    private readonly IPAddress[] _bcIps;
     private UdpClient _udp;
-    private Timer _advTick;
-    private byte _gwRadius;
-    private AddrWithMask[] _whiteList;
+    private readonly Timer _advTick;
+    private readonly byte _gwRadius;
+    private readonly AddrWithMask[] _whiteList;
 
     public MsGUdp(MQTT_SNPl pl) {
       _pl = pl;
-      var udpT = Topic.root.Get("/$YS/MQTT-SN/udp");
+      var udpT = Topic.Root.Get("/$YS/MQTT-SN/udp");
       if(udpT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
         udpT.SetAttribute(Topic.Attribute.Config);
         udpT.SetState(true);
@@ -29,10 +29,10 @@ namespace X13.Periphery {
         return;  // udp disabled
       }
       List<AddrWithMask> wl = new List<AddrWithMask>();
-      foreach(var c in udpT.children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
-        var we = AddrWithMask.Parse(c.GetState().Value as string, c.name);
+      foreach(var c in udpT.Children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
+        var we = AddrWithMask.Parse(c.GetState().Value as string, c.Name);
         if(we == null) {
-          Log.Warning("{0} = {1} is not IpAddress with Mask", c.path, c.GetState().Value as string);
+          Log.Warning("{0} = {1} is not IpAddress with Mask", c.Path, c.GetState().Value as string);
         } else {
           wl.Add(we);
         }
@@ -85,12 +85,10 @@ namespace X13.Periphery {
       }
 
       try {
-        _udp = new UdpClient(1883);
-        _udp.EnableBroadcast = true;
+        _udp = new UdpClient(1883) { EnableBroadcast = true, };
         _udp.BeginReceive(new AsyncCallback(ReceiveCallback), null);
         _advTick = new Timer(SendAdv, null, 4500, 900000);
-        Topic t;
-        if(Topic.root.Exist("/$YS/MQTT-SN/radius", out t) && t.GetState().IsNumber) {
+        if(Topic.Root.Exist("/$YS/MQTT-SN/radius", out Topic t) && t.GetState().IsNumber) {
           _gwRadius = (byte)(int)t.GetState();
           if(_gwRadius < 1 || _gwRadius > 3) {
             _gwRadius = 0;
@@ -117,7 +115,7 @@ namespace X13.Periphery {
             var mt = (MsMessageType)(buf[0] > 1 ? buf[1] : buf[3]);
             if((mt != MsMessageType.CONNECT && mt != MsMessageType.SEARCHGW) || _whiteList.Any(z => z.Check(addr))) {
               _pl.ProcessInPacket(this, addr, buf, 0, buf.Length);
-            } else if(_pl.verbose) {
+            } else if(_pl.Verbose) {
               var msg = MsMessage.Parse(buf, 0, buf.Length);
               if(msg != null) {
                 Log.Debug("restricted  {0}: {1}  {2}", this.Addr2If(addr), BitConverter.ToString(buf), msg.ToString());
@@ -149,7 +147,7 @@ namespace X13.Periphery {
       byte[] buf = msg.GetBytes();
       IPAddress addr = new IPAddress(arr);
       _udp.Send(buf, buf.Length, new IPEndPoint(addr, 1883));
-      if(_pl.verbose) {
+      if(_pl.Verbose) {
         Log.Debug("s {0}: {1}  {2}", addr, BitConverter.ToString(buf), msg.ToString());
       }
     }
@@ -167,7 +165,7 @@ namespace X13.Periphery {
             _udp.Send(buf, buf.Length, new IPEndPoint(bc, 1883));
           }
           catch(Exception ex) {
-            if(_pl.verbose) {
+            if(_pl.Verbose) {
               Log.Warning("MsGUdp.SendGw({0}, {1}) - {2}", bc, msg, ex.Message);
             }
           }
@@ -178,14 +176,14 @@ namespace X13.Periphery {
           _udp.Send(buf, buf.Length, new IPEndPoint(addr, 1883));
         }
         catch(Exception ex) {
-          if(_pl.verbose) {
+          if(_pl.Verbose) {
             Log.Warning("MsGUdp.SendGw({0}, {1}) - {2}", addr, msg, ex.Message);
           }
         }
       } else {
         return;
       }
-      if(_pl.verbose) {
+      if(_pl.Verbose) {
         Log.Debug("s {0}: {1}  {2}", addr, BitConverter.ToString(buf), msg.ToString());
       }
     }
@@ -209,12 +207,14 @@ namespace X13.Periphery {
           Log.Error("MsGUdp.Close() - {0}", ex.ToString());
         }
       }
+      _advTick.Change(-1, -1);
+      _advTick.Dispose();
     }
     #endregion IMsGate Members
 
     private class AddrWithMask {
-      private byte[] _addr;
-      private byte[] _mask;
+      private readonly byte[] _addr;
+      private readonly byte[] _mask;
       public readonly string name;
 
       public static AddrWithMask Parse(string s, string name) {
@@ -226,17 +226,15 @@ namespace X13.Periphery {
           return null;
         }
         byte[] addr;
-        IPAddress tmp;
-        if(IPAddress.TryParse(sp[0], out tmp)) {
+        if(IPAddress.TryParse(sp[0], out IPAddress tmp)) {
           addr = tmp.GetAddressBytes();
         } else {
           return null;
         }
         byte[] mask;
-        int mn;
         if(sp.Length < 2) {  // no mask
           mask = Enumerable.Repeat((byte)0xFF, addr.Length).ToArray();
-        } else if(int.TryParse(sp[1], out mn)) {
+        } else if(int.TryParse(sp[1], out int mn)) {
           mask = new byte[addr.Length];
           for(int i = 0; i < mask.Length; i++) {
             if(mn < 1) {

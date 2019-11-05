@@ -7,7 +7,7 @@ using System.Text;
 namespace X13.Periphery {
   public static class Crc16 {
     private const ushort polynomial = 0xA001;
-    private static ushort[] table = new ushort[256];
+    private static readonly ushort[] table = new ushort[256];
 
     public static ushort UpdateCrc(ushort crc_in, byte[] buf) {
       for(int j = 0; j < buf.Length; ++j) {

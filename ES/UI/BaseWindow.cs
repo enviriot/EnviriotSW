@@ -12,10 +12,7 @@ namespace X13.UI {
     #region INotifyPropertyChanged Members
     public event PropertyChangedEventHandler PropertyChanged;
     protected void PropertyChangedReise([System.Runtime.CompilerServices.CallerMemberName] string propertyName = "") {
-      var pc = PropertyChanged;
-      if(pc != null) {
-        pc(this, new PropertyChangedEventArgs(propertyName));
-      }
+      PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
     #endregion INotifyPropertyChanged Members
      

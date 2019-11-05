@@ -25,7 +25,7 @@ namespace X13.UI{
       return new veMsStatus(owner, manifest);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
 
     public veMsStatus(InBase owner, JSC.JSValue manifest) {
       _owner = owner;

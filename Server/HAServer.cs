@@ -17,30 +17,18 @@ namespace X13 {
       ManagedInstallerClass.InstallHelper(args_i);
       Log.Info("The Enviriot service installed");
 
-      List<SC_ACTION> FailureActions = new List<SC_ACTION>();
-
-      // First Failure Actions and Delay (msec).
-      FailureActions.Add(new SC_ACTION() {
-        Type = (int)SC_ACTION_TYPE.RestartService,
-        Delay = 1000 * 15
-      });
-
-      // Second Failure Actions and Delay (msec).
-      FailureActions.Add(new SC_ACTION() {
-        Type = (int)SC_ACTION_TYPE.RestartService,
-        Delay = 1000 * 60 * 2
-      });
-
-      // Subsequent Failures Actions and Delay (msec).
-      FailureActions.Add(new SC_ACTION() {
-        Type = (int)SC_ACTION_TYPE.None,
-        Delay = 1000 * 60 * 3
-      });
+      List<SC_ACTION> FailureActions = new List<SC_ACTION>{
+        new SC_ACTION { Type = (int)SC_ACTION_TYPE.RestartService, Delay = 1000 * 15 },  // First Failure Actions and Delay (msec).
+        new SC_ACTION { Type = (int)SC_ACTION_TYPE.RestartService, Delay = 1000 * 60 * 2 },  // Second Failure Actions and Delay (msec).
+        new SC_ACTION { Type = (int)SC_ACTION_TYPE.None, Delay = 1000 * 60 * 3   }  // Subsequent Failures Actions and Delay (msec).
+      };
 
       // Configure service recovery property.
       ServiceRecoveryProperty.ChangeRecoveryProperty("Enviriot", FailureActions, 60 * 60 * 24, "", false, "");
       Log.Info("The service recovery property is modified successfully");
+#pragma warning disable IDE0067 // Dispose objects before losing scope
       ServiceController svc =  new ServiceController("Enviriot");
+#pragma warning restore IDE0067 // Dispose objects before losing scope
       svc.Start();
       svc.WaitForStatus(ServiceControllerStatus.Running, new TimeSpan(0, 0, 3));
     }
@@ -61,7 +49,7 @@ namespace X13 {
 
     }
 
-    private Programm _instance;
+    private readonly Programm _instance;
     public HAServer(string cfgPath) {
       InitializeComponent();
       _instance=new Programm(cfgPath);

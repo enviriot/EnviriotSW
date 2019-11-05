@@ -15,7 +15,7 @@ namespace X13.UI {
       return new veString(owner, manifest);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
     private string _oldValue;
 
     public veString(InBase owner, JSC.JSValue manifest) {

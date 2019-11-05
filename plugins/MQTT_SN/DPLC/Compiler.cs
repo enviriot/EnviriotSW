@@ -9,7 +9,7 @@ using System.Text;
 
 namespace X13.DevicePLC {
   internal class EP_Compiler {
-    private static SortedList<string, EP_Type> _predefs;
+    private static readonly SortedList<string, EP_Type> _predefs;
     private static bool Verbose {
       get {
         return true;
@@ -17,15 +17,16 @@ namespace X13.DevicePLC {
     }
 
     static EP_Compiler() {
-      _predefs = new SortedList<string, EP_Type>();
-      _predefs["Op"] = EP_Type.OUTPUT;
-      _predefs["On"] = EP_Type.OUTPUT;
-      _predefs["Pp"] = EP_Type.OUTPUT;
-      _predefs["Pn"] = EP_Type.OUTPUT;
-      _predefs["Ip"] = EP_Type.INPUT;
-      _predefs["In"] = EP_Type.INPUT;
-      _predefs["Av"] = EP_Type.INPUT;
-      _predefs["Ai"] = EP_Type.INPUT;
+      _predefs = new SortedList<string, EP_Type> {
+        ["Op"] = EP_Type.OUTPUT,
+        ["On"] = EP_Type.OUTPUT,
+        ["Pp"] = EP_Type.OUTPUT,
+        ["Pn"] = EP_Type.OUTPUT,
+        ["Ip"] = EP_Type.INPUT,
+        ["In"] = EP_Type.INPUT,
+        ["Av"] = EP_Type.INPUT,
+        ["Ai"] = EP_Type.INPUT
+      };
     }
 
     internal Stack<Instruction> _sp;
@@ -244,7 +245,6 @@ namespace X13.DevicePLC {
     internal Merker DefineMerker(VariableDescriptor v, EP_Type type = EP_Type.NONE) {
       Merker m = null;
       uint addr;
-      EP_Type ioType;
 
       m = cur.memory.FirstOrDefault(z => z.vd == v);
       if(m == null) {
@@ -252,7 +252,7 @@ namespace X13.DevicePLC {
       }
       if(m == null) {
         addr = uint.MaxValue;
-        if(v.Name.Length > 2 && _predefs.TryGetValue(v.Name.Substring(0, 2), out ioType) && UInt32.TryParse(v.Name.Substring(2), out addr)) {
+        if(v.Name.Length > 2 && _predefs.TryGetValue(v.Name.Substring(0, 2), out EP_Type ioType) && UInt32.TryParse(v.Name.Substring(2), out addr)) {
           addr = (uint)( (uint)( ( (byte)v.Name[0] ) << 24 ) | (uint)( ( (byte)v.Name[1] ) << 16 ) | addr & 0xFFFF );
           type = ioType;
         } else if(type == EP_Type.NONE) {
@@ -370,10 +370,7 @@ namespace X13.DevicePLC {
         Log.Debug("{0}", msg);
         break;
       }
-      var cm = CMsg;
-      if(cm != null) {
-        cm(level, coords, message);
-      }
+      CMsg?.Invoke(level, coords, message);
     }
 
     internal class DP_MemBlock : IComparable<DP_MemBlock> {
@@ -407,7 +404,7 @@ namespace X13.DevicePLC {
       }
     }
     internal class Scope {
-      private EP_Compiler _compiler;
+      private readonly EP_Compiler _compiler;
       public Scope _parent;
       public List<Instruction> code;
       public List<Merker> memory;
@@ -420,8 +417,7 @@ namespace X13.DevicePLC {
         _compiler = c;
         _parent = parent;
         this.fm = fm;
-        memBlocks = new SortedSet<DP_MemBlock>();
-        memBlocks.Add(new DP_MemBlock(0, 16384));
+        memBlocks = new SortedSet<DP_MemBlock> { new DP_MemBlock(0, 16384) };
         code = new List<Instruction>();
         memory = new List<Merker>();
         loops = new Stack<EP_VP2.Loop>();

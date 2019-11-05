@@ -22,7 +22,7 @@ using X13.Data;
 namespace X13.UI {
   /// <summary></summary>
   public partial class UIDocument : BaseWindow, IDisposable {
-    private ObservableCollection<DTopic> _pathItems;
+    private readonly ObservableCollection<DTopic> _pathItems;
     private string _path;
     private string _view;
     private IBaseForm _contentForm;
@@ -37,8 +37,7 @@ namespace X13.UI {
 
       InitializeComponent();
       this.icPanel.ItemsSource = _pathItems;
-      Uri url;
-      if(path != null && Uri.TryCreate(path, UriKind.Absolute, out url)) {
+      if(path != null && Uri.TryCreate(path, UriKind.Absolute, out Uri url)) {
         RequestData(url);
       }
     }
@@ -48,9 +47,9 @@ namespace X13.UI {
     private string _altView;
 
 
-    public bool connected { get { return _cl != null && _cl.Status==ClientState.Ready; } }
-    public DTopic data { get { return _data; } }
-    public IBaseForm contentForm {
+    public bool Connected { get { return _cl != null && _cl.Status==ClientState.Ready; } }
+    public DTopic Data { get { return _data; } }
+    public IBaseForm ContentForm {
       get {
         return _contentForm;
       }
@@ -76,13 +75,12 @@ namespace X13.UI {
 
     private void ClientChanged(object sender, PropertyChangedEventArgs e) {
       if(e.PropertyName == "Status") {
-        if(this.connected) {
-          Uri url;
-          if(_data == null && _path != null && Uri.TryCreate(_path, UriKind.Absolute, out url)) {
+        if(this.Connected) {
+          if(_data == null && _path != null && Uri.TryCreate(_path, UriKind.Absolute, out Uri url)) {
             RequestData(url);
           }
         } else {
-          contentForm = null;
+          ContentForm = null;
           _data = null;
           PropertyChangedReise("data");
         }
@@ -103,26 +101,26 @@ namespace X13.UI {
           App.Workspace.Close(this);
           return;
         }
-        _data.changed+=DataChanged;
+        _data.Changed+=DataChanged;
         if(System.Threading.Interlocked.CompareExchange(ref _cl, _data.Connection, null) == null) {
           _cl.PropertyChanged += ClientChanged;
         }
-        _path = _data.fullPath;
+        _path = _data.FullPath;
         PropertyChangedReise("data");
         DTopic c = _data;
         _pathItems.Clear();
         while(c != null) {
           _pathItems.Insert(0, c);
-          c = c.parent;
+          c = c.Parent;
         }
         DataChanged(DTopic.Art.type, _data);
         if(_view == null) {
           _view = _altView??"IN";
         }
-        if(_data == _data.Connection.root) {
-          Title = _data.Connection.alias;
+        if(_data == _data.Connection.Root) {
+          Title = _data.Connection.Alias;
         } else {
-          Title = _data.name;
+          Title = _data.Name;
         }
 
         PropertyChangedReise("connected");
@@ -179,13 +177,8 @@ namespace X13.UI {
         App.Workspace.Close(this);
       }
     }
-    private void buChangeView_Click(object sender, RoutedEventArgs e) {
-      string nv = _view;
-      if((ccMain.Content as InspectorForm) != null && _altView!=null) {
-        nv = _altView;
-      } else {
-        nv = "IN";
-      }
+    private void BuChangeView_Click(object sender, RoutedEventArgs e) {
+      string nv = ((ccMain.Content as InspectorForm) != null && _altView!=null)?_altView:"IN";
       if(_view!=nv) {
         _view = nv;
         UpdContent();
@@ -196,31 +189,31 @@ namespace X13.UI {
 
       if(_view == "IN") {
         if((ccMain.Content as InspectorForm) == null) {
-          if(contentForm != null) {
-            contentForm.Dispose();
+          if(ContentForm != null) {
+            ContentForm.Dispose();
           }
-          contentForm = new InspectorForm(_data);
+          ContentForm = new InspectorForm(_data);
         }
       } else if(_view == "LO") {
         if((ccMain.Content as LogramForm) == null) {
-          if(contentForm != null) {
-            contentForm.Dispose();
+          if(ContentForm != null) {
+            ContentForm.Dispose();
           }
-          contentForm = new LogramForm(_data);
+          ContentForm = new LogramForm(_data);
         }
       }
     }
 
     #region Address bar
-    private void tbAddress_Loaded(object sender, RoutedEventArgs e) {
-      if(!this.connected && _path == null) {
+    private void TbAddress_Loaded(object sender, RoutedEventArgs e) {
+      if(!this.Connected && _path == null) {
         tbAddress.Focus();
       }
     }
     private void TextBox_IsKeyboardFocusedChanged(object sender, DependencyPropertyChangedEventArgs e) {
       if((bool)e.NewValue) {
         this.icPanel.Visibility = System.Windows.Visibility.Collapsed;
-      } else if(connected) {
+      } else if(Connected) {
         this.icPanel.Visibility = System.Windows.Visibility.Visible;
       } else {
         tbAddress.Focus();
@@ -229,8 +222,7 @@ namespace X13.UI {
     }
     private void TextBox_KeyUp(object sender, KeyEventArgs e) {
       if(e.Key == Key.Enter) {
-        Uri url;
-        if(Uri.TryCreate(tbAddress.Text, UriKind.Absolute, out url)) {
+        if(Uri.TryCreate(tbAddress.Text, UriKind.Absolute, out Uri url)) {
           tbAddress.Background = null;
           RequestData(url);
         } else {
@@ -244,7 +236,7 @@ namespace X13.UI {
       var bu = sender as Button;
       DTopic t;
       if(bu != null && (t = bu.DataContext as DTopic) != null) {
-        App.Workspace.Open(t.fullPath);
+        App.Workspace.Open(t.FullPath);
       }
     }
     #endregion Address bar
@@ -253,7 +245,7 @@ namespace X13.UI {
     public void Dispose() {
       var d = System.Threading.Interlocked.Exchange(ref _data, null);
       if(d != null) {
-        d.changed -= DataChanged;
+        d.Changed -= DataChanged;
         if(_cl != null) {
           _cl.PropertyChanged -= ClientChanged;
         }

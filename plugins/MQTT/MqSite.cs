@@ -10,15 +10,15 @@ using X13.Repository;
 
 namespace X13.MQTT {
   internal class MqSite : IDisposable {
-    private Uri _uri;
-    private MQTTPl _pl;
+    private readonly Uri _uri;
+    private readonly MQTTPl _pl;
     private SubRec _sr;
 
     public readonly Topic Owner;
     public readonly MqClient Client;
     public readonly string remotePath;
     public readonly string remotePrefix;
-    private SubRec.SubMask _mask;
+    private readonly SubRec.SubMask _mask;
 
     public MqSite(MQTTPl pl, MqClient client, Topic owner, Uri uUri) {
       this.Client = client;
@@ -41,7 +41,7 @@ namespace X13.MQTT {
         remotePrefix = remotePrefix + "/" + sl[i];
       }
       Client.Sites.Add(this);
-      if(Client.status == MqClient.Status.Connected) {
+      if(Client.Status == MqClient.StatusEnum.Connected) {
         this.Connected();
       }
     }
@@ -76,18 +76,18 @@ namespace X13.MQTT {
     }
 
     private void Changed(Perform p, SubRec sr) {
-      if(Client == null || Client.status != MqClient.Status.Connected) {
+      if(Client == null || Client.Status != MqClient.StatusEnum.Connected) {
         Disconnected();
-        Log.Warning("{0}.Changed({1}) - Client OFFLINE", Owner.path, p.ToString());
+        Log.Warning("{0}.Changed({1}) - Client OFFLINE", Owner.Path, p.ToString());
         return;
       }
-      if((p.art == Perform.Art.subscribe || ((p.art == Perform.Art.changedState || p.art == Perform.Art.create) && p.prim != Owner)) && !p.src.CheckAttribute(Topic.Attribute.Internal)) {
-        var rp = remotePrefix + p.src.path.Substring(Owner.path.Length);
+      if((p.Art == Perform.ArtEnum.subscribe || ((p.Art == Perform.ArtEnum.changedState || p.Art == Perform.ArtEnum.create) && p.Prim != Owner)) && !p.src.CheckAttribute(Topic.Attribute.Internal)) {
+        var rp = remotePrefix + p.src.Path.Substring(Owner.Path.Length);
         var payload = JsLib.Stringify(p.src.GetState() ?? JSC.JSValue.Null);
         if(!string.IsNullOrEmpty(rp) && payload != null) {
           Client.Send(new MqPublish(rp, payload));
         }
-      } else if(p.art == Perform.Art.subAck) {
+      } else if(p.Art == Perform.ArtEnum.subAck) {
         Client.Subscribe(this);
       }
     }

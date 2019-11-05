@@ -10,24 +10,24 @@ using System.Threading;
 
 namespace X13.MQTT {
   internal class MqStreamer : IDisposable {
-    private NetworkStream _stream;
+    private readonly NetworkStream _stream;
 
     private int _rcvState=0;
     private byte _rcvHeader=0;
     private uint _rcvLengt=0;
     private int _rcvLengthPos=0;
     private MemoryStream _rcvMemoryStream=new MemoryStream();
-    private byte[] _rcvBuf=new byte[1];
-    private Action<MqMessage> _rcvCallback;
-    private Timer _rcvTimer;
+    private readonly byte[] _rcvBuf=new byte[1];
+    private readonly Action<MqMessage> _rcvCallback;
+    private readonly Timer _rcvTimer;
 
-    private Queue<MqMessage> _sendQ=new Queue<MqMessage>(32);
-    private List<wMessage> _waitAck=new List<wMessage>();
+    private readonly Queue<MqMessage> _sendQ=new Queue<MqMessage>(32);
+    private readonly List<wMessage> _waitAck=new List<wMessage>();
 
     private int _sendProcessed=0;
-    private AsyncCallback _sendCB;
-    private Action _idleCB;
-    private Timer _sendTimer;
+    private readonly AsyncCallback _sendCB;
+    private readonly Action _idleCB;
+    private readonly Timer _sendTimer;
 
     private int _messageIdGen;
     private bool _connected;
@@ -151,8 +151,8 @@ namespace X13.MQTT {
         if(_waitAck.Count>0 && _waitAck[0].cnt>2) {
           _waitAck.RemoveAt(0);
         }
-      } else if(_idleCB!=null) {
-        _idleCB();
+      } else {
+        _idleCB?.Invoke();
       }
     }
 
@@ -225,9 +225,7 @@ namespace X13.MQTT {
                       }
                     }
                   }
-                  if(_rcvCallback != null) {
-                    _rcvCallback(msg);
-                  }
+                  _rcvCallback?.Invoke(msg);
                 }
 
                 if(_waitAck.Count > 0) {
@@ -315,6 +313,8 @@ namespace X13.MQTT {
       if(str != null) {
         str.Dispose();
       }
+      _rcvTimer.Dispose();
+      _sendTimer.Dispose();
     }
 
     private class wMessage {

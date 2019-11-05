@@ -21,11 +21,11 @@ namespace X13.WebUI {
 
   public class WebUI_Pl : IPlugModul {
     internal static int ProcessPublish(string path, string json, Session ses) {
-      Topic cur=Topic.root.Get(path, true, ses==null?null:ses.owner);
+      Topic cur=Topic.Root.Get(path, true, ses?.Owner);
       if(string.IsNullOrEmpty(json) || json=="null") {                      // Remove
         cur.Remove();
       } else {
-        cur.SetState(JsLib.ParseJson(json), ses==null?null:ses.owner);
+        cur.SetState(JsLib.ParseJson(json), ses?.Owner);
       }
       return 200;
     }
@@ -39,7 +39,7 @@ namespace X13.WebUI {
     }
 
     public void Start() {
-      _owner = Topic.root.Get("/$YS/WebUI");
+      _owner = Topic.Root.Get("/$YS/WebUI");
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -84,7 +84,7 @@ namespace X13.WebUI {
 
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/WebUI", true);
+        var en = Topic.Root.Get("/$YS/WebUI", true);
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -93,20 +93,20 @@ namespace X13.WebUI {
         return (bool)en.GetState();
       }
       set {
-        var en = Topic.root.Get("/$YS/WebUI", true);
+        var en = Topic.Root.Get("/$YS/WebUI", true);
         en.SetState(value);
       }
     }
     #endregion IPlugModul Members
 
-    public static bool verbose {
+    public static bool Verbose {
       get {
         return _verbose != null && (bool)_verbose.GetState();
       }
     }
 
     private void WsLog(LogData d, string f) {
-      if(verbose) {
+      if(Verbose) {
         Log.Debug("WS({0}) - {1}", d.Level, d.Message);
       }
     }
@@ -119,13 +119,12 @@ namespace X13.WebUI {
       }
       System.Net.IPEndPoint remoteEndPoint = req.RemoteEndPoint;
       {
-        System.Net.IPAddress remIP;
-        if(req.Headers.Contains("X-Real-IP") && System.Net.IPAddress.TryParse(req.Headers["X-Real-IP"], out remIP)) {
+        if(req.Headers.Contains("X-Real-IP") && System.Net.IPAddress.TryParse(req.Headers["X-Real-IP"], out System.Net.IPAddress remIP)) {
           remoteEndPoint=new System.Net.IPEndPoint(remIP, remoteEndPoint.Port);
         }
       }
       string path=req.RawUrl=="/"?"/index.html":req.RawUrl;
-      string client = null;
+      string client;
       Session ses;
       if(req.Cookies["sessionId"]!=null) {
         ses=Session.Get(req.Cookies["sessionId"].Value, remoteEndPoint, false);
@@ -133,8 +132,8 @@ namespace X13.WebUI {
         ses=null;
       }
 
-      if(ses!=null && ses.owner!=null) {
-        client=ses.owner.name;
+      if(ses!=null && ses.Owner!=null) {
+        client=ses.Owner.Name;
       } else {
         client=remoteEndPoint.Address.ToString();
       }
@@ -164,12 +163,12 @@ namespace X13.WebUI {
           res.WriteContent(Encoding.UTF8.GetBytes("404 Not found"));
         }
 
-        if(verbose) {
+        if(Verbose) {
           Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.RawUrl, statusCode.ToString());
         }
       }
       catch(Exception ex) {
-        if(verbose) {
+        if(Verbose) {
           Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.RawUrl, ex.Message);
         }
       }

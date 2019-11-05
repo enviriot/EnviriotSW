@@ -9,9 +9,9 @@ using System.Collections.Concurrent;
 
 namespace X13.Repository {
   public sealed class Topic : IComparable<Topic> {
-    private object _sync;
+    private readonly object _sync;
     private static Repo _repo;
-    public static Topic root { get; private set; }
+    public static Topic Root { get; private set; }
 
     public static void Subscribe(Action<Perform> func) {
       if(_repo!=null) {
@@ -40,10 +40,10 @@ namespace X13.Repository {
       _name = name;
       _parent = parent;
       _state = JSValue.Undefined;
-      disposed = false;
+      IsDisposed = false;
       if(parent == null) {
         _path = "/";
-      } else if(parent == root) {
+      } else if(parent == Root) {
         _path = "/" + name;
       } else {
         _path = parent._path + "/" + name;
@@ -54,17 +54,17 @@ namespace X13.Repository {
       }
     }
 
-    public Topic parent {
+    public Topic Parent {
       get { return _parent; }
       internal set { _parent = value; }
     }
-    public string name {
+    public string Name {
       get { return _name; }
     }
-    public string path { get { return _path; } }
-    public bool disposed { get; private set; }
-    public Bill all { get { return new Bill(this, true); } }
-    public Bill children { get { return new Bill(this, false); } }
+    public string Path { get { return _path; } }
+    public bool IsDisposed { get; private set; }
+    public Bill All { get { return new Bill(this, true); } }
+    public Bill Children { get { return new Bill(this, false); } }
 
     /// <summary> Get item from tree</summary>
     /// <param name="path">relative or absolute path</param>
@@ -84,12 +84,11 @@ namespace X13.Repository {
         return;
       }
       if(nParent == null) {
-        nParent = this.parent;
+        nParent = this.Parent;
       }
       if(string.IsNullOrEmpty(nName)) {
-        nName = this.name;
+        nName = this.Name;
       }
-      Topic tmp;
       if(nParent._children == null) {
         lock(nParent) {
           if(nParent._children == null) {
@@ -100,11 +99,12 @@ namespace X13.Repository {
       if(!nParent._children.TryAdd(nName, this)) {
         throw new ArgumentException(this._path + ".Move(" + nParent._path + ", " + nName + ") FAILED");
       }
-      if(!_parent._children.TryRemove(this._name, out tmp)) {
+
+      if(!_parent._children.TryRemove(this._name, out _)) {
         Log.Warning("{0}.Move({1}, {2}) remove FAILED", this._path, nParent._path, nName);
         return;
       }
-      var c = Perform.Create(this, Perform.Art.move, prim);
+      var c = Perform.Create(this, Perform.ArtEnum.move, prim);
       c.o = this._path;
       _parent = nParent;
       this._name = nName;
@@ -112,8 +112,8 @@ namespace X13.Repository {
       _repo.DoCmd(c, false);
     }
     public void Remove(Topic prim = null) {
-      this.disposed = true;
-      var c = Perform.Create(this, Perform.Art.remove, prim);
+      this.IsDisposed = true;
+      var c = Perform.Create(this, Perform.ArtEnum.remove, prim);
       _repo.DoCmd(c, false);
     }
     public SubRec Subscribe(SubRec.SubMask mask, Action<Perform, SubRec> func) {
@@ -121,7 +121,7 @@ namespace X13.Repository {
     }
     public SubRec Subscribe(SubRec.SubMask mask, string prefix, Action<Perform, SubRec> func) {
       if(func == null) {
-        throw new ArgumentNullException(this.path + ".Subscribe(func == NULL, " + mask.ToString() + (prefix == null ? string.Empty : ", " + prefix) + ")");
+        throw new ArgumentNullException(this.Path + ".Subscribe(func == NULL, " + mask.ToString() + (prefix == null ? string.Empty : ", " + prefix) + ")");
       }
       SubRec sb;
       bool exist = true;
@@ -142,11 +142,11 @@ namespace X13.Repository {
         }
       }
       if(!exist) {
-        var c = Perform.Create(this, Perform.Art.subscribe, this);
+        var c = Perform.Create(this, Perform.ArtEnum.subscribe, this);
         c.o = sb;
         _repo.DoCmd(c, false);
       } else {
-        var c = Perform.Create(this, Perform.Art.subAck, this);
+        var c = Perform.Create(this, Perform.ArtEnum.subAck, this);
         c.o = sb;
         _repo.DoCmd(c, false);
       }
@@ -250,8 +250,8 @@ namespace X13.Repository {
       public static readonly string[] allArr = new string[] { maskAll };
       public static readonly string[] childrenArr = new string[] { maskChildren };
 
-      private Topic _home;
-      private bool _deep;
+      private readonly Topic _home;
+      private readonly bool _deep;
 
       public Bill(Topic home, bool deep) {
         _home = home;
@@ -295,7 +295,7 @@ namespace X13.Repository {
     internal static class I {
       public static void Init(Repo repo) {
         Topic._repo = repo;
-        Topic.root = new Topic(null, "/", false);
+        Topic.Root = new Topic(null, "/", false);
       }
 
       public static void Fill(Topic t, JSValue state, JSValue manifest, Topic prim) {
@@ -304,7 +304,7 @@ namespace X13.Repository {
           t._manifest = JsLib.SetField(t._manifest, "attr", new JST.Number(0));
         }
 
-        var c = Perform.Create(t, Perform.Art.create, prim);
+        var c = Perform.Create(t, Perform.ArtEnum.create, prim);
         _repo.DoCmd(c, false);
 
         if(state != null) {
@@ -321,7 +321,7 @@ namespace X13.Repository {
           if(path.StartsWith(home._path)) {
             path = path.Substring(home._path.Length);
           } else {
-            home = Topic.root;
+            home = Topic.Root;
           }
         }
         var pt = path.Split(Bill.delmiterArr, StringSplitOptions.RemoveEmptyEntries);
@@ -343,18 +343,16 @@ namespace X13.Repository {
                 home._children = new ConcurrentDictionary<string, Topic>();
               }
             }
-          } else if(home._children.TryGetValue(pt[i], out next) && next.disposed) {
+          } else if(home._children.TryGetValue(pt[i], out next) && next.IsDisposed) {
             next = null;
           }
           if(next == null) {
             if(create) {
-              if(home._children.TryGetValue(pt[i], out next)) {
-                home = next;
-              } else {
+              if(!home._children.TryGetValue(pt[i], out next)) {
                 next = new Topic(home, pt[i], fill);
                 home._children[pt[i]] = next;
                 if(fill) {  // else the Perform(create) will be added in Fill()
-                  var c = Perform.Create(next, Perform.Art.create, prim);
+                  var c = Perform.Create(next, Perform.ArtEnum.create, prim);
                   _repo.DoCmd(c, inter);
                 }
               }
@@ -380,8 +378,8 @@ namespace X13.Repository {
         } else {
           r = false;
           oc = t._mfst_pu.f_v;
-          if(cmd.prim != t._mfst_pu.prim) {
-            t._mfst_pu.prim = null; // inform all subscribers
+          if(cmd.Prim != t._mfst_pu.Prim) {
+            t._mfst_pu.Prim = null; // inform all subscribers
           }
         }
         t._mfst_pu.f_v = JsLib.SetField(oc, cmd.o as string, cmd.f_v);
@@ -393,7 +391,7 @@ namespace X13.Repository {
       }
 
       public static void UpdatePath(Topic t) {
-        t._path = t.parent == root ? "/" + t._name : t.parent._path + "/" + t._name;
+        t._path = t.Parent == Root ? "/" + t._name : t.Parent._path + "/" + t._name;
         if(t._children != null) {
           foreach(var ch in t._children) {
             UpdatePath(ch.Value);
@@ -401,17 +399,16 @@ namespace X13.Repository {
         }
       }
       public static void Remove(Topic t) {
-        t.disposed = true;
+        t.IsDisposed = true;
         if(t._parent != null) {
-          Topic tmp;
-          t._parent._children.TryRemove(t._name, out tmp);
+          t._parent._children.TryRemove(t._name, out _);
         }
       }
       public static void Publish(Perform cmd) {
         SubRec sb;
         Topic t = cmd.src;
 
-        if((cmd.art == Perform.Art.subscribe || cmd.art == Perform.Art.subAck) && (sb = cmd.o as SubRec) != null) {
+        if((cmd.Art == Perform.ArtEnum.subscribe || cmd.Art == Perform.ArtEnum.subAck) && (sb = cmd.o as SubRec) != null) {
           try {
             sb.func(cmd, sb);
           }
@@ -422,9 +419,9 @@ namespace X13.Repository {
           if(t._subRecords != null) {
             for(int i = t._subRecords.Count-1; i >= 0; i--) {
               sb = t._subRecords[i];
-              if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
-                  && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
-                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.old_o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
+              if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.Parent))
+                  && (cmd.Art != Perform.ArtEnum.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
+                  && (cmd.Art != Perform.ArtEnum.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.old_o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
                   ) {
                 try {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());
@@ -441,7 +438,7 @@ namespace X13.Repository {
       }
       public static void SubscribeByCreation(Topic t_c) {
         Topic p;
-        if((p = t_c.parent) != null) {
+        if((p = t_c.Parent) != null) {
           if(p._subRecords != null) {
             lock(p._subRecords) {
               foreach(var st in p._subRecords.Where(z => z.setTopic == p && (z.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren)) {
@@ -457,7 +454,7 @@ namespace X13.Repository {
                 }
               }
             }
-            p = p.parent;
+            p = p.Parent;
           }
         }
       }
@@ -490,7 +487,7 @@ namespace X13.Repository {
       }
       public static bool Unsubscribe(Topic t, SubRec sr) {
         if(RemoveSubscripton(t, sr)) {
-          var c = Perform.Create(t, Perform.Art.unsubscribe, null);
+          var c = Perform.Create(t, Perform.ArtEnum.unsubscribe, null);
           c.o = sr;
           _repo.DoCmd(c, false);
           return true;

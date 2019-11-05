@@ -90,15 +90,15 @@
           <ColumnDefinition Width="32"/>
           <ColumnDefinition Width="32"/>
         </Grid.ColumnDefinitions>
-        <Button Name="buConfig" Grid.Column="0" Click="buConfig_Click">
+        <Button Name="buConfig" Grid.Column="0" Click="BuConfig_Click">
           <Button.ContextMenu>
             <ContextMenu>
-              <MenuItem Name="miCatatlog" Header="Catatlog Window" Click="miCatatlog_Click" />
-              <MenuItem Header="Workspace Window" Click="miWorkSpace_Click" />
-              <MenuItem Header="Output Window" Click="miOpenLog" />
+              <MenuItem Name="miCatatlog" Header="Catatlog Window" Click="MiCatatlog_Click" />
+              <MenuItem Header="Workspace Window" Click="MiWorkSpace_Click" />
+              <MenuItem Header="Output Window" Click="MiOpenLog" />
               <Separator />
-              <MenuItem Name="miImport" Header="Import" Click="miImport_Click" />
-              <MenuItem Name="miExport" Header="Export" Click="miExport_Click" />
+              <MenuItem Name="miImport" Header="Import" Click="MiImport_Click" />
+              <MenuItem Name="miExport" Header="Export" Click="MiExport_Click" />
             </ContextMenu>
           </Button.ContextMenu>
           <Image x:Name="AppIcon" Width="32" Height="32" Source="logo48.ico" />
@@ -127,7 +127,7 @@
       </Grid>
       <xcad:DockingManager x:Name="dmMain" Grid.Row="1" AllowMixedOrientation="True"
             DocumentsSource="{Binding Files}" AnchorablesSource="{Binding Tools}"                            
-			ActiveContent="{Binding ActiveDocument, Converter={StaticResource ActiveDocumentConverter}, Mode=TwoWay}" DocumentClosed="dmMain_DocumentClosed">
+			ActiveContent="{Binding ActiveDocument, Converter={StaticResource ActiveDocumentConverter}, Mode=TwoWay}" DocumentClosed="DmMain_DocumentClosed">
         <xcad:DockingManager.Theme>
           <xcad:AeroTheme />
         </xcad:DockingManager.Theme>

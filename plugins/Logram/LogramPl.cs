@@ -15,9 +15,9 @@ namespace X13.Logram {
   class LogramPl : IPlugModul {
     private Topic _owner;
     private Topic _verbose;
-    private Dictionary<Topic, ILoItem> _items;
-    private ConcurrentQueue<ILoItem> _TaskIn;
-    private List<ILoItem> _TaskPr;
+    private readonly Dictionary<Topic, ILoItem> _items;
+    private readonly ConcurrentQueue<ILoItem> _TaskIn;
+    private readonly List<ILoItem> _TaskPr;
     private int _curIdx;
 
     public LogramPl() {
@@ -27,7 +27,7 @@ namespace X13.Logram {
       _curIdx = 0;
     }
 
-    public bool verbose {
+    public bool Verbose {
       get {
         return _verbose != null && (bool)_verbose.GetState();
       }
@@ -39,7 +39,7 @@ namespace X13.Logram {
       RPC.Register("LoBlock", BlockCh);
     }
     public void Start() {
-      _owner = Topic.root.Get("/$YS/Logram");
+      _owner = Topic.Root.Get("/$YS/Logram");
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -84,7 +84,7 @@ namespace X13.Logram {
     }
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/Logram", true);
+        var en = Topic.Root.Get("/$YS/Logram", true);
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -93,15 +93,14 @@ namespace X13.Logram {
         return (bool)en.GetState();
       }
       set {
-        Topic.root.Get("/$YS/Logram", true).SetState(value);
+        Topic.Root.Get("/$YS/Logram", true).SetState(value);
       }
     }
     #endregion IPlugModul Members
 
     internal LoVariable GetVariable(Topic t) {
       LoVariable v;
-      ILoItem it;
-      if(_items.TryGetValue(t, out it) && ( v = it as LoVariable )!=null) {
+      if(_items.TryGetValue(t, out ILoItem it) && ( v = it as LoVariable )!=null) {
         return v;
       }
       v=new LoVariable(this, t);
@@ -126,10 +125,9 @@ namespace X13.Logram {
       _TaskIn.Enqueue(it);
     }
 
-    private void BindCh(Topic t, Perform.Art a) {
-      ILoItem it;
+    private void BindCh(Topic t, Perform.ArtEnum a) {
       LoVariable v = null;
-      if(( !_items.TryGetValue(t, out it) || ( v = it as LoVariable )==null ) && a == Perform.Art.create) {
+      if(( !_items.TryGetValue(t, out ILoItem it) || ( v = it as LoVariable )==null ) && a == Perform.ArtEnum.create) {
         v = new LoVariable(this, t);
         _items[t] = v;
       }
@@ -137,11 +135,10 @@ namespace X13.Logram {
         v.ManifestChanged();
       }
     }
-    private void BlockCh(Topic t, Perform.Art a) {
-      ILoItem it;
-      LoBlock v = null;
-      if(!_items.TryGetValue(t, out it) || ( v = it as LoBlock )==null) {
-        if(a == Perform.Art.create) {
+    private void BlockCh(Topic t, Perform.ArtEnum a) {
+      LoBlock v;
+      if(!_items.TryGetValue(t, out ILoItem it) || ( v = it as LoBlock )==null) {
+        if(a == Perform.ArtEnum.create) {
           v = new LoBlock(this, t);
           _items[t] = v;
         }
@@ -150,19 +147,18 @@ namespace X13.Logram {
       }
     }
     private void SubFunc(Perform p) {
-      ILoItem it;
-      if(!_items.TryGetValue(p.src, out it)) {
-        if(p.art==Perform.Art.create) {
+      if(!_items.TryGetValue(p.src, out ILoItem it)) {
+        if(p.Art==Perform.ArtEnum.create) {
           LoBlock lb;
-          if(p.src.parent!=null && _items.TryGetValue(p.src.parent, out it) && ( lb = it as LoBlock )!=null) {
+          if(p.src.Parent!=null && _items.TryGetValue(p.src.Parent, out it) && ( lb = it as LoBlock )!=null) {
             lb.GetPin(p.src);
           }
         }
         return;
       }
-      if(p.art==Perform.Art.changedState) {
-        it.SetValue(p.src.GetState(), p.prim);
-      } else if(p.art==Perform.Art.remove) {
+      if(p.Art==Perform.ArtEnum.changedState) {
+        it.SetValue(p.src.GetState(), p.Prim);
+      } else if(p.Art==Perform.ArtEnum.remove) {
         _TaskIn.Enqueue(it);
       }
     }

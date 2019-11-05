@@ -11,12 +11,12 @@ using System.Threading;
 
 namespace X13.Periphery {
   internal class TWI : IMsExt {
-    private Topic _owner;
-    private Topic _verbose;
-    private Action<byte[]> _pub;
-    private SubRec _deviceChangedsSR;
-    private List<TwiDevice> _devs;
-    private Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>>> _reqs;
+    private readonly Topic _owner;
+    private readonly Topic _verbose;
+    private readonly Action<byte[]> _pub;
+    private readonly SubRec _deviceChangedsSR;
+    private readonly List<TwiDevice> _devs;
+    private readonly Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>>> _reqs;
     private int _flag;
 
     public TWI(Topic owner, Action<byte[]> pub) {
@@ -24,7 +24,7 @@ namespace X13.Periphery {
       this._pub = pub;
       this._devs = new List<TwiDevice>();
       this._reqs = new Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>>>();
-      this._verbose = Topic.root.Get("/$YS/TWI/verbose");
+      this._verbose = Topic.Root.Get("/$YS/TWI/verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
 #if DEBUG
@@ -36,12 +36,12 @@ namespace X13.Periphery {
 
       _flag = 1;
       _deviceChangedsSR = this._owner.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Field, "type", DeviceChanged);
-      if(verbose) {
-        Log.Debug("{0}.Created", _owner.path);
+      if(Verbose) {
+        Log.Debug("{0}.Created", _owner.Path);
       }
     }
 
-    public bool verbose {
+    public bool Verbose {
       get {
         return _verbose != null && (bool)_verbose.GetState();
       }
@@ -50,8 +50,8 @@ namespace X13.Periphery {
     #region IMsExt Members
     public void Recv(byte[] buf) {
       if(buf == null || buf.Length < 4) {
-        if(verbose) {
-          Log.Warning("{0}.recv({1})", _owner.path, buf == null ? "null" : BitConverter.ToString(buf));
+        if(Verbose) {
+          Log.Warning("{0}.recv({1})", _owner.Path, buf == null ? "null" : BitConverter.ToString(buf));
         }
         return;
       }
@@ -61,41 +61,41 @@ namespace X13.Periphery {
           if((buf[1] & 0xF0) == 0x10) {
             if(buf[3] == req.Item1[3]) {
               req.Item2.SetResult(new JSL.Array(buf));
-              if(verbose) {
-                Log.Debug("{0}.recv({1})", _owner.path, BitConverter.ToString(buf));
+              if(Verbose) {
+                Log.Debug("{0}.recv({1})", _owner.Path, BitConverter.ToString(buf));
               }
             } else {
               req.Item2.SetException(new JSC.JSException(new JSL.Number(5)));  // wrong response length
-              if(verbose) {
-                Log.Warning("{0}.recv({1}) - wrong response length", _owner.path, BitConverter.ToString(buf));
+              if(Verbose) {
+                Log.Warning("{0}.recv({1}) - wrong response length", _owner.Path, BitConverter.ToString(buf));
               }
             }
           } else if((buf[1] & 0x20) != 0) {
             req.Item2.SetException(new JSC.JSException(new JSL.Number(2)));  // Timeout
-            if(verbose) {
-              Log.Warning("{0}.recv({1}) - Timeout", _owner.path, BitConverter.ToString(buf));
+            if(Verbose) {
+              Log.Warning("{0}.recv({1}) - Timeout", _owner.Path, BitConverter.ToString(buf));
             }
           } else if((buf[1] & 0x40) != 0) {
             req.Item2.SetException(new JSC.JSException(new JSL.Number(3)));  // Slave Addr NACK received - Device not present
-            if(verbose) {
-              Log.Warning("{0}.recv({1}) - Slave Addr NACK", _owner.path, BitConverter.ToString(buf));
+            if(Verbose) {
+              Log.Warning("{0}.recv({1}) - Slave Addr NACK", _owner.Path, BitConverter.ToString(buf));
             }
           } else {
             req.Item2.SetException(new JSC.JSException(new JSL.Number(4)));  // Internal Error
-            if(verbose) {
-              Log.Warning("{0}.recv({1}) - Internal Error", _owner.path, BitConverter.ToString(buf));
+            if(Verbose) {
+              Log.Warning("{0}.recv({1}) - Internal Error", _owner.Path, BitConverter.ToString(buf));
             }
           }
           _flag = 1;
           SendReq();
         } else {
-          if(verbose) {
-            Log.Warning("{0}.recv({1}) - unknown response", _owner.path, BitConverter.ToString(buf));
+          if(Verbose) {
+            Log.Warning("{0}.recv({1}) - unknown response", _owner.Path, BitConverter.ToString(buf));
           }
         }
       } else {
-        if(verbose) {
-          Log.Warning("{0}.recv({1}) - unknown response", _owner.path, BitConverter.ToString(buf));
+        if(Verbose) {
+          Log.Warning("{0}.recv({1}) - unknown response", _owner.Path, BitConverter.ToString(buf));
         }
       }
     }
@@ -108,8 +108,8 @@ namespace X13.Periphery {
         if(_reqs.Any()) {
           var req = _reqs.Peek();
           _pub(req.Item1);
-          if(verbose) {
-            Log.Debug("{0}.send({1})", _owner.path, BitConverter.ToString(req.Item1));
+          if(Verbose) {
+            Log.Debug("{0}.send({1})", _owner.Path, BitConverter.ToString(req.Item1));
           }
           if(req.Item1[3] == 0) {  // to recive 0 bytes => no answer
             Recv(new byte[] { req.Item1[0], 0x10, req.Item1[2], 0 });
@@ -127,7 +127,7 @@ namespace X13.Periphery {
         d.Dispose();
       }
       JSC.JSValue jType;
-      if((p.art == Perform.Art.create || p.art == Perform.Art.changedField || p.art == Perform.Art.subscribe) && (jType = p.src.GetField("type")).ValueType == JSC.JSValueType.String
+      if((p.Art == Perform.ArtEnum.create || p.Art == Perform.ArtEnum.changedField || p.Art == Perform.ArtEnum.subscribe) && (jType = p.src.GetField("type")).ValueType == JSC.JSValueType.String
         && jType.Value != null && (jType.Value as string).StartsWith("TWI")) {
         _devs.Add(new TwiDevice(p.src, this));
       }
@@ -155,25 +155,24 @@ namespace X13.Periphery {
         d.Dispose();
       }
       _devs.Clear();
-      if(verbose) {
-        Log.Debug("{0}.Disposed", _owner.path);
+      if(Verbose) {
+        Log.Debug("{0}.Disposed", _owner.Path);
       }
     }
     #endregion IDisposable Member
 
     private class TwiDevice : IDisposable {
       public readonly Topic owner;
-      private TWI _twi;
-      private JSC.Context _ctx;
-      private JSC.JSValue _self;
+      private readonly TWI _twi;
+      private readonly JSC.Context _ctx;
+      private readonly JSC.JSValue _self;
 
       public TwiDevice(Topic owner, TWI twi) {
         this.owner = owner;
         this._twi = twi;
         JSC.JSValue jSrc;
         var jType = owner.GetField("type");
-        Topic tt;
-        if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out tt)
+        if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.Root.Get("$YS/TYPES", false).Exist(jType.Value as string, out Topic tt)
           && (jSrc = JsLib.GetField(tt.GetState(), "src")).ValueType == JSC.JSValueType.String) {
         } else {
           jSrc = null;
@@ -205,10 +204,10 @@ namespace X13.Periphery {
             }
           }
           catch(Exception ex) {
-            Log.Warning("{0}.ctor() - {1}", owner.path, ex.Message);
+            Log.Warning("{0}.ctor() - {1}", owner.Path, ex.Message);
           }
         } else {
-          Log.Warning("{0} constructor is not defined", owner.path);
+          Log.Warning("{0} constructor is not defined", owner.Path);
         }
 
       }
@@ -229,15 +228,10 @@ namespace X13.Periphery {
       }
 
       private JSC.JSValue GetState(string path) {
-        Topic t;
-        if(owner.Exist(path, out t)) {
-          return t.GetState();
-        }
-        return JSC.JSValue.NotExists;
+        return owner.Exist(path, out Topic t) ? t.GetState() : JSC.JSValue.NotExists;
       }
       private void SetState(string path, JSC.JSValue value) {
-        Topic t;
-        if(!owner.Exist(path, out t)) {
+        if(!owner.Exist(path, out Topic t)) {
           t = owner.Get(path, true, owner);
           t.SetField("MQTT-SN.tag", "---", owner);
           t.SetAttribute(Topic.Attribute.Required);
@@ -245,17 +239,12 @@ namespace X13.Periphery {
         t.SetState(value, owner);
       }
       private JSC.JSValue GetField(string path, string field) {
-        Topic t;
-        if(owner.Exist(path, out t)) {
-          return t.GetField(field);
-        }
-        return JSC.JSValue.NotExists;
-
+        return owner.Exist(path, out Topic t) ? t.GetField(field) : JSC.JSValue.NotExists;
       }
 
       #region IDisposable Member
       public void Dispose() {
-        if(!owner.disposed) {
+        if(!owner.IsDisposed) {
           owner.SetState(0, _twi._owner);
         }
         JsExtLib.ClearTimeout(_ctx);

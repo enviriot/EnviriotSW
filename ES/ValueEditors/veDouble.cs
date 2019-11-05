@@ -14,7 +14,7 @@ namespace X13.UI {
       return new veDouble(owner, type);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
     private double _oldValue;
 
     public veDouble(InBase owner, JSC.JSValue manifest) {

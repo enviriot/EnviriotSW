@@ -30,8 +30,9 @@ namespace X13 {
       App.Workspace = new DWorkspace(cfgPath);
       XmlNode window;
       if(App.Workspace.config != null && (window = App.Workspace.config.SelectSingleNode("/Config/Window")) != null) {
-        WindowState st;
+#pragma warning disable IDE0018 // Inline variable declaration
         double tmp;
+#pragma warning restore IDE0018 // Inline variable declaration
         if(window.Attributes["Top"] != null && double.TryParse(window.Attributes["Top"].Value, out tmp)) {
           this.Top = tmp;
         }
@@ -44,7 +45,7 @@ namespace X13 {
         if(window.Attributes["Height"] != null && double.TryParse(window.Attributes["Height"].Value, out tmp)) {
           this.Height = tmp;
         }
-        if(window.Attributes["State"] != null && Enum.TryParse(window.Attributes["State"].Value, out st)) {
+        if(window.Attributes["State"] != null && Enum.TryParse(window.Attributes["State"].Value, out WindowState st)) {
           this.WindowState = st;
         }
       }
@@ -120,8 +121,7 @@ namespace X13 {
 
     private void LSF(object sender, Xceed.Wpf.AvalonDock.Layout.Serialization.LayoutSerializationCallbackEventArgs arg) {
       if(!string.IsNullOrWhiteSpace(arg.Model.ContentId)) {
-        Uri u;
-        if(!Uri.TryCreate(arg.Model.ContentId, UriKind.Absolute, out u)) {
+        if(!Uri.TryCreate(arg.Model.ContentId, UriKind.Absolute, out Uri u)) {
           Log.Warning("Restore Layout({0}) - Bad ContentID", arg.Model.ContentId);
           arg.Cancel = true;
           return;
@@ -136,7 +136,7 @@ namespace X13 {
       }
     }
 
-    private void buConfig_Click(object sender, RoutedEventArgs e) {
+    private void BuConfig_Click(object sender, RoutedEventArgs e) {
       if(buConfig.ContextMenu != null) {
         buConfig.ContextMenu.IsOpen = !buConfig.ContextMenu.IsOpen;
       }
@@ -155,32 +155,28 @@ namespace X13 {
       }
     }
 
-    private void miCatatlog_Click(object sender, RoutedEventArgs e) {
+    private void MiCatatlog_Click(object sender, RoutedEventArgs e) {
       Client cl;
       var doc =App.Workspace.ActiveDocument as UI.UIDocument;
-      if(doc == null || doc.data == null || (cl = doc.data.Connection) == null || cl.Status!=ClientState.Ready) {
+      if(doc == null || doc.Data == null || (cl = doc.Data.Connection) == null || cl.Status!=ClientState.Ready) {
         return;
       }
       App.Workspace.Open(cl.ToString(), "catatlog");
     }
-    private void miOpenLog(object sender, RoutedEventArgs e) {
+    private void MiOpenLog(object sender, RoutedEventArgs e) {
       App.Workspace.Open("file://local/", "log");
     }
-    private void miWorkSpace_Click(object sender, RoutedEventArgs e) {
+    private void MiWorkSpace_Click(object sender, RoutedEventArgs e) {
       App.Workspace.Open("file://local/", "wks");
     }
-    private void miImport_Click(object sender, RoutedEventArgs e) {
+    private void MiImport_Click(object sender, RoutedEventArgs e) {
       Client cl;
       var doc =App.Workspace.ActiveDocument as UI.UIDocument;
-      if(doc == null || doc.data == null || (cl = doc.data.Connection) == null || cl.Status!=ClientState.Ready) {
+      if(doc == null || doc.Data == null || (cl = doc.Data.Connection) == null || cl.Status!=ClientState.Ready) {
         return;
       }
 
-      Microsoft.Win32.OpenFileDialog dlg = new Microsoft.Win32.OpenFileDialog();
-      dlg.Title = "Import";
-      dlg.DefaultExt = ".xst"; // Default file extension
-      dlg.Filter = "Exported storage (.xst)|*.xst"; // Filter files by extension
-      dlg.CheckFileExists = true;
+      Microsoft.Win32.OpenFileDialog dlg = new Microsoft.Win32.OpenFileDialog(){ Title = "Import", DefaultExt = ".xst", Filter = "Exported storage (.xst)|*.xst", CheckFileExists = true};
 
       if(dlg.ShowDialog() != true || string.IsNullOrEmpty(dlg.FileName) || !System.IO.File.Exists(dlg.FileName)) {
         return;
@@ -195,17 +191,13 @@ namespace X13 {
         Log.Warning("Import({0}) - {1}", dlg.FileName, ex.Message);
       }
     }
-    private void miExport_Click(object sender, RoutedEventArgs e) {
+    private void MiExport_Click(object sender, RoutedEventArgs e) {
       DTopic t;
       var doc =App.Workspace.ActiveDocument as UI.UIDocument;
-      if(doc == null || (t = doc.data) == null) {
+      if(doc == null || (t = doc.Data) == null) {
         return;
       }
-      var dlg = new Microsoft.Win32.SaveFileDialog();
-      dlg.Title = "Export "+t.fullPath+" to";
-      dlg.FileName = t.parent == null ? "root" : t.name;
-      dlg.DefaultExt = ".xst"; // Default file extension
-      dlg.Filter = "Exported storage (.xst)|*.xst"; // Filter files by extension
+      var dlg = new Microsoft.Win32.SaveFileDialog(){ Title = "Export "+t.FullPath+" to", FileName = t.Parent == null ? "root" : t.Name, DefaultExt = ".xst", Filter = "Exported storage (.xst)|*.xst"};
 
       if(dlg.ShowDialog() != true || string.IsNullOrEmpty(dlg.FileName)) {
         return;
@@ -213,7 +205,7 @@ namespace X13 {
       t.Export(dlg.FileName);
     }
 
-    private void dmMain_DocumentClosed(object sender, Xceed.Wpf.AvalonDock.DocumentClosedEventArgs e) {
+    private void DmMain_DocumentClosed(object sender, Xceed.Wpf.AvalonDock.DocumentClosedEventArgs e) {
       var doc = e.Document.Content as BaseWindow;
       if(doc != null) {
         App.Workspace.Close(doc);

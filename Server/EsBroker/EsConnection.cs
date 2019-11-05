@@ -21,10 +21,10 @@ namespace X13.EsBroker {
     }
 
 
-    private EsBrokerPl _basePl;
+    private readonly EsBrokerPl _basePl;
     private Topic _owner;
-    private List<Tuple<SubRec, EsMessage>> _subscriptions;
-    private Action<Perform, SubRec> _subCB;
+    private readonly List<Tuple<SubRec, EsMessage>> _subscriptions;
+    private readonly Action<Perform, SubRec> _subCB;
 
     public EsConnection(EsBrokerPl pl, TcpClient tcp)
       : base(tcp, null) { //
@@ -34,7 +34,7 @@ namespace X13.EsBroker {
       this._subscriptions = new List<Tuple<SubRec, EsMessage>>();
       // Hello
       this.SendArr(new JSL.Array { 1, Environment.MachineName });
-      _owner = Topic.root.Get("/$YS/ES").Get(base.ToString());
+      _owner = Topic.Root.Get("/$YS/ES").Get(base.ToString());
       _owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
       _owner.SetField("type", "Ext/Connection", _owner);
       System.Net.Dns.BeginGetHostEntry(EndPoint.Address, EndDnsReq, null);
@@ -47,14 +47,14 @@ namespace X13.EsBroker {
         v["Port"] = EndPoint.Port;
         v["Dns"] = h.HostName;
         _owner.SetState(v, _owner);
-        Log.Info("{0} connected from {1}[{2}]:{3}", _owner.path, h.HostName, EndPoint.Address.ToString(), EndPoint.Port);
+        Log.Info("{0} connected from {1}[{2}]:{3}", _owner.Path, h.HostName, EndPoint.Address.ToString(), EndPoint.Port);
       }
       catch(SocketException) {
         var v = JSC.JSObject.CreateObject();
         v["Address"] = EndPoint.Address.ToString();
         v["Port"] = EndPoint.Port;
         _owner.SetState(v, _owner);
-        Log.Info("{0} connected from {1}:{2}", _owner.path, EndPoint.Address.ToString(), EndPoint.Port);
+        Log.Info("{0} connected from {1}:{2}", _owner.Path, EndPoint.Address.ToString(), EndPoint.Port);
       }
       Log.Write += Log_Write;
     }
@@ -97,7 +97,7 @@ namespace X13.EsBroker {
               var o = Interlocked.Exchange(ref _owner, null);
               if(o != null) {
                 Log.Write -= Log_Write;
-                Log.Info("{0} connection dropped", o.path);
+                Log.Info("{0} connection dropped", o.Path);
                 o.Remove(o); //-V3062
                 lock(_subscriptions) {
                   foreach(var sr in _subscriptions) {
@@ -113,14 +113,14 @@ namespace X13.EsBroker {
         }
       }
       catch(Exception ex) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("{0} - {1}", msg, ex);
         }
       }
     }
     public override bool verbose {
       get {
-        return _basePl.verbose;
+        return _basePl.Verbose;
       }
       set {
       }
@@ -133,12 +133,12 @@ namespace X13.EsBroker {
     /// </param>
     private void Subscribe(EsMessage msg) {
       if(msg.Count != 4 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || !msg[3].IsNumber) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
         return;
       }
-      Topic parent = Topic.root.Get(msg[2].Value as string, false, _owner);
+      Topic parent = Topic.Root.Get(msg[2].Value as string, false, _owner);
       if(parent != null) {
         var sr1 = parent.Subscribe(SubRec.SubMask.Value | SubRec.SubMask.Field | SubRec.SubMask.Once | SubRec.SubMask.Chldren, string.Empty, _subCB);
         lock(_subscriptions) {
@@ -155,14 +155,14 @@ namespace X13.EsBroker {
     /// </param> 
     private void SetState(EsMessage msg) {
       if(msg.Count != 4 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
         return;
       }
       string path = msg[2].Value as string;
 
-      Topic t = Topic.root.Get(path, false, _owner);
+      Topic t = Topic.Root.Get(path, false, _owner);
       if(t != null) {
         t.SetState(msg[3], _owner);
         msg.Response(3, msg[1], true);
@@ -177,12 +177,12 @@ namespace X13.EsBroker {
     /// </param> 
     private void SetField(EsMessage msg) {
       if(msg.Count != 5 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
         return;
       }
-      Topic t = Topic.root.Get(msg[2].Value as string, false, _owner);
+      Topic t = Topic.Root.Get(msg[2].Value as string, false, _owner);
       if(t != null) {
         if(t.TrySetField(msg[3].Value as string, msg[4], _owner)) {
           msg.Response(3, msg[1], true);
@@ -199,21 +199,20 @@ namespace X13.EsBroker {
     /// </param>
     private void Create(EsMessage msg) {
       if(msg.Count < 4 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
         return;
       }
-      Create(Topic.root, msg[2].Value as string, msg[3], (msg[4].ValueType == JSC.JSValueType.Object && msg[4].Value != null) ? msg[4] : null);
+      Create(Topic.Root, msg[2].Value as string, msg[3], (msg[4].ValueType == JSC.JSValueType.Object && msg[4].Value != null) ? msg[4] : null);
     }
     private void Create(Topic parent, string path, JSC.JSValue state, JSC.JSValue manifest) {
       var t = Topic.I.Get(parent, path, true, _owner, false, false);
       Topic.I.Fill(t, state, manifest, _owner);
       JSC.JSValue typeS, typeV, ChL;
-      Topic typeT;
 
       if(manifest != null && (typeS = manifest["type"]).ValueType == JSC.JSValueType.String && !string.IsNullOrWhiteSpace(typeS.Value as string)
-        && Topic.root.Get("/$YS/TYPES").Exist(typeS.Value as string, out typeT) && (typeV = typeT.GetState()) != null && typeV.ValueType == JSC.JSValueType.Object && typeV.Value != null
+        && Topic.Root.Get("/$YS/TYPES").Exist(typeS.Value as string, out Topic typeT) && (typeV = typeT.GetState()) != null && typeV.ValueType == JSC.JSValueType.Object && typeV.Value != null
         && (ChL = typeV["Children"]).ValueType == JSC.JSValueType.Object && ChL.Value != null) {
           foreach(var ch in ChL) {
             if((JsLib.OfInt(JsLib.GetField(ch.Value, "manifest.attr"), 0) & (int)Topic.Attribute.Required) != 0) {
@@ -229,15 +228,15 @@ namespace X13.EsBroker {
     private void Move(EsMessage msg) {
       if(msg.Count < 4 || msg.Count > 5 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String
         || ( msg.Count == 5 && msg[4].ValueType != JSC.JSValueType.String )) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
         return;
       }
-      Topic t = Topic.root.Get(msg[2].Value as string, false, _owner);
-      Topic p = Topic.root.Get(msg[3].Value as string, false, _owner);
+      Topic t = Topic.Root.Get(msg[2].Value as string, false, _owner);
+      Topic p = Topic.Root.Get(msg[3].Value as string, false, _owner);
       if(t != null && p != null) {
-        string nname = msg.Count == 5 ? (msg[4].Value as string) : t.name;
+        string nname = msg.Count == 5 ? (msg[4].Value as string) : t.Name;
         t.Move(p, nname, _owner);
       }
     }
@@ -247,12 +246,12 @@ namespace X13.EsBroker {
     /// </param>
     private void Remove(EsMessage msg) {
       if(msg.Count != 3 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
         return;
       }
-      Topic t = Topic.root.Get(msg[2].Value as string, false, _owner);
+      Topic t = Topic.Root.Get(msg[2].Value as string, false, _owner);
       if(t != null) {
         t.Remove(_owner);
       }
@@ -263,7 +262,7 @@ namespace X13.EsBroker {
     /// </param>
     private void Import(EsMessage msg) {
       if(msg.Count != 3 || msg[1].ValueType != JSC.JSValueType.String || msg[2].ValueType != JSC.JSValueType.String) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
         return;
@@ -282,7 +281,7 @@ namespace X13.EsBroker {
     /// <param name="msg">Req: [91, Date. count]</param>
     private void History(EsMessage msg) {
       if(msg.Count != 3 || msg[1].ValueType != JSC.JSValueType.Date || !msg[2].IsNumber) {
-        if(_basePl.verbose) {
+        if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
         return;
@@ -301,13 +300,13 @@ namespace X13.EsBroker {
     }
 
     private void TopicChanged(Perform p, SubRec sb) {
-      switch(p.art) { //-V3002
-      case Perform.Art.create:
+      switch(p.Art) { //-V3002
+      case Perform.ArtEnum.create:
         if(sb.setTopic != p.src) {
-          base.SendArr(new JSL.Array { 4, p.src.path });
+          base.SendArr(new JSL.Array { 4, p.src.Path });
         }
         break;
-      case Perform.Art.subscribe:
+      case Perform.ArtEnum.subscribe:
         if(sb.setTopic == p.src) {
           var m = p.src.GetField(null);
           if(m == null || m.ValueType!=JSC.JSValueType.Object || m.Value == null) {
@@ -317,12 +316,12 @@ namespace X13.EsBroker {
           if(s==null){
             s=JSC.JSValue.Undefined;
           }
-          base.SendArr(new JSL.Array { 4, p.src.path, s, m });
+          base.SendArr(new JSL.Array { 4, p.src.Path, s, m });
         } else {
-          base.SendArr(new JSL.Array { 4, p.src.path });
+          base.SendArr(new JSL.Array { 4, p.src.Path });
         }
         break;
-      case Perform.Art.subAck:
+      case Perform.ArtEnum.subAck:
         var sr = p.o as SubRec;
         if(sr != null) {
           lock(_subscriptions) {
@@ -332,24 +331,24 @@ namespace X13.EsBroker {
           }
         }
         break;
-      case Perform.Art.changedState:
-        if(!p.src.disposed && p.prim != _owner && sb.setTopic == p.src) {
-          base.SendArr(new JSL.Array { 6, p.src.path, p.src.GetState() });
+      case Perform.ArtEnum.changedState:
+        if(!p.src.IsDisposed && p.Prim != _owner && sb.setTopic == p.src) {
+          base.SendArr(new JSL.Array { 6, p.src.Path, p.src.GetState() });
         }
         break;
-      case Perform.Art.changedField:
+      case Perform.ArtEnum.changedField:
         if(sb.setTopic == p.src) {
-          base.SendArr(new JSL.Array { 14, p.src.path, p.src.GetField(null) });
+          base.SendArr(new JSL.Array { 14, p.src.Path, p.src.GetField(null) });
         }
         break;
-      case Perform.Art.move:
+      case Perform.ArtEnum.move:
         if(sb.setTopic != p.src) {
-          base.SendArr(new JSL.Array { 10, p.o as string, p.src.parent.path, p.src.name });
+          base.SendArr(new JSL.Array { 10, p.o as string, p.src.Parent.Path, p.src.Name });
         }
         break;
-      case Perform.Art.remove:
-        if(sb.setTopic == p.src.parent) {
-          base.SendArr(new JSL.Array { 12, p.src.path });
+      case Perform.ArtEnum.remove:
+        if(sb.setTopic == p.src.Parent) {
+          base.SendArr(new JSL.Array { 12, p.src.Path });
           lock(_subscriptions) {
             _subscriptions.RemoveAll(z => z.Item1.setTopic == p.src);
           }

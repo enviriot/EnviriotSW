@@ -16,8 +16,8 @@ namespace X13.EsBroker {
   internal class EsBrokerPl : IPlugModul {
     #region internal Members
     private TcpListener _tcp;
-    private System.Collections.Concurrent.ConcurrentBag<EsConnection> _connections;
-    private System.Collections.Concurrent.ConcurrentBag<EsMessage> _msgs;
+    private readonly System.Collections.Concurrent.ConcurrentBag<EsConnection> _connections;
+    private readonly System.Collections.Concurrent.ConcurrentBag<EsMessage> _msgs;
     private Topic _owner;
     private Topic _verbose;
 
@@ -46,7 +46,7 @@ namespace X13.EsBroker {
       _msgs = new System.Collections.Concurrent.ConcurrentBag<EsMessage>();
     }
 
-    public bool verbose {
+    public bool Verbose {
       get {
         return _verbose != null && (bool)_verbose.GetState();
       }
@@ -57,7 +57,7 @@ namespace X13.EsBroker {
       _tcp.Start();
     }
     public void Start() {
-      _owner = Topic.root.Get("/$YS/ES");
+      _owner = Topic.Root.Get("/$YS/ES");
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -71,8 +71,7 @@ namespace X13.EsBroker {
       _tcp.BeginAcceptTcpClient(new AsyncCallback(Connect), null);
     }
     public void Tick() {
-      EsMessage msg;
-      while(_msgs.TryTake(out msg)) {
+      while(_msgs.TryTake(out EsMessage msg)) {
         if(msg.Count == 0) {
           continue;
         }
@@ -87,7 +86,7 @@ namespace X13.EsBroker {
           }
         }
         catch(Exception ex) {
-          if(verbose) {
+          if(Verbose) {
             Log.Warning("{0} - {1}", msg, ex);
           }
         }
@@ -110,7 +109,7 @@ namespace X13.EsBroker {
 
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/ES", true);
+        var en = Topic.Root.Get("/$YS/ES", true);
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -119,7 +118,7 @@ namespace X13.EsBroker {
         return (bool)en.GetState();
       }
       set {
-        var en = Topic.root.Get("/$YS/ES", true);
+        var en = Topic.Root.Get("/$YS/ES", true);
         en.SetState(value);
       }
     }

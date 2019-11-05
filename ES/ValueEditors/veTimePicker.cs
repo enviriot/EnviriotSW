@@ -13,7 +13,7 @@ namespace X13.UI {
     public static IValueEditor Create(InBase owner, JSC.JSValue type) {
       return new veTimePicker(owner, type);
     }
-    private InBase _owner;
+    private readonly InBase _owner;
     private DateTime _oldValue;
     public veTimePicker(InBase owner, JSC.JSValue manifest) {
       _owner = owner;

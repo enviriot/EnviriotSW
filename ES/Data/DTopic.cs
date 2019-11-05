@@ -11,8 +11,7 @@ using System.Xml.Linq;
 
 namespace X13.Data {
   public class DTopic {
-    private static char[] FIELDS_SEPARATOR = new char[] { '.' };
-    private static char[] PATH_SEPARATOR = new char[] { '/' };
+    private static readonly char[] PATH_SEPARATOR = new char[] { '/' };
 
     public static string JSV2Type(JSC.JSValue value) {
       if(value == null) {
@@ -53,27 +52,27 @@ namespace X13.Data {
     private bool _typeLoading;
 
     private DTopic(DTopic parent, string name) {
-      this.parent = parent;
-      this.Connection = this.parent.Connection;
-      this.name = name;
-      this.path = this.parent == Connection.root ? ("/" + name) : (this.parent.path + "/" + name);
+      this.Parent = parent;
+      this.Connection = this.Parent.Connection;
+      this.Name = name;
+      this.Path = this.Parent == Connection.Root ? ("/" + name) : (this.Parent.Path + "/" + name);
     }
     internal DTopic(Client cl) {
       Connection = cl;
-      this.name =  Connection.ToString();
-      this.path = "/";
+      this.Name =  Connection.ToString();
+      this.Path = "/";
     }
 
-    public virtual string name { get; protected set; }
-    public string path { get; private set; }
-    public string fullPath { get { return Connection.ToString() + this.path; } }
-    public DTopic parent { get; private set; }
+    public virtual string Name { get; protected set; }
+    public string Path { get; private set; }
+    public string FullPath { get { return Connection.ToString() + this.Path; } }
+    public DTopic Parent { get; private set; }
     public JSC.JSValue State { get { return _state; } }
     public JSC.JSValue Manifest { get { return _manifest; } }
-    public ReadOnlyCollection<DTopic> children { get { return _children == null ? null : _children.AsReadOnly(); } }
+    public ReadOnlyCollection<DTopic> Children { get { return _children?.AsReadOnly(); } }
 
     public Task<DTopic> CreateAsync(string name, JSC.JSValue st, JSC.JSValue manifest) {
-      var req = new TopicReq(this, this == Connection.root ? ("/" + name) : (this.path + "/" + name), st, manifest);
+      var req = new TopicReq(this, this == Connection.Root ? ("/" + name) : (this.Path + "/" + name), st, manifest);
       App.PostMsg(req);
       return req.Task;
     }
@@ -86,10 +85,10 @@ namespace X13.Data {
       if(string.IsNullOrEmpty(p)) {
         ts = this;
       } else if(p[0] == '/') {
-        ts = Connection.root;
+        ts = Connection.Root;
       } else {
         ts = this;
-        p = this == Connection.root ? ("/" + p) : (this.path + "/" + p);
+        p = this == Connection.Root ? ("/" + p) : (this.Path + "/" + p);
       }
       //Log.Debug(this.path+".GetAsync("+( p??"null" )+")");
       var req = new TopicReq(ts, p);
@@ -109,17 +108,17 @@ namespace X13.Data {
     }
 
     public void Move(DTopic nParent, string nName) {
-      Connection.SendReq(10, null, this.path, nParent.path, nName);
+      Connection.SendReq(10, null, this.Path, nParent.Path, nName);
     }
     public void Delete() {
-      Connection.SendReq(12, null, this.path);
+      Connection.SendReq(12, null, this.Path);
     }
 
     public void Export(string path) {
       Task.Run(() => ExportI0(path));
     }
 
-    public event Action<Art, DTopic> changed;
+    public event Action<Art, DTopic> Changed;
 
     private void ValuePublished(JSC.JSValue value) {
       _state = value;
@@ -143,12 +142,12 @@ namespace X13.Data {
     private void TypeLoaded(Task<DTopic> td) {
       if(td.IsCompleted && !td.IsFaulted && td.Result != null) {
         _typeTopic = td.Result;
-        _typeTopic.changed += _typeTopic_changed;
+        _typeTopic.Changed += TypeTopic_changed;
       }
       _typeLoading = false;
-      _typeTopic_changed(Art.value, _typeTopic);
+      TypeTopic_changed(Art.value, _typeTopic);
     }
-    private void _typeTopic_changed(DTopic.Art art, DTopic t) {
+    private void TypeTopic_changed(DTopic.Art art, DTopic t) {
       if(art == Art.value) {
         ProtoDeep(_manifest, (_typeTopic == null || _typeTopic.State.ValueType != JSC.JSValueType.Object) ? null : _typeTopic.State.ToObject());
         ChangedReise(Art.type, this);
@@ -171,8 +170,8 @@ namespace X13.Data {
       }
     }
     private void ChangedReise(Art art, DTopic src) {
-      if(changed != null && App.mainWindow != null) {
-        App.mainWindow.Dispatcher.BeginInvoke(changed, System.Windows.Threading.DispatcherPriority.DataBind, art, src);
+      if(Changed != null && App.MW != null) {
+        App.MW.Dispatcher.BeginInvoke(Changed, System.Windows.Threading.DispatcherPriority.DataBind, art, src);
       }
     }
 
@@ -186,7 +185,7 @@ namespace X13.Data {
       }
       int cmp, mid;
       for(mid = _children.Count - 1; mid >= 0; mid--) {
-        cmp = string.Compare(_children[mid].name, cName);
+        cmp = string.Compare(_children[mid].Name, cName);
         if(cmp == 0) {
           return _children[mid];
         }
@@ -209,7 +208,7 @@ namespace X13.Data {
       }
       int cmp, mid;
       for(mid = _children.Count - 1; mid >= 0; mid--) {
-        cmp = string.Compare(_children[mid].name, t.name);
+        cmp = string.Compare(_children[mid].Name, t.Name);
         if(cmp == 0) {
           _children[mid] = t;
           return;
@@ -221,10 +220,10 @@ namespace X13.Data {
       this._children.Insert(mid + 1, t);
     }
     private void UpdatePath() {
-      this.path = this.parent == Connection.root ? ("/" + name) : (this.parent.path + "/" + name);
+      this.Path = this.Parent == Connection.Root ? ("/" + Name) : (this.Parent.Path + "/" + Name);
       if(_children != null) {
         foreach(var c in _children) {
-          c.parent = this;
+          c.Parent = this;
           c.UpdatePath();
         }
       }
@@ -233,17 +232,15 @@ namespace X13.Data {
       if(_children == null) {
         return;
       }
-      int min = 0, max = _children.Count - 1, cmp, mid = 0;
+      int min = 0, max = _children.Count - 1, cmp, mid;
 
       while(min <= max) {
         mid = (min + max) / 2;
-        cmp = string.Compare(_children[mid].name, t.name);
+        cmp = string.Compare(_children[mid].Name, t.Name);
         if(cmp < 0) {
           min = mid + 1;
-          mid = min;
         } else if(cmp > 0) {
           max = mid - 1;
-          mid = max;
         } else {
           _children.RemoveAt(mid);
           t.ChangedReise(Art.RemoveChild, t);
@@ -257,8 +254,7 @@ namespace X13.Data {
     }
 
     private void ExportI0(string filename) {
-      XDocument doc = new XDocument(new XElement("xst", new XAttribute("path", this.path)));
-      doc.Declaration = new XDeclaration("1.0", "utf-8", "yes");
+      XDocument doc = new XDocument(new XElement("xst", new XAttribute("path", this.Path))) { Declaration = new XDeclaration("1.0", "utf-8", "yes") };
       this.ExportI1(doc.Root, true);
       using(System.Xml.XmlTextWriter writer = new System.Xml.XmlTextWriter(filename, Encoding.UTF8)) {
         writer.Formatting = System.Xml.Formatting.Indented;
@@ -269,7 +265,7 @@ namespace X13.Data {
 
     }
     private void ExportI1(XElement x, bool isRoot = false) {
-      XElement xCur = isRoot ? x : new XElement("i", new XAttribute("n", this.name));
+      XElement xCur = isRoot ? x : new XElement("i", new XAttribute("n", this.Name));
 
       var tmp = JsLib.GetField(this._manifest, "attr");
       if(tmp.IsNumber && (((int)tmp) & 0x0C) != 0 && this._state.Exists) {
@@ -277,8 +273,7 @@ namespace X13.Data {
       }
       tmp = JsLib.GetField(this._manifest, "version");
       string vs;
-      Version v;
-      if(tmp.ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(vs = tmp.Value as string) && vs.StartsWith("¤VR") && Version.TryParse(vs.Substring(3), out v)) {
+      if(tmp.ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(vs = tmp.Value as string) && vs.StartsWith("¤VR") && Version.TryParse(vs.Substring(3), out Version v)) {
         tmp = JsLib.Clone(this._manifest);
         tmp.DeleteProperty("version");
         xCur.Add(new XAttribute("m", JsLib.Stringify(tmp)));
@@ -307,16 +302,16 @@ namespace X13.Data {
     }
 
     public override string ToString() {
-      return this.fullPath;
+      return this.FullPath;
     }
 
     private class TopicReq : INotMsg {
       private DTopic _cur;
-      private string _path;
+      private readonly string _path;
       private bool _create;
-      private JSC.JSValue _state;
-      private JSC.JSValue _manifest;
-      private TaskCompletionSource<DTopic> _tcs;
+      private readonly JSC.JSValue _state;
+      private readonly JSC.JSValue _manifest;
+      private readonly TaskCompletionSource<DTopic> _tcs;
       private List<TopicReq> _reqs;
 
       public TopicReq(DTopic cur, string path) {
@@ -336,11 +331,11 @@ namespace X13.Data {
       public Task<DTopic> Task { get { return _tcs.Task; } }
 
       public void Process() {
-        int idx1 = _cur.path.Length;
+        int idx1 = _cur.Path.Length;
         if(idx1 > 1) {
           idx1++;
         }
-        if(_path == null || _path.Length <= _cur.path.Length) {
+        if(_path == null || _path.Length <= _cur.Path.Length) {
           if(_cur._disposed) {
             _tcs.SetResult(null);
             lock(_cur) {
@@ -353,7 +348,7 @@ namespace X13.Data {
             }
           } else if(_cur._state != null) {
             if(_cur._typeLoading) {
-              _cur.changed+=TypeLoaded;
+              _cur.Changed+=TypeLoaded;
             } else {
               _tcs.SetResult(_cur);
             }
@@ -377,7 +372,7 @@ namespace X13.Data {
                 _cur._req = this;
               }
             }
-            _cur.Connection.SendReq(4, this, _cur.path, 3);
+            _cur.Connection.SendReq(4, this, _cur.Path, 3);
           }
           return;
         }
@@ -400,7 +395,7 @@ namespace X13.Data {
               _cur._req = this;
             }
           }
-          _cur.Connection.SendReq(4, this, _cur.path, 3);
+          _cur.Connection.SendReq(4, this, _cur.Path, 3);
           return;
         }
         next = _cur.GetChild(name, false);
@@ -433,7 +428,7 @@ namespace X13.Data {
         if(success) {   // value == null after connect
           if(value != null && (value.ValueType != JSC.JSValueType.Boolean || !((bool)value))) {
             _cur._disposed = true;
-            var parent = _cur.parent;
+            var parent = _cur.Parent;
             if(parent != null) {
               parent.RemoveChild(_cur);
               _cur.ChangedReise(Art.RemoveChild, _cur);
@@ -448,19 +443,19 @@ namespace X13.Data {
 
       private void TypeLoaded(Art a, DTopic t) {
         if(a==Art.type && t==_cur && !_cur._typeLoading) {
-          _cur.changed-=TypeLoaded;
+          _cur.Changed-=TypeLoaded;
           _tcs.SetResult(_cur);
         }
       }
 
       public override string ToString() {
-        return "TopicReq(" + _cur.path + ")";
+        return "TopicReq(" + _cur.Path + ")";
       }
     }
     private class TopicPublish : INotMsg {
-      private TaskCompletionSource<bool> _tcs;
-      private DTopic _topic;
-      private JSC.JSValue _value;
+      private readonly TaskCompletionSource<bool> _tcs;
+      private readonly DTopic _topic;
+      private readonly JSC.JSValue _value;
       private bool _complete;
 
       public TopicPublish(DTopic t, JSC.JSValue value) {
@@ -475,7 +470,7 @@ namespace X13.Data {
           if(_value == null ? _topic.State != null : _value.Equals(_topic.State)) {
             _tcs.SetResult(true);
           } else {
-            _topic.Connection.SendReq(6, this, _topic.path, _value);
+            _topic.Connection.SendReq(6, this, _topic.Path, _value);
           }
         }
       }
@@ -490,10 +485,10 @@ namespace X13.Data {
       }
     }
     private class TopicField : INotMsg {
-      private TaskCompletionSource<JSC.JSValue> _tcs;
-      private DTopic _topic;
-      private string _fPath;
-      private JSC.JSValue _value;
+      private readonly TaskCompletionSource<JSC.JSValue> _tcs;
+      private readonly DTopic _topic;
+      private readonly string _fPath;
+      private readonly JSC.JSValue _value;
       private bool _complete;
 
       public TopicField(DTopic t, string fPath, JSC.JSValue value) {
@@ -506,7 +501,7 @@ namespace X13.Data {
 
       public void Process() {
         if(!_complete) {
-          _topic.Connection.SendReq(14, this, _topic.path, _fPath, _value);
+          _topic.Connection.SendReq(14, this, _topic.Path, _fPath, _value);
         }
       }
       public void Response(bool success, JSC.JSValue value) {
@@ -519,22 +514,15 @@ namespace X13.Data {
       }
     }
     internal class ClientEvent : INotMsg {
-      private DTopic _root;
-      private string _path;
-      private int _cmd;
-      private JSC.JSValue _p1;
-      private JSC.JSValue _p2;
+      private readonly DTopic _root;
+      private readonly string _path;
+      private readonly int _cmd;
+      private readonly JSC.JSValue _p1;
+      private readonly JSC.JSValue _p2;
 
       public ClientEvent(DTopic root, string path, int cmd, JSC.JSValue p1, JSC.JSValue p2) {
-        if(root == null) {
-          throw new ArgumentNullException("root");
-        }
-        if(path == null) {
-          throw new ArgumentNullException("path");
-        }
-
-        _root = root;
-        _path = path;
+        _root = root ?? throw new ArgumentNullException("root");
+        _path = path ?? throw new ArgumentNullException("path");
         _cmd = cmd;
         _p1 = p1;
         _p2 = p2;
@@ -553,7 +541,7 @@ namespace X13.Data {
         if(noCreation) {
           if(_cmd == 10) {  // move
             DTopic parent = _root;
-            ps = (_p1.Value as string).Split(PATH_SEPARATOR, StringSplitOptions.RemoveEmptyEntries); //-V3095
+            ps = ( _p1.Value as string ).Split(PATH_SEPARATOR, StringSplitOptions.RemoveEmptyEntries); //-V3095
             for(int i = 0; i < ps.Length; i++) {
               next = parent.GetChild(ps[i], false);
               if(next == null) {  // Topic not exist
@@ -561,14 +549,9 @@ namespace X13.Data {
               }
               parent = next;
             }
-            next = new DTopic(parent, _p2.Value as string); //-V3095
-            next._children = cur._children;
-            next._state = cur._state;
-            next._manifest = cur._manifest;
-            next._typeTopic = cur._typeTopic;
-
-            cur.parent.ChangedReise(Art.RemoveChild, cur);
-            cur.parent._children.Remove(cur);
+            next = new DTopic(parent, _p2.Value as string) { _children = cur._children, _state = cur._state, _manifest = cur._manifest, _typeTopic = cur._typeTopic };//-V3095
+            cur.Parent.ChangedReise(Art.RemoveChild, cur);
+            cur.Parent._children.Remove(cur);
 
             parent.SetChild(next);
             next.UpdatePath();
@@ -576,7 +559,7 @@ namespace X13.Data {
 
           } else if(_cmd == 12) {  // delete
             cur._disposed = true;
-            var parent = cur.parent;
+            var parent = cur.Parent;
             if(parent != null) {
               parent.RemoveChild(cur);
               cur.ChangedReise(Art.RemoveChild, cur);

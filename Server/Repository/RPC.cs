@@ -8,12 +8,12 @@ using System.Text;
 
 namespace X13.Repository {
   public static class RPC {
-    private static Dictionary<string, Action<JSC.JSValue[]>> _list;
-    private static Dictionary<string, Action<Topic, Perform.Art>> _cctors;
+    private static readonly Dictionary<string, Action<JSC.JSValue[]>> _list;
+    private static readonly Dictionary<string, Action<Topic, Perform.ArtEnum>> _cctors;
 
     static RPC() {
       _list = new Dictionary<string, Action<JSC.JSValue[]>>();
-      _cctors = new Dictionary<string, Action<Topic, Perform.Art>>();
+      _cctors = new Dictionary<string, Action<Topic, Perform.ArtEnum>>();
     }
 
     public static void Register(string name, Action<JSC.JSValue[]> cb) {
@@ -21,25 +21,23 @@ namespace X13.Repository {
         _list.Add(name, cb);
       }
     }
-    public static void Register(string name, Action<Topic, Perform.Art> cb) {
+    public static void Register(string name, Action<Topic, Perform.ArtEnum> cb) {
       lock(_list) {
         _cctors.Add(name, cb);
       }
     }
     internal static void Call(string name, JSC.JSValue[] args) {
-      Action<JSC.JSValue[]> cb;
-      if(_list.TryGetValue(name, out cb)) {
+      if(_list.TryGetValue(name, out Action<JSC.JSValue[]> cb)) {
         cb.Invoke(args);
       }
     }
-    internal static void CCtor(string name, Topic t, Perform.Art a) {
-      Action<Topic, Perform.Art> cb;
-      if(_cctors.TryGetValue(name, out cb)) {
+    internal static void CCtor(string name, Topic t, Perform.ArtEnum a) {
+      if(_cctors.TryGetValue(name, out Action<Topic, Perform.ArtEnum> cb)) {
         try {
           cb.Invoke(t, a);
         }
         catch(Exception ex) {
-          Log.Warning("RPC.CCtor({0}, {1}, {2}) - {3}", name, t.path, a, ex);
+          Log.Warning("RPC.CCtor({0}, {1}, {2}) - {3}", name, t.Path, a, ex);
         }
       }
     }

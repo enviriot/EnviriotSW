@@ -19,7 +19,7 @@ namespace X13.Repository {
 
     }
     public override string ToString() {
-      return string.Format("{0}{1}{4} > {2}.{3}", setTopic.path, (mask & (SubMask.Chldren | SubMask.All)) != SubMask.None ? ((mask & SubMask.Chldren) != SubMask.None ? "/+" : "/#") : string.Empty,
+      return string.Format("{0}{1}{4} > {2}.{3}", setTopic.Path, (mask & (SubMask.Chldren | SubMask.All)) != SubMask.None ? ((mask & SubMask.Chldren) != SubMask.None ? "/+" : "/#") : string.Empty,
         func.Target == null ? func.Method.DeclaringType.Name : func.Target.ToString(), func.Method.Name, (mask & SubMask.Field) != SubMask.None ? ("¤" + prefix) : string.Empty);
     }
     public void Dispose() {

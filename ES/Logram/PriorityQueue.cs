@@ -122,9 +122,7 @@ namespace X13.UI {
     /// <summary>Get the smallest object without removing it.</summary>
     /// <returns>The smallest object</returns>
     public T Peek() {
-      if(InnerList.Count>0)
-        return InnerList[0];
-      return default(T);
+      return InnerList.Count>0? InnerList[0]:default;
     }
 
     public void Clear() {

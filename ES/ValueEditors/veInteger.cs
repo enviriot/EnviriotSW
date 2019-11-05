@@ -14,7 +14,7 @@ namespace X13.UI {
       return new veInteger(owner, type);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
     private long _oldValue;
 
     public veInteger(InBase owner, JSC.JSValue manifest) {

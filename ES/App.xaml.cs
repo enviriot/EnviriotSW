@@ -17,11 +17,13 @@ namespace X13 {
   public partial class App : Application {
     private static SortedDictionary<string, BitmapSource> _icons;
 
-    internal static MainWindow mainWindow { get; set; }
+    internal static MainWindow MW { get; set; }
     internal static Data.DWorkspace Workspace { get; set; }
 
     internal static System.Windows.Media.Imaging.BitmapSource GetIcon(string icData) {
+#pragma warning disable IDE0018 // Inline variable declaration
       BitmapSource rez;
+#pragma warning restore IDE0018 // Inline variable declaration
       if(string.IsNullOrEmpty(icData)) {
         icData = string.Empty;
       }
@@ -98,9 +100,9 @@ namespace X13 {
       LoadIcon("log_deb", "log_deb.png");
       LoadIcon("log_ok", "log_ok.png");
       LoadIcon("log_err", "log_err.png");
-      mainWindow = new MainWindow(cfgPath);
+      MW = new MainWindow(cfgPath);
       _msgProcessBusy = 1;
-      mainWindow.Show();
+      MW.Show();
     }
     private void LoadIcon(string name, string path) {
       var decoder = new PngBitmapDecoder(new Uri("pack://application:,,,/ES;component/Images/" + path, UriKind.Absolute), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
@@ -115,16 +117,15 @@ namespace X13 {
     internal static void PostMsg(INotMsg msg) {
       _msgs.Enqueue(msg);
       if(_msgProcessBusy == 1) {
-        mainWindow.Dispatcher.BeginInvoke(_msgProcessFunc, System.Windows.Threading.DispatcherPriority.DataBind);
+        MW.Dispatcher.BeginInvoke(_msgProcessFunc, System.Windows.Threading.DispatcherPriority.DataBind);
       }
     }
     private static void ProcessMessage() {
-      INotMsg msg;
       if(System.Threading.Interlocked.CompareExchange(ref _msgProcessBusy, 2, 1) != 1) {
         return;
       }
       while(_msgs.Any()) {
-        if(_msgs.TryDequeue(out msg)) {
+        if(_msgs.TryDequeue(out INotMsg msg)) {
           try {
             //Log.Debug("Tick: {0}", msg.ToString());
             msg.Process();

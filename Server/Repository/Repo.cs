@@ -16,9 +16,10 @@ namespace X13.Repository {
   [System.ComponentModel.Composition.ExportMetadata("name", "Repository")]
   public class Repo : IPlugModul {
     #region internal Members
-    private ConcurrentQueue<Perform> _tcQueue;
-    private List<Perform> _prOp;
-    private List<Action<Perform>> _subscribers;
+    internal string cfg;
+    private readonly ConcurrentQueue<Perform> _tcQueue;
+    private readonly List<Perform> _prOp;
+    private readonly List<Action<Perform>> _subscribers;
     private int _busyFlag;
     private int _pfPos;
 
@@ -38,7 +39,7 @@ namespace X13.Repository {
       int i;
       for(i = 0; i < _prOp.Count; i++) {
         if(_prOp[i].EqualsGr(cmd)) {
-          if(_prOp[i].art == Perform.Art.changedState) {
+          if(_prOp[i].Art == Perform.ArtEnum.changedState) {
             cmd.old_o = _prOp[i].old_o;
           }
           _prOp.RemoveAt(i);
@@ -56,32 +57,32 @@ namespace X13.Repository {
     private void TickStep1(Perform c) {
       SubRec sr;
 
-      switch(c.art) {
-      case Perform.Art.create:
+      switch(c.Art) {
+      case Perform.ArtEnum.create:
         Topic.I.SubscribeByCreation(c.src);
         EnquePerf(c);
         break;
-      case Perform.Art.subscribe:
-      case Perform.Art.unsubscribe:
+      case Perform.ArtEnum.subscribe:
+      case Perform.ArtEnum.unsubscribe:
         if((sr = c.o as SubRec) != null) {
           Topic.Bill b = null;
           Perform np;
-          if(c.art == Perform.Art.subscribe && (sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once) {
+          if(c.Art == Perform.ArtEnum.subscribe && (sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once) {
             EnquePerf(c);
           }
           if((sr.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren) {
-            b = c.src.children;
+            b = c.src.Children;
           }
           if((sr.mask & SubRec.SubMask.All) == SubRec.SubMask.All) {
-            b = c.src.all;
+            b = c.src.All;
           }
           if(b != null) {
             foreach(Topic tmp in b) {
-              if(c.art == Perform.Art.subscribe) {
+              if(c.Art == Perform.ArtEnum.subscribe) {
                 Topic.I.Subscribe(tmp, sr);
                 if((sr.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value
                   || (sr.mask & SubRec.SubMask.Field) == SubRec.SubMask.None || string.IsNullOrEmpty(sr.prefix) || tmp.GetField(sr.prefix).Defined) {
-                  np = Perform.Create(tmp, Perform.Art.subscribe, c.src);
+                  np = Perform.Create(tmp, Perform.ArtEnum.subscribe, c.src);
                   np.o = c.o;
                   EnquePerf(np);
                 }
@@ -90,77 +91,76 @@ namespace X13.Repository {
               }
             }
           }
-          if(c.art == Perform.Art.subscribe) {
-            np = Perform.Create(c.src, Perform.Art.subAck, c.src);
+          if(c.Art == Perform.ArtEnum.subscribe) {
+            np = Perform.Create(c.src, Perform.ArtEnum.subAck, c.src);
             np.o = c.o;
             EnquePerf(np);
           }
         }
         break;
-      case Perform.Art.setField: {
+      case Perform.ArtEnum.setField: {
           if(Topic.I.SetField(c)) {
-            c.art = Perform.Art.changedField;
+            c.Art = Perform.ArtEnum.changedField;
             EnquePerf(c);
           }
         }
         break;
 
-      case Perform.Art.changedState:
-      case Perform.Art.setState:
-      case Perform.Art.changedField:
-      case Perform.Art.move:
-      case Perform.Art.subAck:
+      case Perform.ArtEnum.changedState:
+      case Perform.ArtEnum.setState:
+      case Perform.ArtEnum.changedField:
+      case Perform.ArtEnum.move:
+      case Perform.ArtEnum.subAck:
         EnquePerf(c);
         break;
-      case Perform.Art.remove:
-        foreach(Topic tmp in c.src.all) {
-          EnquePerf(Perform.Create(tmp, Perform.Art.remove, c.prim));
+      case Perform.ArtEnum.remove:
+        foreach(Topic tmp in c.src.All) {
+          EnquePerf(Perform.Create(tmp, Perform.ArtEnum.remove, c.Prim));
         }
         break;
       }
     }
     private void TickStep2(Perform cmd) {
-      if(cmd.art == Perform.Art.remove || (cmd.art == Perform.Art.setState && !object.ReferenceEquals(cmd.src.GetState(), cmd.o))) {
+      if(cmd.Art == Perform.ArtEnum.remove || (cmd.Art == Perform.ArtEnum.setState && !object.ReferenceEquals(cmd.src.GetState(), cmd.o))) {
         cmd.old_o = cmd.src.GetState();
         Topic.I.SetValue(cmd.src, cmd.o as JSValue);
-        if(cmd.art != Perform.Art.remove) {
-          cmd.art = Perform.Art.changedState;
+        if(cmd.Art != Perform.ArtEnum.remove) {
+          cmd.Art = Perform.ArtEnum.changedState;
         }
       }
-      if(cmd.art == Perform.Art.changedField) {
+      if(cmd.Art == Perform.ArtEnum.changedField) {
         Topic.I.SetField2(cmd.src);
       }
-      if(cmd.art == Perform.Art.move) {
+      if(cmd.Art == Perform.ArtEnum.move) {
         Topic.I.SubscribeByMove(cmd.src);
       }
-      if(cmd.art == Perform.Art.remove) {
+      if(cmd.Art == Perform.ArtEnum.remove) {
         Topic.I.Remove(cmd.src);
       }
     }
     private void CheckCCtor(Perform p) {
       SortedList<string, JSValue> lo = null, ln = null, lc = null;
       JSValue to = null, tn = p.src.GetField("type"), vn;
-      if(p.art == Perform.Art.changedField) {
+      if(p.Art == Perform.ArtEnum.changedField) {
         JSValue o = JsLib.GetField(p.old_o as JSValue, "cctor"), n = p.src.GetField("cctor");
         to = JsLib.GetField(p.old_o as JSValue, "type");
         if(!object.ReferenceEquals(o, n)) {
           JsLib.Propertys(ref lo, o);
           JsLib.Propertys(ref ln, n);
         }
-      } else if(p.art == Perform.Art.create) {
+      } else if(p.Art == Perform.ArtEnum.create) {
         JsLib.Propertys(ref ln, p.src.GetField("cctor"));
-      } else if(p.art == Perform.Art.remove) {
+      } else if(p.Art == Perform.ArtEnum.remove) {
         JsLib.Propertys(ref lo, p.src.GetField("cctor"));
       } else {
         return;
       }
       if(!object.ReferenceEquals(to, tn)) {
-        Topic tt;
-        if(to!=null && to.ValueType == JSValueType.String && to.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(to.Value as string, out tt)) {
-          JsLib.Propertys(ref lo, JsLib.GetField(tt.GetState(), "cctor"));
+        if(to!=null && to.ValueType == JSValueType.String && to.Value != null && Topic.Root.Get("$YS/TYPES", false).Exist(to.Value as string, out Topic t1)) {
+          JsLib.Propertys(ref lo, JsLib.GetField(t1.GetState(), "cctor"));
         }
-        if(tn != null && tn.ValueType == JSValueType.String && tn.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(tn.Value as string, out tt)) {
-          JsLib.Propertys(ref ln, JsLib.GetField(tt.GetState(), "cctor"));
+        if(tn != null && tn.ValueType == JSValueType.String && tn.Value != null && Topic.Root.Get("$YS/TYPES", false).Exist(tn.Value as string, out Topic t2)) {
+          JsLib.Propertys(ref ln, JsLib.GetField(t2.GetState(), "cctor"));
         }
       }
       if(lo != null && ln != null) {
@@ -178,17 +178,17 @@ namespace X13.Repository {
       }
 
       if(lo != null) {
-        ProcessCCtor(lo, p.src, Perform.Art.remove);
+        ProcessCCtor(lo, p.src, Perform.ArtEnum.remove);
       }
       if(ln != null) {
-        ProcessCCtor(ln, p.src, Perform.Art.create);
+        ProcessCCtor(ln, p.src, Perform.ArtEnum.create);
       }
       if(lc != null) {
-        ProcessCCtor(lc, p.src, Perform.Art.changedField);
+        ProcessCCtor(lc, p.src, Perform.ArtEnum.changedField);
       }
     }
 
-    private void ProcessCCtor(SortedList<string, JSValue> l, Topic t, Perform.Art a) {
+    private void ProcessCCtor(SortedList<string, JSValue> l, Topic t, Perform.ArtEnum a) {
       foreach(var kv in l) {
         RPC.CCtor(kv.Key, t, a);
       }
@@ -229,21 +229,19 @@ namespace X13.Repository {
       if(xElement == null || ((xElement.Attribute("n") == null || owner == null) && path == null)) {
         return;
       }
-      Version ver;
-      Topic cur = null;
+      Topic cur;
       bool setVersion;
-      if(xElement.Attribute("ver") != null && Version.TryParse(xElement.Attribute("ver").Value, out ver)) {
-        if(owner == null ? Topic.root.Exist(path, out cur) : owner.Exist(xElement.Attribute("n").Value, out cur)) {
-          Version oldVer;
+      if(xElement.Attribute("ver") != null && Version.TryParse(xElement.Attribute("ver").Value, out Version ver)) {
+        if(owner == null ? Topic.Root.Exist(path, out cur) : owner.Exist(xElement.Attribute("n").Value, out cur)) {
           var ov_js = cur.GetField("version");
           string ov_s;
-          if(ov_js.ValueType == JSValueType.String && (ov_s = ov_js.Value as string) != null && ov_s.StartsWith("¤VR") && Version.TryParse(ov_s.Substring(3), out oldVer) && oldVer >= ver) {
+          if(ov_js.ValueType == JSValueType.String && (ov_s = ov_js.Value as string) != null && ov_s.StartsWith("¤VR") && Version.TryParse(ov_s.Substring(3), out Version oldVer) && oldVer >= ver) {
             return; // don't import older version
           }
         }
         setVersion = true;
       } else {
-        ver = default(Version);
+        ver = default;
         setVersion = false;
       }
       JSValue state = null, manifest = null;
@@ -270,7 +268,7 @@ namespace X13.Repository {
 
 
       if(owner == null) {
-        cur = Topic.I.Get(Topic.root, path, true, null, false, false);
+        cur = Topic.I.Get(Topic.Root, path, true, null, false, false);
       } else {
         cur = Topic.I.Get(owner, xElement.Attribute("n").Value, true, null, false, false);
       }
@@ -284,15 +282,14 @@ namespace X13.Repository {
       if(filename == null || t == null) {
         throw new ArgumentNullException();
       }
-      XDocument doc = new XDocument(new XElement("xst", new XAttribute("path", t.path)));
-      doc.Declaration = new XDeclaration("1.0", "utf-8", "yes");
+      XDocument doc = new XDocument(new XElement("xst", new XAttribute("path", t.Path))){ Declaration = new XDeclaration("1.0", "utf-8", "yes") };
       var s = t.GetState();
       if(s.Exists && (t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config) || (!configOnly && t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)))) {
         doc.Root.Add(new XAttribute("s", JsLib.Stringify(s)));
       }
       var m = t.GetField(null);
       doc.Root.Add(new XAttribute("m", JsLib.Stringify(m)));
-      foreach(Topic c in t.children) {
+      foreach(Topic c in t.Children) {
         Export(doc.Root, c, configOnly);
       }
       using(System.Xml.XmlTextWriter writer = new System.Xml.XmlTextWriter(filename, Encoding.UTF8)) {
@@ -306,8 +303,8 @@ namespace X13.Repository {
       if(x == null || t == null) {
         return;
       }
-      XElement xCur = new XElement("i", new XAttribute("n", t.name));
-      foreach(Topic c in t.children) {
+      XElement xCur = new XElement("i", new XAttribute("n", t.Name));
+      foreach(Topic c in t.Children) {
         Export(xCur, c, configOnly);
       }
       if(!configOnly || xCur.HasElements || t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config)) {
@@ -326,14 +323,15 @@ namespace X13.Repository {
     #region IPlugModul Members
 
     public void Init() {
-      if(!Directory.Exists("../data")) {
-        Directory.CreateDirectory("../data");
+      var dir = Path.GetDirectoryName(cfg);
+      if(!Directory.Exists(dir)) {
+        Directory.CreateDirectory(dir);
       }
 
       Topic.I.Init(this);
       _busyFlag = 1;
-      if(File.Exists("../data/server.xst")) {
-        Import("../data/Server.xst");
+      if(File.Exists(cfg)) {
+        Import(cfg);
       }
       this.Tick();
     }
@@ -372,7 +370,7 @@ namespace X13.Repository {
       // Publish
       for(_pfPos = 0; _pfPos < _prOp.Count; _pfPos++) {
         cmd = _prOp[_pfPos];
-        if(cmd.art != Perform.Art.setState && cmd.art != Perform.Art.setField) {
+        if(cmd.Art != Perform.ArtEnum.setState && cmd.Art != Perform.ArtEnum.setField) {
           Topic.I.Publish(cmd);
           for(int i = _subscribers.Count-1; i>=0; i--) {
             var func = _subscribers[i];
@@ -394,7 +392,7 @@ namespace X13.Repository {
     }
 
     public void Stop() {
-      Export("../data/server.xst", Topic.root, true);
+      Export("../data/server.xst", Topic.Root, true);
     }
 
     public bool enabled { get { return true; } set { if(!value) throw new ApplicationException("Repository disabled"); } }

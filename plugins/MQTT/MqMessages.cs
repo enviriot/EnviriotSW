@@ -88,11 +88,13 @@ namespace X13.MQTT {
       this.Retained=false;
       this.MessageID=0;
     }
+#pragma warning disable IDE0060 // Remove unused parameter
     /// <summary>Creates an MqttMessage from a data stream</summary>
     /// <param name="header">The first byte of the fixed header of the message</param>
     /// <param name="len">Variable header length</param>
     /// <param name="str">Input stream</param>
     protected MqMessage(byte header, uint len, Stream str) { //-V3117
+#pragma warning restore IDE0060 // Remove unused parameter
       this.MsgType = (MessageType)((header & 0xf0) >> 4);
       this.Duplicate = (header & 0x08) != 0;
       this.QualityOfService = (QoS)((header & 0x06)>>1);
@@ -116,7 +118,7 @@ namespace X13.MQTT {
       str.WriteByte((byte)(val & 0xFF));
     }
     private static void WriteToStreamPacked(Stream str, uint length) {
-      byte digit = 0;
+      byte digit;
       do {
         digit = (byte)(length % 128);
         length /= 128;
@@ -160,22 +162,24 @@ namespace X13.MQTT {
   }
 
   internal class MqConnect : MqMessage {
+#pragma warning disable IDE0051 // Remove unused private members
     /// <summary>The version of the MQTT protocol we are using</summary>
     private const byte VERSION = 3;
+#pragma warning restore IDE0051 // Remove unused private members
     /// <summary>Constant description of the protocol</summary>
     private static readonly byte[] protocolDesc3 = new byte[] { 0, 6, (byte)'M', (byte)'Q', (byte)'I', (byte)'s', (byte)'d', (byte)'p', 3};
     private static readonly byte[] protocolDesc4 = new byte[] { 0, 4, (byte)'M', (byte)'Q', (byte)'T', (byte)'T', 4 };
 
-    public ushort keepAlive { get; set; }
-    public string clientId { get; internal set; }
-    public string willTopic { get; set; }
-    public byte[] willPayload { get; set; }
-    public bool willRetained { get; set; }
-    public QoS willQos { get; set; }
-    public bool cleanSession { get; set; }
-    public string userName { get; set; }
-    public string userPassword { get; set; }
-    public byte version { get; set; }
+    public ushort KeepAlive { get; set; }
+    public string ClientId { get; internal set; }
+    public string WillTopic { get; set; }
+    public byte[] WillPayload { get; set; }
+    public bool WillRetained { get; set; }
+    public QoS WillQos { get; set; }
+    public bool CleanSession { get; set; }
+    public string UserName { get; set; }
+    public string UserPassword { get; set; }
+    public byte Version { get; set; }
 
     public MqConnect()
       : base(MessageType.CONNECT) {
@@ -183,20 +187,20 @@ namespace X13.MQTT {
     public MqConnect(byte header, uint len, Stream str)
       : base(header, len, str) {
       byte b;
-      version = 0;
+      Version = 0;
       int i = 0;
       while(true) {
         b = (byte)str.ReadByte();
-        if((version==0 || version==3) && b==protocolDesc3[i]){
+        if((Version==0 || Version==3) && b==protocolDesc3[i]){
           if(i > 0) {
-            version = 3;
+            Version = 3;
           }
           i++;
           if(i>=protocolDesc3.Length){
             break;
           }
-        } else if((version==0 || version==4) && b==protocolDesc4[i]){
-          version=4;
+        } else if((Version==0 || Version==4) && b==protocolDesc4[i]){
+          Version=4;
           i++;
           if(i>=protocolDesc4.Length){
             break;
@@ -206,76 +210,76 @@ namespace X13.MQTT {
         }
       }
       byte connectFlags=(byte)str.ReadByte();
-      this.cleanSession=(connectFlags & 0x02)!=0;
-      this.willRetained=(connectFlags & 0x20)!=0;
-      this.willQos=(QoS)((connectFlags>>3) & 0x03);
-      this.keepAlive=ReadUshortFromStream(str);
-      this.clientId=ReadStringFromStream(str);
+      this.CleanSession=(connectFlags & 0x02)!=0;
+      this.WillRetained=(connectFlags & 0x20)!=0;
+      this.WillQos=(QoS)((connectFlags>>3) & 0x03);
+      this.KeepAlive=ReadUshortFromStream(str);
+      this.ClientId=ReadStringFromStream(str);
       if((connectFlags & 0x04)!=0) {
-        willTopic=ReadStringFromStream(str);
+        WillTopic=ReadStringFromStream(str);
         int wLen=ReadUshortFromStream(str);
-        willPayload=new byte[wLen];
-        ReadCompleteBuffer(str, willPayload);
+        WillPayload=new byte[wLen];
+        ReadCompleteBuffer(str, WillPayload);
       }
       if((connectFlags & 0x80)!=0) {
-        userName=ReadStringFromStream(str);
+        UserName=ReadStringFromStream(str);
       }
       if((connectFlags & 0x40)!=0) {
-        userPassword=ReadStringFromStream(str);
+        UserPassword=ReadStringFromStream(str);
       }
-      if(userPassword==null) {
-        userPassword=string.Empty;
+      if(UserPassword==null) {
+        UserPassword=string.Empty;
       }
     }
     public override void Serialise(Stream str) {
-      byte _connectFlags=(byte)((cleanSession ? 0x02 : 0)); // Clean Start
+      byte _connectFlags=(byte)((CleanSession ? 0x02 : 0)); // Clean Start
 
       base.variableHeaderLength = (uint)(
-        version==4? protocolDesc4.Length:protocolDesc3.Length         //Length of the protocol description
+        Version==4? protocolDesc4.Length:protocolDesc3.Length         //Length of the protocol description
         +3                          //Connect Flags + Keep alive
-        +enc.GetByteCount(clientId) // Length of the client ID string
+        +enc.GetByteCount(ClientId) // Length of the client ID string
         +2                          // The length of the length of the clientID
       );
 
-      if(!string.IsNullOrEmpty(willTopic)) {
-        _connectFlags=(byte)(4 | (willRetained ? 0x20 : 0) | (((byte)willQos) << 3));
-        base.variableHeaderLength += (uint)(enc.GetByteCount(willTopic) +  (willPayload==null?0:willPayload.Length)+ 4);
+      if(!string.IsNullOrEmpty(WillTopic)) {
+        _connectFlags=(byte)(4 | (WillRetained ? 0x20 : 0) | (((byte)WillQos) << 3));
+        base.variableHeaderLength += (uint)(enc.GetByteCount(WillTopic) +  (WillPayload==null?0:WillPayload.Length)+ 4);
       }
-      if(!string.IsNullOrEmpty(userName)) {
+      if(!string.IsNullOrEmpty(UserName)) {
         _connectFlags|=0x80;
-        base.variableHeaderLength += (uint)(enc.GetByteCount(userName)+2);
+        base.variableHeaderLength += (uint)(enc.GetByteCount(UserName)+2);
       }
-      if(!string.IsNullOrEmpty(userPassword)) {
+      if(!string.IsNullOrEmpty(UserPassword)) {
         _connectFlags|=0x40;
-        base.variableHeaderLength += (uint)(enc.GetByteCount(userPassword)+2);
+        base.variableHeaderLength += (uint)(enc.GetByteCount(UserPassword)+2);
       }
 
       base.Serialise(str);
-      str.Write(version == 4 ? protocolDesc4 : protocolDesc3, 0, (version == 4 ? protocolDesc4 : protocolDesc3).Length);
+      str.Write(Version == 4 ? protocolDesc4 : protocolDesc3, 0, (Version == 4 ? protocolDesc4 : protocolDesc3).Length);
       str.WriteByte(_connectFlags);
       // Write the keep alive value
-      WriteToStream(str, this.keepAlive);
+      WriteToStream(str, this.KeepAlive);
       // Write the payload
-      WriteToStream(str, clientId);
+      WriteToStream(str, ClientId);
 
-      if(!string.IsNullOrEmpty(willTopic)) {    // Write the will topic
-        WriteToStream(str, willTopic);
-        if(willPayload!=null) {
-          WriteToStream(str, (ushort)willPayload.Length);
-          str.Write(willPayload, 0, willPayload.Length);
+      if(!string.IsNullOrEmpty(WillTopic)) {    // Write the will topic
+        WriteToStream(str, WillTopic);
+        if(WillPayload!=null) {
+          WriteToStream(str, (ushort)WillPayload.Length);
+          str.Write(WillPayload, 0, WillPayload.Length);
         } else {
           WriteToStream(str, (ushort)0);
         }
       }
-      if(!string.IsNullOrEmpty(userName)) {
-        WriteToStream(str, userName);
+      if(!string.IsNullOrEmpty(UserName)) {
+        WriteToStream(str, UserName);
       }
-      if(!string.IsNullOrEmpty(userPassword)) {
-        WriteToStream(str, userPassword);
+      if(!string.IsNullOrEmpty(UserPassword)) {
+        WriteToStream(str, UserPassword);
       }
     }
     public override string ToString() {
-      return string.Format("{0} - {1}", MessageType.CONNECT, clientId);
+      return string.Format("{0} - {1}", MessageType.CONNECT, ClientId);
     }
   }
 
@@ -313,7 +317,7 @@ namespace X13.MQTT {
   }
 
   internal class MqSubscribe : MqMessage {
-    private List<KeyValuePair<string, QoS>> _list=new List<KeyValuePair<string,QoS>>();
+    private readonly List<KeyValuePair<string, QoS>> _list=new List<KeyValuePair<string,QoS>>();
     /// <summary>Subscribe to multiple topics</summary>
     public MqSubscribe()
       : base(MessageType.SUBSCRIBE) {
@@ -336,7 +340,7 @@ namespace X13.MQTT {
     public void Add(string topic, QoS sQoS) {
         _list.Add(new KeyValuePair<string,QoS>(topic, sQoS));
     }
-    public List<KeyValuePair<string, QoS>> list { get { return _list; } }
+    public List<KeyValuePair<string, QoS>> List { get { return _list; } }
     public override void Serialise(Stream str) {
       // calculate Length
       base.variableHeaderLength=2;
@@ -365,7 +369,7 @@ namespace X13.MQTT {
 
   internal class MqSuback : MqMessage {
 
-    private List<QoS> grantedQos=new List<QoS>();
+    private readonly List<QoS> grantedQos=new List<QoS>();
     public MqSuback()
       : base(MessageType.SUBACK) {
     }
@@ -513,7 +517,7 @@ namespace X13.MQTT {
   }
 
   internal class MqUnsubscribe : MqMessage {
-    private List<string> _subscriptions=new List<string>();
+    private readonly List<string> _subscriptions=new List<string>();
     public MqUnsubscribe()
       : base(MessageType.UNSUBSCRIBE) {
       base.QualityOfService = QoS.AtLeastOnce;
@@ -534,7 +538,7 @@ namespace X13.MQTT {
     public void Add(string path) {
       _subscriptions.Add(path);
     }
-    public List<string> list { get { return _subscriptions; } }
+    public List<string> List { get { return _subscriptions; } }
     public override void Serialise(Stream str) {
       // calculate Length
       base.variableHeaderLength=2;

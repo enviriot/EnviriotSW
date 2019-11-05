@@ -22,9 +22,12 @@ namespace X13.UI {
   public partial class UiCatalog : BaseWindow, IDisposable {
     private const string SERVER_URL = "https://enviriot.github.io/catalog/";
 
-    private string _path, _serverUrl;
-    private ObservableCollection<CatalogItem> _items;
+    private readonly string _path;
+    private string _serverUrl;
+    private readonly ObservableCollection<CatalogItem> _items;
+#pragma warning disable IDE0052 // Remove unread private members
     private CatalogItem _root;
+#pragma warning restore IDE0052 // Remove unread private members
 
     public UiCatalog(string path) {
       _path = path;
@@ -99,7 +102,7 @@ namespace X13.UI {
     }
     #endregion IDisposable Member
 
-    private void buDownload_Click(object sender, RoutedEventArgs e) {
+    private void BuDownload_Click(object sender, RoutedEventArgs e) {
       var fe = sender as FrameworkElement;
       CatalogItem item;
       if(fe!=null && (item = fe.DataContext as CatalogItem)!=null){
@@ -107,7 +110,7 @@ namespace X13.UI {
       }
     }
 
-    private void buRemove_Click(object sender, RoutedEventArgs e) {
+    private void BuRemove_Click(object sender, RoutedEventArgs e) {
       var fe = sender as FrameworkElement;
       CatalogItem item;
       if(fe!=null && (item = fe.DataContext as CatalogItem)!=null){
@@ -116,13 +119,15 @@ namespace X13.UI {
     }
   }
   public class CatalogItem : Data.NPC_UI, IComparable<CatalogItem> {
-    private CatalogItem _parent;
-    private Data.DTopic _rootT, _checkTopic;
-    private string _name, _path, _url, _hint, _src, _checkPath;
+    private readonly CatalogItem _parent;
+    private readonly Data.DTopic _rootT;
+    private Data.DTopic _checkTopic;
+    private readonly string _name, _path, _url, _hint, _src, _checkPath;
     private bool _isExpanded, _isVisible, _loaded, _downloadEnable, _removeEnable;
-    private Version _srcVersion, _actVersion;
+    private readonly Version _srcVersion;
+    private Version _actVersion;
     private List<CatalogItem> _items;
-    private Action<CatalogItem, bool> _collFunc;
+    private readonly Action<CatalogItem, bool> _collFunc;
 
     public CatalogItem(string serverUrl, Data.DTopic root, Action<CatalogItem, bool> collFunc) {
       _loaded = false;
@@ -176,12 +181,12 @@ namespace X13.UI {
       if(!tt.IsFaulted && tt.IsCompleted && tt.Result != null) {
         _checkTopic = tt.Result;
         Refresh();
-        _checkTopic.changed+=_checkTopic_changed;
+        _checkTopic.Changed+=CheckTopic_changed;
       } else {
         DownlodEnabled = true;
       }
     }
-    private void _checkTopic_changed(Data.DTopic.Art art, Data.DTopic t) {
+    private void CheckTopic_changed(Data.DTopic.Art art, Data.DTopic t) {
       if(art == Data.DTopic.Art.type) {
         Refresh();
       } else if(art == Data.DTopic.Art.RemoveChild && t == _checkTopic) {

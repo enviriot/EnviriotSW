@@ -14,12 +14,12 @@ namespace X13.EsBroker {
   internal class EsSocket : IDisposable {
     public const int portDefault = 10013;
 
-    private TcpClient _socket;
-    private NetworkStream _stream;
-    private byte[] _rcvBuf;
+    private readonly TcpClient _socket;
+    private readonly NetworkStream _stream;
+    private readonly byte[] _rcvBuf;
     private byte[] _rcvMsgBuf;
     private int _connected;
-    private AsyncCallback _rcvCB;
+    private readonly AsyncCallback _rcvCB;
     private int _rcvState;
     private int _rcvLength;
     protected Action<EsMessage> _callback;
@@ -43,7 +43,7 @@ namespace X13.EsBroker {
       int st = 1;
       int tmp = len;
       while(tmp > 0x7F) {
-        tmp = tmp >> 7;
+        tmp >>= 7;
         st++;
       }
       var buf = new byte[len + st + 2];
@@ -52,7 +52,7 @@ namespace X13.EsBroker {
       buf[0] = 0;
       for(int i = st; i > 0; i--) {
         buf[i] = (byte)((tmp & 0x7F) | (i < st ? 0x80 : 0));
-        tmp = tmp >> 7;
+        tmp >>= 7;
       }
       buf[buf.Length - 1] = 0xFF;
       if(this._socket.Connected) {
@@ -119,7 +119,7 @@ namespace X13.EsBroker {
                     if(_rcvLength >= _rcvMsgBuf.Length) {
                       int l = _rcvMsgBuf.Length;
                       while(l < _rcvLength) {
-                        l = l * 2;
+                        l *= 2;
                       }
                       _rcvMsgBuf = new byte[l];
                     }

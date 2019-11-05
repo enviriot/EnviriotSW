@@ -15,17 +15,17 @@ using X13.Repository;
 
 namespace X13.MQTT {
   internal class MqClient : IDisposable {
-    private MQTTPl _pl;
-    private string _host, _uName, _uPass;
-    private int _port;
+    private readonly MQTTPl _pl;
+    private readonly string _host, _uName, _uPass;
+    private readonly int _port;
     private MqStreamer _stream;
     private const int KEEP_ALIVE = 30000;
     private bool _waitPingResp;
-    private Timer _tOut;
+    private readonly Timer _tOut;
 
     public readonly List<MqSite> Sites;
     public readonly string Signature;
-    public Status status { get; private set; }
+    public StatusEnum Status { get; private set; }
 
     public MqClient(MQTTPl pl, string host, int port, string uName, string uPass) {
       _tOut = new Timer(new TimerCallback(TimeOut));
@@ -36,18 +36,18 @@ namespace X13.MQTT {
       _uPass = uPass;
       Signature = "MQTT://" + (_uName == null ? string.Empty : (_uName + "@")) + _host + (_port == 1883 ? string.Empty : (":" + _port.ToString()));
       Sites = new List<MqSite>();
-      status = Status.Disconnected;
+      Status = StatusEnum.Disconnected;
       Connect();
     }
     public void Subscribe(MqSite ms) {
-      if(status == Status.Connected) {
+      if(Status == StatusEnum.Connected) {
         var msg = new MqSubscribe();
         msg.Add(ms.remotePath, QoS.AtMostOnce);
         Send(msg);
       }
     }
     public void Unsubscribe(MqSite mqSite) {
-      if(Sites.Remove(mqSite) && status == Status.Connected) {
+      if(Sites.Remove(mqSite) && Status == StatusEnum.Connected) {
         var msg = new MqUnsubscribe();
         msg.Add(mqSite.remotePath);
         Send(msg);
@@ -55,7 +55,7 @@ namespace X13.MQTT {
     }
     public void Dispose() {
       _tOut.Change(Timeout.Infinite, Timeout.Infinite);
-      status = Status.Disconnected;
+      Status = StatusEnum.Disconnected;
       _waitPingResp = false;
       var s = Interlocked.Exchange(ref _stream, null);
       if(s != null && s.isOpen) {
@@ -66,13 +66,12 @@ namespace X13.MQTT {
       foreach(var site in Sites.ToArray()) {
         site.Disconnected();
       }
+      _tOut.Dispose();
     }
 
     private void Connect() {
-      status = Status.Connecting;
-      TcpClient _tcp = new TcpClient();
-      _tcp.SendTimeout = 900;
-      _tcp.ReceiveTimeout = 10;
+      Status = StatusEnum.Connecting;
+      TcpClient _tcp = new TcpClient(){SendTimeout = 900, ReceiveTimeout = 10 };
       _tcp.BeginConnect(_host, _port, new AsyncCallback(ConnectCB), _tcp);
     }
     private void ConnectCB(IAsyncResult rez) {
@@ -81,14 +80,11 @@ namespace X13.MQTT {
         _tcp.EndConnect(rez);
         _stream = new MqStreamer(_tcp, Received, SendIdle);
         var id = string.Format("{0}_{1:X4}", Environment.MachineName, System.Diagnostics.Process.GetCurrentProcess().Id);
-        var ConnInfo = new MqConnect();
-        ConnInfo.keepAlive = (ushort)(KEEP_ALIVE / 900);
-        ConnInfo.cleanSession = true;
-        ConnInfo.clientId = id;
+        var ConnInfo = new MqConnect(){KeepAlive = (ushort)(KEEP_ALIVE / 900), CleanSession = true, ClientId = id};
         if(_uName != null) {
-          ConnInfo.userName = _uName;
+          ConnInfo.UserName = _uName;
           if(_uPass != null) {
-            ConnInfo.userPassword = _uPass;
+            ConnInfo.UserPassword = _uPass;
           }
         }
         this.Send(ConnInfo);
@@ -97,10 +93,10 @@ namespace X13.MQTT {
       catch(Exception ex) {
         var se = ex as SocketException;
         if(se != null && (se.SocketErrorCode == SocketError.ConnectionRefused || se.SocketErrorCode == SocketError.TryAgain || se.SocketErrorCode == SocketError.TimedOut)) {
-          status = Status.Disconnected;
+          Status = StatusEnum.Disconnected;
           _tOut.Change((new Random()).Next(KEEP_ALIVE * 3, KEEP_ALIVE * 6), Timeout.Infinite);
         } else {
-          status = Status.NotAccepted;
+          Status = StatusEnum.NotAccepted;
           _tOut.Change(Timeout.Infinite, Timeout.Infinite);
         }
         Log.Error("{0} Connection FAILED - {1}", this.Signature, ex.Message);
@@ -115,20 +111,20 @@ namespace X13.MQTT {
       case MessageType.CONNACK: {
           MqConnack cm = msg as MqConnack;
           if(cm.Response == MqConnack.MqttConnectionResponse.Accepted) {
-            status = Status.Connected;
+            Status = StatusEnum.Connected;
             _tOut.Change(KEEP_ALIVE, KEEP_ALIVE);
             Log.Info("Connected to {0}", Signature);
             foreach(var site in Sites) {
               site.Connected();
             }
           } else {
-            status = Status.NotAccepted;
+            Status = StatusEnum.NotAccepted;
             _tOut.Change(Timeout.Infinite, Timeout.Infinite);
           }
         }
         break;
       case MessageType.DISCONNECT:
-        status = Status.Disconnected;
+        Status = StatusEnum.Disconnected;
         _tOut.Change(3000, KEEP_ALIVE);
         break;
       case MessageType.PINGRESP:
@@ -184,17 +180,17 @@ namespace X13.MQTT {
       }
     }
     private void TimeOut(object o) {
-      if(status == Status.NotAccepted) {
+      if(Status == StatusEnum.NotAccepted) {
         _tOut.Change(Timeout.Infinite, Timeout.Infinite);
       } else if(_stream == null) {
         Connect();
-      } else if(status == Status.Connected && !_waitPingResp) {
+      } else if(Status == StatusEnum.Connected && !_waitPingResp) {
         _waitPingResp = true;
         Send(new MqPingReq());
       } else {
-        if(status == Status.Connected) {
+        if(Status == StatusEnum.Connected) {
           Log.Warning("{0} - PingResponse timeout", Signature);
-        } else if(status == Status.Connecting) {
+        } else if(Status == StatusEnum.Connecting) {
           Log.Warning("{0} - ConnAck timeout", Signature);
         }
         Dispose();
@@ -230,7 +226,7 @@ namespace X13.MQTT {
       }
     }*/
 
-    public enum Status {
+    public enum StatusEnum {
       Disconnected,
       Connecting,
       Connected,

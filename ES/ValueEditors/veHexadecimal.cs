@@ -14,7 +14,7 @@ namespace X13.UI {
       return new veHexadecimal(owner, type);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
     private long _oldValue;
 
     public veHexadecimal(InBase owner, JSC.JSValue manifest) {

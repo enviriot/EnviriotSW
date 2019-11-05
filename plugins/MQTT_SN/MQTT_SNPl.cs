@@ -18,7 +18,7 @@ namespace X13.Periphery {
     private Topic _owner;
     private Topic _verbose;
     private Topic _stat;
-    private Random _rand;
+    private readonly Random _rand;
 
     internal List<IMsGate> _gates;
     internal List<MsDevice> _devs;
@@ -42,7 +42,7 @@ namespace X13.Periphery {
     }
 
     public void Start() {
-      _owner = Topic.root.Get("/$YS/MQTT-SN");
+      _owner = Topic.Root.Get("/$YS/MQTT-SN");
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -91,7 +91,7 @@ namespace X13.Periphery {
 
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/MQTT-SN", true);
+        var en = Topic.Root.Get("/$YS/MQTT-SN", true);
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -100,13 +100,13 @@ namespace X13.Periphery {
         return (bool)en.GetState();
       }
       set {
-        var en = Topic.root.Get("/$YS/MQTT-SN", true);
+        var en = Topic.Root.Get("/$YS/MQTT-SN", true);
         en.SetState(value);
       }
     }
     #endregion IPlugModul Members
 
-    public bool verbose {
+    public bool Verbose {
       get {
         return _verbose != null && (bool)_verbose.GetState();
       }
@@ -123,7 +123,7 @@ namespace X13.Periphery {
       if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
         return;
       }
-      var d = _devs.FirstOrDefault(z => z.owner.path == path);
+      var d = _devs.FirstOrDefault(z => z.owner.Path == path);
       if(d != null) {
         d.Send(new MsDisconnect());
         d.Disconnect();
@@ -134,7 +134,7 @@ namespace X13.Periphery {
       if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
         return;
       }
-      var d = _plcs.FirstOrDefault(z => z.path == path);
+      var d = _plcs.FirstOrDefault(z => z.Path == path);
       if(d != null) {
         d.Build();
       }
@@ -144,7 +144,7 @@ namespace X13.Periphery {
       if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
         return;
       }
-      var d = _plcs.FirstOrDefault(z => z.path == path);
+      var d = _plcs.FirstOrDefault(z => z.Path == path);
       if(d != null) {
         d.StartPlc();
       }
@@ -154,7 +154,7 @@ namespace X13.Periphery {
       if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
         return;
       }
-      var d = _plcs.FirstOrDefault(z => z.path == path);
+      var d = _plcs.FirstOrDefault(z => z.Path == path);
       if(d != null) {
         d.StopPlc();
       }
@@ -164,14 +164,14 @@ namespace X13.Periphery {
       if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
         return;
       }
-      var d = _plcs.FirstOrDefault(z => z.path == path);
+      var d = _plcs.FirstOrDefault(z => z.Path == path);
       if(d != null) {
         d.Run();
       }
     }
 
-    private void MqsDevCctor(Topic t, Perform.Art a) {
-      var dev = _devs.FirstOrDefault(z => z.name == t.name);
+    private void MqsDevCctor(Topic t, Perform.ArtEnum a) {
+      var dev = _devs.FirstOrDefault(z => z.name == t.Name);
       if(dev == null) {
         dev = new MsDevice(this, t);
         _devs.Add(dev);
@@ -183,7 +183,7 @@ namespace X13.Periphery {
     internal bool ProcessInPacket(IMsGate gate, byte[] addr, byte[] buf, int start, int end) {
       var msg = MsMessage.Parse(buf, start, end);
       if(msg == null) {
-        if(verbose) {
+        if(Verbose) {
           Log.Warning("r {0}: {1}  bad message", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start));
         }
         return false;
@@ -191,7 +191,7 @@ namespace X13.Periphery {
       if(msg.MsgTyp == MsMessageType.ADVERTISE || msg.MsgTyp == MsMessageType.GWINFO) {
         return true;
       }
-      if(verbose) {
+      if(Verbose) {
         Log.Debug("r {0}: {1}  {2}", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start), msg.ToString());
       }
       if(msg.MsgTyp == MsMessageType.SEARCHGW) {
@@ -230,7 +230,7 @@ namespace X13.Periphery {
               }
               ackAddr.AddRange(resp);
             } else {
-              if(verbose) {
+              if(Verbose) {
                 Log.Warning("r {0}: {1}  DhcpReq.hLen is too high", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start));
               }
               ackAddr = null;
@@ -245,9 +245,9 @@ namespace X13.Periphery {
       }
       if(msg.MsgTyp == MsMessageType.CONNECT) {
         var cm = msg as MsConnect;
-        MsDevice dev = _devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
+        MsDevice dev = _devs.FirstOrDefault(z => z.owner != null && z.owner.Name == cm.ClientId);
         if(dev == null) {
-          var dt = Topic.root.Get("/dev/" + cm.ClientId, true, _owner);
+          var dt = Topic.Root.Get("/dev/" + cm.ClientId, true, _owner);
           dev = new MsDevice(this, dt);
           _devs.Add(dev);
           dt.SetAttribute(Topic.Attribute.Readonly);
@@ -260,18 +260,18 @@ namespace X13.Periphery {
         foreach(var dub in _devs.Where(z => z != dev && z.CheckAddr(addr) && z._gate == gate).ToArray()) {
           dub.addr = null;
           dub._gate = null;
-          dub.state = State.Disconnected;
+          dub.State = StateEnum.Disconnected;
         }
       } else {
         MsDevice dev = _devs.FirstOrDefault(z => z.addr != null && z.addr.SequenceEqual(addr) && z._gate == gate);
-        if(dev != null && (dev.state != State.Disconnected && dev.state != State.Lost)) {
+        if(dev != null && (dev.State != StateEnum.Disconnected && dev.State != StateEnum.Lost)) {
           dev.ProcessInPacket(msg);
         } else {
-          if(verbose) {
+          if(Verbose) {
             if(dev == null || dev.owner == null) {
               Log.Debug("{0} unknown device", gate.Addr2If(addr));
             } else {
-              Log.Debug("{0} inactive device: {1}", gate.Addr2If(addr), dev.owner.path);
+              Log.Debug("{0} inactive device: {1}", gate.Addr2If(addr), dev.owner.Path);
             }
           }
           gate.SendGw(addr, new MsDisconnect());
@@ -288,7 +288,7 @@ namespace X13.Periphery {
     ExactlyOnce = 2,
     MinusOne = 3
   }
-  internal enum State {
+  internal enum StateEnum {
     Disconnected = 0,
     WillTopic,
     WillMsg,

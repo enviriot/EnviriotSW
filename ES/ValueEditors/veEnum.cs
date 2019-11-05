@@ -16,7 +16,7 @@ namespace X13.UI {
       return new veEnum(owner, manifest);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
     private DTopic _enumT;
     private JSC.JSValue _oldValue;
 
@@ -51,7 +51,7 @@ namespace X13.UI {
     }
 
     public void TypeChanged(JSC.JSValue manifest) {
-      if(_enumT == null || _enumT.name != manifest["enum"].Value as string) {
+      if(_enumT == null || _enumT.Name != manifest["enum"].Value as string) {
         _owner.Root.GetAsync("/$YS/TYPES/Enum/" + (manifest["enum"].Value as string)).ContinueWith(EnumRcv, TaskScheduler.FromCurrentSynchronizationContext());
       }
       if(_owner.IsReadonly) {
@@ -68,11 +68,11 @@ namespace X13.UI {
     private void EnumRcv(Task<DTopic> td) {
       if(td.IsCompleted && !td.IsFaulted) {
         if(_enumT != null) {
-          _enumT.changed -= _enumT_changed;
+          _enumT.Changed -= _enumT_changed;
         }
         _enumT = td.Result;
         if(_enumT != null) {
-          _enumT.changed += _enumT_changed;
+          _enumT.Changed += _enumT_changed;
         }
         _enumT_changed(DTopic.Art.value, _enumT);
       }

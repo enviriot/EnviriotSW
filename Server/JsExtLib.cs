@@ -32,7 +32,6 @@ namespace X13 {
     [JSI.RequireNewKeyword]
     private class XMLHttpRequest : IDisposable {
       private HttpWebRequest _req;
-      private IAsyncResult _resp_w;
       private HttpWebResponse _resp;
       private string _contentType;
       private int _readyState;
@@ -40,6 +39,7 @@ namespace X13 {
       public XMLHttpRequest() {
         _readyState = 0;
       }
+#pragma warning disable IDE1006 // Naming Styles, Javascript style
       public void open(string method, string url, bool async=true, string user=null, string password=null) {
         if(!async) {
           throw new NotImplementedException("XMLHttpRequest.open( synchron )");
@@ -79,7 +79,7 @@ namespace X13 {
             stream.Write(data, 0, data.Length);
           }
         }
-        _resp_w = _req.BeginGetResponse(RespCallback, null);
+        _req.BeginGetResponse(RespCallback, null);
       }
       public JSL.Function onreadystatechange { get; set; }
       public int readyState {
@@ -102,6 +102,7 @@ namespace X13 {
       public string responseText { get; private set; }
       public ushort status { get; private set; }
       public string statusText { get; private set; }
+#pragma warning restore IDE1006 // Naming Styles
 
       private void RespCallback(IAsyncResult asynchronousResult) {
         try {
@@ -255,7 +256,7 @@ namespace X13 {
 
     #region Log
     private class Console : JSL.JSConsole, IDisposable {
-      private LogWriter _debug, _info, _warning, _error;
+      private readonly LogWriter _debug, _info, _warning, _error;
 
       public Console() {
         _debug = new LogWriter(X13.LogLevel.Debug);
@@ -285,13 +286,13 @@ namespace X13 {
     }
 
     private class LogWriter : TextWriter {
-      private LogLevel _ll;
+      private readonly LogLevel _ll;
       public LogWriter(LogLevel ll) {
         _ll = ll;
       }
       public override Encoding Encoding { get { return Encoding.UTF8; } }
       public override void WriteLine(string msg) {
-        Log.onWrite(_ll, msg);
+        Log.OnWrite(_ll, msg);
       }
     }
     #endregion Log

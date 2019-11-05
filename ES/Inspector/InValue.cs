@@ -14,10 +14,10 @@ using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.UI {
   internal class InValue : InBase {
-    private DTopic _data;
-    private InValue _parent;
+    private readonly DTopic _data;
+    private readonly InValue _parent;
     private JSC.JSValue _value;
-    private string _path;
+    private readonly string _path;
 
     public InValue(DTopic data, Action<InBase, bool> collFunc) {
       _data = data;
@@ -35,7 +35,7 @@ namespace X13.UI {
       UpdateType(_data.Manifest);
       UpdateData(_data.State);
       _isExpanded = this.HasChildren;
-      _data.changed += _data_PropertyChanged;
+      _data.Changed += _data_PropertyChanged;
     }
     private InValue(DTopic data, InValue parent, string name, JSC.JSValue value, JSC.JSValue type, Action<InBase, bool> collFunc) {
       _data = data;
@@ -199,7 +199,7 @@ namespace X13.UI {
       }
     }
     public override DTopic Root {
-      get { return _data.Connection.root; }
+      get { return _data.Connection.Root; }
     }
     public override int CompareTo(InBase other) {
       var o = other as InValue;
@@ -219,34 +219,32 @@ namespace X13.UI {
             if(_items.Any(z => z.name == kv.Key)) {
               continue;
             }
-            mi = new MenuItem();
-            mi.Header = kv.Key;
+            mi = new MenuItem() { Header = kv.Key, Tag = kv.Value };
             if((v2 = kv.Value["icon"]).ValueType == JSC.JSValueType.String) {
               mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
             }
             if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
               mi.ToolTip = v2.Value;
             }
-            mi.Tag = kv.Value;
-            mi.Click += miAdd_Click;
+            mi.Click += MiAdd_Click;
             ma.Items.Add(mi);
           }
         } else {
           if(_data.Connection.CoreTypes != null) {
-            foreach(var t in _data.Connection.CoreTypes.children) {
+            foreach(var t in _data.Connection.CoreTypes.Children) {
               if((v1 = t.State).ValueType != JSC.JSValueType.Object || v1.Value == null || !v1["default"].Defined) {
                 continue;
               }
-              mi = new MenuItem() { Header = t.name, Tag = v1 };
+              mi = new MenuItem() { Header = t.Name, Tag = v1 };
               if((v2 = v1["icon"]).ValueType == JSC.JSValueType.String) {
                 mi.Icon = new Image() { Source = App.GetIcon(v2.Value as string), Height = 16, Width = 16 };
               } else {
-                mi.Icon = new Image() { Source = App.GetIcon(t.name), Height = 16, Width = 16 };
+                mi.Icon = new Image() { Source = App.GetIcon(t.Name), Height = 16, Width = 16 };
               }
               if((v2 = v1["hint"]).ValueType == JSC.JSValueType.String) {
                 mi.ToolTip = v2.Value;
               }
-              mi.Click += miAdd_Click;
+              mi.Click += MiAdd_Click;
               ma.Items.Add(mi);
             }
           }
@@ -258,12 +256,12 @@ namespace X13.UI {
       }
       mi = new MenuItem() { Header = "Delete", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Delete.png"), Width = 16, Height = 16 } };
       mi.IsEnabled = _parent != null && !IsRequired;
-      mi.Click += miDelete_Click;
+      mi.Click += MiDelete_Click;
       l.Add(mi);
       return l;
     }
 
-    private void miAdd_Click(object sender, RoutedEventArgs e) {
+    private void MiAdd_Click(object sender, RoutedEventArgs e) {
       var mi = sender as MenuItem;
       JSC.JSValue decl;
       if(!IsReadonly && mi != null && (decl = mi.Tag as JSC.JSValue) != null) {
@@ -293,7 +291,7 @@ namespace X13.UI {
         }
       }
     }
-    private void miDelete_Click(object sender, RoutedEventArgs e) {
+    private void MiDelete_Click(object sender, RoutedEventArgs e) {
       if(_parent != null && !IsRequired) {
         _parent.ChangeValue(name, null);
       }
@@ -303,13 +301,13 @@ namespace X13.UI {
     #region IDisposable Member
     public override void Dispose() {
       if(_parent == null) {
-        _data.changed -= _data_PropertyChanged;
+        _data.Changed -= _data_PropertyChanged;
       }
     }
     #endregion IDisposable Member
 
     public override string ToString() {
-      return (_data != null ? _data.fullPath : "<new>") + "." + _path;
+      return (_data != null ? _data.FullPath : "<new>") + "." + _path;
     }
   }
 }

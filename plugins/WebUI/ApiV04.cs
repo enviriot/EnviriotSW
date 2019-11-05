@@ -11,7 +11,9 @@ using X13.Repository;
 
 namespace X13.WebUI {
   internal class ApiV04 : WebSocketBehavior {
-    private static Timer _pingTimer;
+#pragma warning disable IDE0052 // Remove unread private members
+    private static readonly Timer _pingTimer;
+#pragma warning restore IDE0052 // Remove unread private members
     private static WebSocketSessionManager _wsMan;
 
     static ApiV04() {
@@ -37,22 +39,21 @@ namespace X13.WebUI {
       }
       System.Net.IPEndPoint remoteEndPoint = Context.UserEndPoint;
       {
-        System.Net.IPAddress remIP;
-        if(Context.Headers.Contains("X-Real-IP") && System.Net.IPAddress.TryParse(Context.Headers["X-Real-IP"], out remIP)) {
+        if(Context.Headers.Contains("X-Real-IP") && System.Net.IPAddress.TryParse(Context.Headers["X-Real-IP"], out System.Net.IPAddress remIP)) {
           remoteEndPoint=new System.Net.IPEndPoint(remIP, remoteEndPoint.Port);
         }
       }
       _ses=Session.Get(sid, remoteEndPoint);
       _subscriptions=new List<Repository.SubRec>();
       Send(string.Concat("I\t", _ses.id, "\t", (string.IsNullOrEmpty(_ses.userName)?(/*_disAnonym.value?"false":*/"null"):"true")));
-      if(WebUI_Pl.verbose) {
-        X13.Log.Debug("{0} connect webSocket", _ses.owner.name);
+      if(WebUI_Pl.Verbose) {
+        X13.Log.Debug("{0} connect webSocket", _ses.Owner.Name);
       }
     }
     protected override void OnMessage(MessageEventArgs e) {
       string[] sa;
       if(e.IsText && !string.IsNullOrEmpty(e.Data) && (sa=e.Data.Split('\t'))!=null && sa.Length>0) {
-        if(WebUI_Pl.verbose) {
+        if(WebUI_Pl.Verbose) {
           X13.Log.Debug("ws.msg({0})", string.Join(", ", sa));
         }
         if(sa[0]=="C" && sa.Length==3) {  // Connect, username, password
@@ -64,8 +65,8 @@ namespace X13.WebUI {
             }
           } else */{
             Send("C\tfalse");
-            if(WebUI_Pl.verbose) {
-              X13.Log.Warning("{0}@{2} logon  as {1} failed", _ses.owner.name, sa[1], _ses.owner.GetState());
+            if(WebUI_Pl.Verbose) {
+              X13.Log.Warning("{0}@{2} logon  as {1} failed", _ses.Owner.Name, sa[1], _ses.Owner.GetState());
             }
             Sessions.CloseSession(base.ID);
           }
@@ -74,13 +75,12 @@ namespace X13.WebUI {
             if(sa[1]!=null && sa[1].StartsWith("/export/")) {
               WebUI_Pl.ProcessPublish(sa[1], sa[2], _ses);
             } else {
-              X13.Log.Warning("{0}.publish({1}) - bad path",   _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
+              X13.Log.Warning("{0}.publish({1}) - bad path",   _ses.Owner==null?"UNK":_ses.Owner.Name, sa[1]);
             }
           } else if(sa[0]=="S" && sa.Length==2) {
             if(sa[1]!=null && sa[1].StartsWith("/export/")) {
               string p = sa[1];
               SubRec.SubMask mask =  Repository.SubRec.SubMask.Value;
-              Topic t;
               int idx = p.IndexOfAny(new[] { '+', '#' });
               if(idx<0) {
                 mask |= SubRec.SubMask.Once;
@@ -88,16 +88,16 @@ namespace X13.WebUI {
                 mask |= p[idx] == '#'?SubRec.SubMask.All:SubRec.SubMask.Chldren;
                 p = p.Substring(0, p.Length-2);
               } else {
-                X13.Log.Warning("{0}.subscribe({1}) - bad path", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
+                X13.Log.Warning("{0}.subscribe({1}) - bad path", _ses.Owner==null?"UNK":_ses.Owner.Name, sa[1]);
                 return;
               }
-              if(Topic.root.Exist(p, out t)) {
+              if(Topic.Root.Exist(p, out Topic t)) {
                 _subscriptions.Add(t.Subscribe(mask, SubChanged));
               } else {
-                X13.Log.Warning("{0}.subscribe({1}) - path not exist", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
+                X13.Log.Warning("{0}.subscribe({1}) - path not exist", _ses.Owner==null?"UNK":_ses.Owner.Name, sa[1]);
               }
             } else {
-              X13.Log.Warning("{0}.subscribe({1}) - bad path", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
+              X13.Log.Warning("{0}.subscribe({1}) - bad path", _ses.Owner==null?"UNK":_ses.Owner.Name, sa[1]);
             }
           }
         }
@@ -106,16 +106,16 @@ namespace X13.WebUI {
 
     private void SubChanged(Perform p, SubRec sr) {
       var vj = JsLib.Stringify(p.src.GetState());
-        Send(string.Concat("P\t", p.src.path, "\t", vj));
-        if(WebUI_Pl.verbose) {
-          X13.Log.Debug("ws.snd({0}, {1})", p.src.path, vj);
+        Send(string.Concat("P\t", p.src.Path, "\t", vj));
+        if(WebUI_Pl.Verbose) {
+          X13.Log.Debug("ws.snd({0}, {1})", p.src.Path, vj);
         }
     }
     protected override void OnClose(CloseEventArgs e) {
       if(_ses!=null) {
         _ses.Close();
-        if(WebUI_Pl.verbose) {
-          X13.Log.Info("{0} Disconnect: [{1}]{2}", _ses.owner==null?"UNK":_ses.owner.name, e.Code, e.Reason);
+        if(WebUI_Pl.Verbose) {
+          X13.Log.Info("{0} Disconnect: [{1}]{2}", _ses.Owner==null?"UNK":_ses.Owner.Name, e.Code, e.Reason);
         }
         _ses=null;
       }
@@ -125,7 +125,7 @@ namespace X13.WebUI {
     }
   }
   internal class Session : IDisposable {
-    private static List<WeakReference> sessions;
+    private static readonly List<WeakReference> sessions;
 
     static Session() {
       sessions=new List<WeakReference>();
@@ -144,7 +144,7 @@ namespace X13.WebUI {
     }
 
     private Session(System.Net.IPEndPoint ep) {
-      Topic r=Topic.root.Get("/$YS/WebUI/clients");
+      Topic r=Topic.Root.Get("/$YS/WebUI/clients");
       this.id = Guid.NewGuid().ToString();
       this.ip = ep.Address;
       int i=1;
@@ -153,7 +153,7 @@ namespace X13.WebUI {
         i++;
       }
       _owner=r.Get(pre+i.ToString());
-      owner.ClearAttribute(Topic.Attribute.Saved);
+      Owner.ClearAttribute(Topic.Attribute.Saved);
       try {
         var he=System.Net.Dns.GetHostEntry(this.ip);
         _host=string.Format("{0}[{1}]", he.HostName, this.ip.ToString());
@@ -169,19 +169,19 @@ namespace X13.WebUI {
       catch(Exception) {
         _host=string.Format("[{0}]", this.ip.ToString());
       }
-      this.owner.SetState(_host);
-      if(WebUI_Pl.verbose) {
-        Log.Info("{0} session[{2}] - {1}", owner.name, this._host, this.id);
+      this.Owner.SetState(_host);
+      if(WebUI_Pl.Verbose) {
+        Log.Info("{0} session[{2}] - {1}", Owner.Name, this._host, this.id);
       }
     }
-    private string _host;
+    private readonly string _host;
     private Topic _owner;
     public readonly string id;
     public readonly System.Net.IPAddress ip;
 #pragma warning disable 649
     public string userName;
 #pragma warning restore 649
-    public Topic owner { get { return _owner; } }
+    public Topic Owner { get { return _owner; } }
     public void Close() {
       sessions.RemoveAll(z => !z.IsAlive || z.Target==this);
       Dispose();
@@ -191,7 +191,7 @@ namespace X13.WebUI {
     }
     public void Dispose() {
       var o=Interlocked.Exchange(ref _owner, null);
-      if(o!=null && !o.disposed) {
+      if(o!=null && !o.IsDisposed) {
         o.Remove();
       }
     }

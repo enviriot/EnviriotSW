@@ -22,10 +22,10 @@ namespace X13.PersistentStorage {
     private LiteCollection<BsonDocument> _objects, _states, _history;
     private Topic _owner;
     private System.Collections.Generic.SortedDictionary<Topic, Stash> _base;
-    private System.Collections.Concurrent.ConcurrentQueue<Perform> _q;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Perform> _q;
     private Thread _tr;
     private bool _terminate;
-    private AutoResetEvent _tick;
+    private readonly AutoResetEvent _tick;
 
     private static string EscapFieldName(string fn) {
       if(string.IsNullOrEmpty(fn)) {
@@ -50,10 +50,9 @@ namespace X13.PersistentStorage {
         throw new ArgumentNullException("PersistentStorage.UnescapFieldName()");
       }
       StringBuilder sb = new StringBuilder();
-      ushort cc;
       for(var i = 0; i < fn.Length; i++) {
         var c = fn[i];
-        if(c == '_' && i + 4 < fn.Length && ushort.TryParse(fn.Substring(i + 1, 4), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out cc)) {
+        if(c == '_' && i + 4 < fn.Length && ushort.TryParse(fn.Substring(i + 1, 4), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out ushort cc)) {
           i += 4;
           sb.Append((char)cc);
         } else {
@@ -87,10 +86,9 @@ namespace X13.PersistentStorage {
       case JSC.JSValueType.String: {
           var s = val.Value as string;
           if(s != null && s.StartsWith("¤TR")) {
-            var t = Topic.I.Get(Topic.root, s.Substring(3), false, null, false, false);
+            var t = Topic.I.Get(Topic.Root, s.Substring(3), false, null, false, false);
             if(t != null) {
-              Stash tu;
-              if(_base.TryGetValue(t, out tu)) {
+              if(_base.TryGetValue(t, out Stash tu)) {
                 return tu.bm["_id"];
               }
             }
@@ -105,9 +103,8 @@ namespace X13.PersistentStorage {
         var arr = val as JSL.Array;
         if(arr != null) {
           var r = new BsonArray();
-          int i;
           foreach(var f in arr) {
-            if(int.TryParse(f.Key, out i)) {
+            if(int.TryParse(f.Key, out int i)) {
               while(i >= r.Count()) { r.Add(BsonValue.Null); }
               r[i] = Js2Bs(f.Value);
             }
@@ -190,7 +187,6 @@ namespace X13.PersistentStorage {
     }
 
     private void ThreadM() {
-      Perform p;
       DateTime backupDT;
       if(File.Exists(DB_PATH)) {
         string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
@@ -203,7 +199,7 @@ namespace X13.PersistentStorage {
 
       do {
         _tick.WaitOne(500);
-        while(_q.TryDequeue(out p)) {
+        while(_q.TryDequeue(out Perform p)) {
           try {
             Save(p);
           }
@@ -241,7 +237,6 @@ namespace X13.PersistentStorage {
         JSC.JSValue jTmp;
         bool saved;
         string sTmp;
-        Version vRepo, vDB;
         List<string> oldT = new List<string>();
         List<ObjectId> oldId = new List<ObjectId>();
 
@@ -251,16 +246,16 @@ namespace X13.PersistentStorage {
             oldId.Add(obj["_id"]);
             continue;  // skip load, old version
           }
-          t = Topic.I.Get(Topic.root, sTmp, true, _owner, false, false);
+          t = Topic.I.Get(Topic.Root, sTmp, true, _owner, false, false);
           a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
           // check version
           {
             jTmp = t.GetField("version");
 
-            if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out vRepo)) {
+            if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out Version vRepo)) {
               jTmp = a.jm["version"];
-              if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out vDB) || vRepo > vDB) {
-                oldT.Add(t.path + "/");
+              if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out Version vDB) || vRepo > vDB) {
+                oldT.Add(t.Path + "/");
                 oldId.Add(a.id);
                 continue; // skip load, old version
               }
@@ -294,23 +289,22 @@ namespace X13.PersistentStorage {
       }
     }
     private void Save(Perform p) {
-      if(p.art == Perform.Art.subscribe || p.art == Perform.Art.subAck || p.art == Perform.Art.setField || p.art == Perform.Art.setState || p.art == Perform.Art.unsubscribe || p.prim == _owner) {
+      if(p.Art == Perform.ArtEnum.subscribe || p.Art == Perform.ArtEnum.subAck || p.Art == Perform.ArtEnum.setField || p.Art == Perform.ArtEnum.setState || p.Art == Perform.ArtEnum.unsubscribe || p.Prim == _owner) {
         return;
       }
       Topic t = p.src;
-      Stash a;
       JSC.JSValue jTmp;
       bool saveM = false, saveS = false;
-      if(!_base.TryGetValue(t, out a)) {
-        if(p.art == Perform.Art.remove) {
+      if(!_base.TryGetValue(t, out Stash a)) {
+        if(p.Art == Perform.ArtEnum.remove) {
           return;
         }
-        var obj = _objects.FindOne(Query.EQ("p", t.path));
+        var obj = _objects.FindOne(Query.EQ("p", t.Path));
         a = obj!=null?new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null } : new Stash { id = ObjectId.NewObjectId() };
         _base[t] = a;
       }
 
-      if(p.art == Perform.Art.remove) {
+      if(p.Art == Perform.ArtEnum.remove) {
         _states.Delete(a.id);
         _objects.Delete(a.id);
         _base.Remove(t);
@@ -319,9 +313,10 @@ namespace X13.PersistentStorage {
         jTmp = t.GetField(null);
         if(!object.ReferenceEquals(jTmp, a.jm)) {
           if(a.bm == null) {
-            a.bm = new BsonDocument();
-            a.bm["_id"] = a.id;
-            a.bm["p"] = t.path;
+            a.bm = new BsonDocument {
+              ["_id"] = a.id,
+              ["p"] = t.Path
+            };
           }
           a.bm["v"] = Js2Bs(jTmp);
           a.jm = jTmp;
@@ -332,8 +327,9 @@ namespace X13.PersistentStorage {
           jTmp = t.GetState();
           if(!object.ReferenceEquals(jTmp, a.js)) {
             if(a.bs == null) {
-              a.bs = new BsonDocument();
-              a.bs["_id"] = a.id;
+              a.bs = new BsonDocument {
+                ["_id"] = a.id
+              };
             }
             a.bs["v"] = Js2Bs(jTmp);
             a.js = jTmp;
@@ -345,8 +341,8 @@ namespace X13.PersistentStorage {
           saveS = false;
         }
 
-        if(p.art == Perform.Art.move) {
-          a.bm["p"] = t.path;
+        if(p.Art == Perform.ArtEnum.move) {
+          a.bm["p"] = t.Path;
           saveM = true;
         }
         if(saveM) {
@@ -401,12 +397,12 @@ namespace X13.PersistentStorage {
     #region History
     private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
       if(_history != null && ll != LogLevel.Debug) {
-        var d = new BsonDocument();
-        d["_id"] = ObjectId.NewObjectId();
-        d["t"] = new BsonValue(dt.ToUniversalTime());
-        d["l"] = new BsonValue((int)ll);
-        d["m"] = new BsonValue(msg);
-        _history.Insert(d);
+        _history.Insert(new BsonDocument {
+          ["_id"] = ObjectId.NewObjectId(),
+          ["t"] = new BsonValue(dt.ToUniversalTime()),
+          ["l"] = new BsonValue((int)ll),
+          ["m"] = new BsonValue(msg),
+        });
       }
     }
     private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
@@ -423,7 +419,7 @@ namespace X13.PersistentStorage {
 
     #region IPlugModul Members
     public void Init() {
-      _owner = Topic.root.Get("/$YS/PersistentStorage", true);
+      _owner = Topic.Root.Get("/$YS/PersistentStorage", true);
     }
     public void Start() {
       _terminate = false;
@@ -436,9 +432,10 @@ namespace X13.PersistentStorage {
       Log.History = History;
       Log.Write += Log_Write;
 
-      _tr = new Thread(new ThreadStart(ThreadM));
-      _tr.IsBackground = true;
-      _tr.Priority = ThreadPriority.BelowNormal;
+      _tr = new Thread(new ThreadStart(ThreadM)) {
+        IsBackground = true,
+        Priority = ThreadPriority.BelowNormal
+      };
       _tr.Start();
       _tick.WaitOne();  // wait load
       Topic.Subscribe(SubFunc);
@@ -467,7 +464,7 @@ namespace X13.PersistentStorage {
 
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/PersistentStorage", true);
+        var en = Topic.Root.Get("/$YS/PersistentStorage", true);
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -476,7 +473,7 @@ namespace X13.PersistentStorage {
         return (bool)en.GetState();
       }
       set {
-        var en = Topic.root.Get("/$YS/PersistentStorage", true);
+        var en = Topic.Root.Get("/$YS/PersistentStorage", true);
         en.SetState(value);
       }
     }

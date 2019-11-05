@@ -22,33 +22,33 @@ using System.ComponentModel;
 
 namespace X13.UI {
   public partial class InspectorForm : UserControl, IBaseForm {
-    private static SortedList<string, Func<InBase, JSC.JSValue, IValueEditor>> _editors;
+    private static readonly SortedList<string, Func<InBase, JSC.JSValue, IValueEditor>> _editors;
     static InspectorForm() {
-      _editors = new SortedList<string, Func<InBase, JSC.JSValue, IValueEditor>>();
-      _editors["Attribute"] = veAttribute.Create;
-      _editors["Boolean"] = veSliderBool.Create;
-      _editors["ByteArray"] = veByteArray.Create;
-      _editors["Date"] = veDateTimePicker.Create;
-      _editors["DevicePLC"] = veDevicePLC.Create;
-      _editors["Double"] = veDouble.Create;
-      _editors["Editor"] = veEditor.Create;
-      _editors["Enum"] = veEnum.Create;
-      _editors["Integer"] = veInteger.Create;
-      _editors["JS"] = veJS.Create;
-      _editors["Hexadecimal"] = veHexadecimal.Create;
-      _editors["MsStatus"] = veMsStatus.Create;
-      _editors["String"] = veString.Create;
-      _editors["Time"] = veTimePicker.Create;
-      _editors["TopicReference"] = veTopicReference.Create;
-      _editors["Version"] = veVersion.Create;
+      _editors = new SortedList<string, Func<InBase, JSC.JSValue, IValueEditor>> {
+        ["Attribute"] = veAttribute.Create,
+        ["Boolean"] = VE_SliderBool.Create,
+        ["ByteArray"] = VE_ByteArray.Create,
+        ["Date"] = veDateTimePicker.Create,
+        ["DevicePLC"] = veDevicePLC.Create,
+        ["Double"] = veDouble.Create,
+        ["Editor"] = veEditor.Create,
+        ["Enum"] = veEnum.Create,
+        ["Integer"] = veInteger.Create,
+        ["JS"] = veJS.Create,
+        ["Hexadecimal"] = veHexadecimal.Create,
+        ["MsStatus"] = veMsStatus.Create,
+        ["String"] = veString.Create,
+        ["Time"] = veTimePicker.Create,
+        ["TopicReference"] = VE_TopicReference.Create,
+        ["Version"] = VE_Version.Create,
+      };
     }
     public static IValueEditor GetEditor(string editor, InBase owner, JSC.JSValue manifest) {
       IValueEditor rez;
-      Func<InBase, JSC.JSValue, IValueEditor> ct;
-      if(editor!=null && _editors.TryGetValue(editor, out ct) && ct != null) {
+      if(editor!=null && _editors.TryGetValue(editor, out Func<InBase, JSC.JSValue, IValueEditor> ct) && ct != null) {
         rez = ct(owner, manifest);
       } else {
-        rez = new veDefault(owner, manifest);
+        rez = new VE_Default(owner, manifest);
       }
       return rez;
     }
@@ -56,8 +56,8 @@ namespace X13.UI {
       return _editors.Keys;
     }
 
-    private DTopic _data;
-    private ObservableCollection<InBase> _valueVC;
+    private readonly DTopic _data;
+    private readonly ObservableCollection<InBase> _valueVC;
     private bool _disableDrag;
 
     internal InspectorForm(DTopic data) {
@@ -154,7 +154,7 @@ namespace X13.UI {
         InTopic it;
         if((gr = sender as FrameworkElement) != null && (it = gr.DataContext as InTopic) != null && it.Owner!=null && it.Owner!=_data) {
           _disableDrag = true;
-          App.Workspace.Open(it.Owner.fullPath);
+          App.Workspace.Open(it.Owner.FullPath);
           e.Handled = true;
         }
       }
@@ -170,11 +170,11 @@ namespace X13.UI {
       }
     }
 
-    private void tbItemName_Loaded(object sender, RoutedEventArgs e) {
+    private void TbItemName_Loaded(object sender, RoutedEventArgs e) {
       (sender as TextBox).SelectAll();
       (sender as TextBox).Focus();
     }
-    private void tbItemName_PreviewKeyDown(object sender, KeyEventArgs e) {
+    private void TbItemName_PreviewKeyDown(object sender, KeyEventArgs e) {
       TextBox tb;
       InBase tv;
       if((tb = sender as TextBox) == null || (tv = tb.DataContext as InBase) == null) {
@@ -188,7 +188,7 @@ namespace X13.UI {
         e.Handled = true;
       }
     }
-    private void tbItemName_LostFocus(object sender, RoutedEventArgs e) {
+    private void TbItemName_LostFocus(object sender, RoutedEventArgs e) {
       TextBox tb;
       InTopic tv;
       if((tb = sender as TextBox) == null || (tv = tb.DataContext as InTopic) == null) {

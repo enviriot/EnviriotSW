@@ -13,9 +13,9 @@ using System.Windows.Controls;
 
 namespace X13.Data {
   internal class DWorkspace : NPC_UI {
-    private string _cfgPath;
+    private readonly string _cfgPath;
     private BaseWindow _activeDocument;
-    private ObservableCollection<Client> _clients;
+    private readonly ObservableCollection<Client> _clients;
 
     public XmlDocument config;
     public ObservableCollection<Client> Clients { get { return _clients; } }
@@ -43,7 +43,6 @@ namespace X13.Data {
               int i;
               XmlNode xc;
               string server, userName, password, alias;
-              int port;
               var xcl = cList.SelectNodes("Server");
               for(i = 0; i < xcl.Count; i++) {
                 xc = xcl[i];
@@ -52,15 +51,15 @@ namespace X13.Data {
                   continue;
                 }
                 tmp = xc.Attributes["Port"];
-                if(tmp == null || !int.TryParse(tmp.Value, out port) || port == 0) {
+                if(tmp == null || !int.TryParse(tmp.Value, out int port) || port == 0) {
                   port = EsBroker.EsSocket.portDefault;
                 }
                 tmp = xc.Attributes["User"];
-                userName = tmp != null ? tmp.Value : null;
+                userName = tmp?.Value;
                 tmp = xc.Attributes["Password"];
-                password = tmp != null ? tmp.Value : null;
+                password = tmp?.Value;
                 tmp = xc.Attributes["Alias"];
-                alias = tmp != null?tmp.Value:null;
+                alias = tmp?.Value;
                 var cl = new Client(server, port, userName, password, alias);
                 _clients.Add(cl);
               }
@@ -89,7 +88,7 @@ namespace X13.Data {
       if(view == "wks") {
         var ui = Tools.FirstOrDefault(z => z != null && z.ContentId == id);
         if(ui == null) {
-          ui = new uiWorkspace();
+          ui = new UI_Workspace();
           Tools.Add(ui);
         }
         return ui;
@@ -109,7 +108,7 @@ namespace X13.Data {
         ActiveDocument = catalog;
         return catalog;
       } else {
-        var doc = Files.OfType<UI.UIDocument>().FirstOrDefault(z => z != null && ((z.data != null && z.data.fullPath == path) || z.ContentId == id));
+        var doc = Files.OfType<UI.UIDocument>().FirstOrDefault(z => z != null && ((z.Data != null && z.Data.FullPath == path) || z.ContentId == id));
         if(doc==null) {
           doc = new UI.UIDocument(path, view);
           Files.Add(doc);
@@ -131,7 +130,7 @@ namespace X13.Data {
           }
         }
       }
-      return cl.root.GetAsync(url.LocalPath);
+      return cl.Root.GetAsync(url.LocalPath);
     }
 
     public void Close(BaseWindow w) {
@@ -173,9 +172,9 @@ namespace X13.Data {
           tmp.Value = cl.password;
           xc.Attributes.Append(tmp);
         }
-        if(cl.alias != null) {
+        if(cl.Alias != null) {
           tmp = cfg.CreateAttribute("Alias");
-          tmp.Value = cl.alias;
+          tmp.Value = cl.Alias;
           xc.Attributes.Append(tmp);
         }
         clx.AppendChild(xc);
@@ -198,7 +197,7 @@ namespace X13.Data {
     public ObservableCollection<BaseWindow> Files { get; private set; }
     public ObservableCollection<BaseWindow> Tools { get; private set; }
 
-    public T ReadConfig<T>(string path, T defaultValue = default(T)) {
+    public T ReadConfig<T>(string path, T defaultValue = default) {
       if(string.IsNullOrWhiteSpace(path)) {
         throw new ArgumentNullException("path");
       }

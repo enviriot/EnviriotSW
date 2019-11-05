@@ -25,7 +25,7 @@ namespace X13.UI {
       return new veAttribute(owner, manifest);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
 
     public veAttribute(InBase owner, JSC.JSValue manifest) {
       _owner = owner;

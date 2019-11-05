@@ -9,27 +9,14 @@ using System.Text;
 namespace X13.Repository {
   public class Perform : IComparable<Perform> {
 
-    internal static Perform Create(Topic src, Art art, Topic prim) {
-      Perform r;
-      r = new Perform(art, src, prim);
-      r.o = null;
-      r.i = 0;
-      return r;
+    internal static Perform Create(Topic src, ArtEnum art, Topic prim) {
+      return new Perform(art, src, prim) { o = null, i = 0 };
     }
     internal static Perform Create(Topic src, JSValue val, Topic prim) {
-      Perform r;
-      r = new Perform(Art.setState, src, prim);
-      r.o = val;
-      r.i = 0;
-      return r;
+      return new Perform(ArtEnum.setState, src, prim) { o = val, i = 0 };
     }
     internal static Perform Create(Topic src, string fName, JSValue val, Topic prim) {
-      Perform r;
-      r = new Perform(Art.setField, src, prim);
-      r.o = fName;
-      r.f_v = val;
-      r.i = 0;
-      return r;
+      return new Perform(ArtEnum.setField, src, prim) { o = fName, f_v = val, i = 0 };
     }
 
     internal object o;
@@ -38,40 +25,40 @@ namespace X13.Repository {
     internal JSValue f_v;
 
     public readonly Topic src;
-    public Topic prim { get; internal set; }
-    public Art art { get; internal set; }
-    public string FieldPath { get { return this.art == Art.changedField ? (o as string) : null; } }
+    public Topic Prim { get; internal set; }
+    public ArtEnum Art { get; internal set; }
+    public string FieldPath { get { return this.Art == ArtEnum.changedField ? (o as string) : null; } }
 
-    private Perform(Art art, Topic src, Topic prim) {
+    private Perform(ArtEnum art, Topic src, Topic prim) {
       this.src = src;
-      this.art = art;
-      this.prim = prim;
+      this.Art = art;
+      this.Prim = prim;
     }
     internal bool EqualsGr(Perform other) {
-      return (this.art == Art.setState || this.art == Art.changedState)
+      return (this.Art == ArtEnum.setState || this.Art == ArtEnum.changedState)
         && other != null
         && this.src == other.src
-        && (((int)this.art) >> 2) == (((int)other.art) >> 2);
+        && (((int)this.Art) >> 2) == (((int)other.Art) >> 2);
     }
     public int CompareTo(Perform other) {
       if(other == null) {
         return -1;
       }
-      int p1 = ((int)this.art) >> 2;
-      int p2 = (int)(other.art) >> 2;
+      int p1 = ((int)this.Art) >> 2;
+      int p2 = (int)(other.Art) >> 2;
       if(p1 != p2) {
         return p1.CompareTo(p2);
       }
-      if(this.src == other.src && (this.art == Art.setState || this.art == Art.changedState)) {
+      if(this.src == other.src && (this.Art == ArtEnum.setState || this.Art == ArtEnum.changedState)) {
         return 0;
       }
       return -1;  // сохраняется порядок поступления
     }
     public override string ToString() {
-      return string.Concat(src.path, "[", art.ToString(), "]=", o == null ? "null" : o.ToString());
+      return string.Concat(src.Path, "[", Art.ToString(), "]=", o == null ? "null" : o.ToString());
     }
 
-    public enum Art {
+    public enum ArtEnum {
       move = 1,
       create = 2,
       subscribe = 4,

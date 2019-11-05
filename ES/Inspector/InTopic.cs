@@ -15,10 +15,10 @@ using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.UI {
   internal class InTopic : InBase {
-    private InTopic _parent;
+    private readonly InTopic _parent;
     private DTopic _owner;
     private bool _populated;
-    private JSC.JSValue _createTag;
+    private readonly JSC.JSValue _createTag;
 
     public InTopic(DTopic owner, InTopic parent, Action<InBase, bool> collFunc) {
       _owner = owner;
@@ -26,23 +26,23 @@ namespace X13.UI {
       base._compactView = true;
       _collFunc = collFunc;
       IsGroupHeader = _parent == null;
-      _owner.changed += _owner_PropertyChanged;
+      _owner.Changed += Owner_PropertyChanged;
       if(IsGroupHeader) {
-        name = string.IsNullOrWhiteSpace(owner.Connection.alias)?owner.Connection.server:owner.Connection.alias;
+        name = string.IsNullOrWhiteSpace(owner.Connection.Alias)?owner.Connection.server:owner.Connection.Alias;
         _manifest = _owner.Manifest;  // if(IsGroupHeader) don't use UpdateType(...)
         icon = App.GetIcon("children");
         editor = null;
         levelPadding = 1;
 
-        if(_owner.children != null && _owner.children.Any()) {
+        if(_owner.Children != null && _owner.Children.Any()) {
           _populated = true;
-          if(_owner.children != null) {
-            InsertItems(_owner.children);
+          if(_owner.Children != null) {
+            InsertItems(_owner.Children);
           }
         }
         base._isExpanded = true;
       } else {
-        name = _owner.name;
+        name = _owner.Name;
         base.UpdateType(_owner.Manifest);
         levelPadding = _parent.levelPadding + 8;
         base._isExpanded = false;
@@ -67,8 +67,8 @@ namespace X13.UI {
       set {
         if(value && _owner != null && _items == null) {
           _populated = true;
-          if(_owner.children != null) {
-            InsertItems(_owner.children);
+          if(_owner.Children != null) {
+            InsertItems(_owner.Children);
           }
         }
         base.IsExpanded = value;
@@ -76,12 +76,12 @@ namespace X13.UI {
     }
     public override bool HasChildren {
       get {
-        return (_owner != null && _owner.children != null && _owner.children.Any()) || (_items != null && _items.Any());
+        return (_owner != null && _owner.Children != null && _owner.Children.Any()) || (_items != null && _items.Any());
       }
     }
     public override JSC.JSValue value { get { return _owner != null ? _owner.State : JSC.JSValue.NotExists; } set { if(_owner != null) { _owner.SetValue(value); } } }
     public override DTopic Root {
-      get { return _owner.Connection.root; }
+      get { return _owner.Connection.Root; }
     }
     public DTopic Owner { get { return _owner; } }
     public override void FinishNameEdit(string name) {
@@ -99,7 +99,7 @@ namespace X13.UI {
         }
       } else {
         if(!string.IsNullOrEmpty(name)) {
-          _owner.Move(_owner.parent, name);
+          _owner.Move(_owner.Parent, name);
         }
         IsEdited = false;
         PropertyChangedReise("IsEdited");
@@ -117,7 +117,7 @@ namespace X13.UI {
         //PropertyChangedReise("name");
       } else {
         if(td.IsFaulted) {
-          Log.Warning("{0}/{1} - {2}", _parent._owner.fullPath, base.name, td.Exception.Message);
+          Log.Warning("{0}/{1} - {2}", _parent._owner.FullPath, base.name, td.Exception.Message);
         }
         if(_parent._items != null) {
           _parent._items.Remove(this);
@@ -157,7 +157,7 @@ namespace X13.UI {
       var tt = await t.GetAsync(null);
       if(tt != null) {
         bool o_hc = _items != null && _items.Any();
-        if((tmp = _items.OfType<InTopic>().FirstOrDefault(z => z.name == tt.name)) != null) {
+        if((tmp = _items.OfType<InTopic>().FirstOrDefault(z => z.name == tt.Name)) != null) {
           _items.Remove(tmp);
           _collFunc(tmp, false);
           tmp.RefreshOwner(tt);
@@ -166,7 +166,7 @@ namespace X13.UI {
         }
         int i;
         for(i = 0; i < _items.Count; i++) {
-          if(string.Compare(_items[i].name, tt.name) > 0) {
+          if(string.Compare(_items[i].name, tt.Name) > 0) {
             break;
           }
         }
@@ -182,19 +182,19 @@ namespace X13.UI {
     }
     private void RefreshOwner(DTopic tt) {
       if(_owner != null) {
-        _owner.changed -= _owner_PropertyChanged;
+        _owner.Changed -= Owner_PropertyChanged;
         if(_items != null) {
           _items.Clear();
           _items = null;
         }
       }
       _owner = tt;
-      name = tt.name;
-      if(_populated && _owner.children != null) {
-        InsertItems(_owner.children);
+      name = tt.Name;
+      if(_populated && _owner.Children != null) {
+        InsertItems(_owner.Children);
       }
     }
-    private void _owner_PropertyChanged(DTopic.Art art, DTopic child) {
+    private void Owner_PropertyChanged(DTopic.Art art, DTopic child) {
       bool o_hc = _items!=null && _items.Any();
       {
         var pr = this;
@@ -220,13 +220,13 @@ namespace X13.UI {
       if(_populated) {
         if(art == DTopic.Art.addChild) {
           if(_items == null) {
-            InsertItems(_owner.children);
+            InsertItems(_owner.Children);
           } else {
             var td = AddTopic(child);
           }
         } else if(art == DTopic.Art.RemoveChild) {
           if(_items != null) {
-            var it = _items.FirstOrDefault(z => z.name == child.name);
+            var it = _items.FirstOrDefault(z => z.name == child.Name);
             if(it != null) {
               it.Deleted();
               _items.Remove(it);
@@ -252,17 +252,17 @@ namespace X13.UI {
       MenuItem mi;
       if(!IsGroupHeader) {
         mi = new MenuItem() { Header = "Open in new tab" };
-        mi.Click += miOpen_Click;
+        mi.Click += MiOpen_Click;
         l.Add(mi);
         l.Add(new Separator());
       }
       if(_owner.Connection.Status!=ClientState.Ready) {
-        if(_owner.Connection.root==_owner) {
+        if(_owner.Connection.Root==_owner) {
           mi = new MenuItem() { Header = "Connect" };
-          mi.Click += miOpen_Click;
+          mi.Click += MiOpen_Click;
           l.Add(mi);
           mi = new MenuItem() { Header = "Delete connection" };
-          mi.Click += miDelConn_Click;
+          mi.Click += MiDelConn_Click;
           l.Add(mi);
         }
       } else if(_manifest != null && (v1 = _manifest["Children"]).ValueType == JSC.JSValueType.Object) {
@@ -290,10 +290,10 @@ namespace X13.UI {
     private async void FillContextMenuFromChildren(ObservableCollection<Control> l, Task<DTopic> tt) {
       var acts = new Dictionary<string, JSC.JSValue>();
       if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
-        foreach(var t in tt.Result.children) {
+        foreach(var t in tt.Result.Children) {
           var z = await t.GetAsync(null);
           if(z.State.ValueType == JSC.JSValueType.Object && z.State.Value != null && (z.State["default"].Defined || z.State["manifest"].Defined)) {
-            acts.Add(z.name, z.State);
+            acts.Add(z.Name, z.State);
           }
         }
       }
@@ -311,18 +311,17 @@ namespace X13.UI {
         KeyValuePair<string, JSC.JSValue> rca;
         string rcs;
         // fill used resources
-        if(_owner.children != null) {
-          foreach(var ch in _owner.children) {
+        if(_owner.Children != null) {
+          foreach(var ch in _owner.Children) {
             if((tmp1 = JsLib.GetField(ch.Manifest, "MQTT-SN.tag")).ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(rName = tmp1.Value as string)) {
-              rName = ch.name;
+              rName = ch.Name;
             }
             rca = _acts.FirstOrDefault(z => z.Key == rName);
             if(rca.Value == null || (tmp1 = rca.Value["rc"]).ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(rcs = tmp1.Value as string)) {
               continue;
             }
             foreach(string curRC in rcs.Split(',').Where(z => !string.IsNullOrWhiteSpace(z) && z.Length > 1)) {
-              int pos;
-              if(!int.TryParse(curRC.Substring(1), out pos)) {
+              if(!int.TryParse(curRC.Substring(1), out int pos)) {
                 continue;
               }
               for(int i = pos - resource.Count; i >= 0; i--) {
@@ -339,8 +338,7 @@ namespace X13.UI {
           bool busy = false;
           if((tmp1 = kv.Value["rc"]).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(rcs = tmp1.Value as string)) { // check used resources
             foreach(string curRC in rcs.Split(',').Where(z => !string.IsNullOrWhiteSpace(z) && z.Length > 1)) {
-              int pos;
-              if(!int.TryParse(curRC.Substring(1), out pos)) {
+              if(!int.TryParse(curRC.Substring(1), out int pos)) {
                 continue;
               }
               if(pos < resource.Count && ((curRC[0] == (char)RcUse.Exclusive && resource[pos] != RcUse.None) || (curRC[0] == (char)RcUse.Shared && resource[pos] != RcUse.None && resource[pos] != RcUse.Shared))) {
@@ -361,7 +359,7 @@ namespace X13.UI {
           if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
             mi.ToolTip = v2.Value;
           }
-          mi.Click += miAdd_Click;
+          mi.Click += MiAdd_Click;
           if((v2 = kv.Value["menu"]).ValueType == JSC.JSValueType.String && kv.Value.Value != null) {
             AddSubMenu(ma, v2.Value as string, mi);
           } else {
@@ -382,25 +380,24 @@ namespace X13.UI {
       if((v2 = _manifest["Action"]).ValueType == JSC.JSValueType.Object) {
         FillActions(l, v2);
       }
-      Uri uri;
       if(System.Windows.Clipboard.ContainsText(System.Windows.TextDataFormat.Text)
-        && Uri.TryCreate(System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.Text), UriKind.Absolute, out uri)
+        && Uri.TryCreate(System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.Text), UriKind.Absolute, out Uri uri)
         && _owner.Connection.server == uri.DnsSafeHost) {
         mi = new MenuItem() { Header = "Paste", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Paste.png"), Width = 16, Height = 16 } };
-        mi.Click += miPaste_Click;
+        mi.Click += MiPaste_Click;
         l.Add(mi);
       }
       mi = new MenuItem() { Header = "Cut", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Cut.png"), Width = 16, Height = 16 } };
       mi.IsEnabled = !IsGroupHeader && !IsRequired;
-      mi.Click += miCut_Click;
+      mi.Click += MiCut_Click;
       l.Add(mi);
       mi = new MenuItem() { Header = "Delete", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Delete.png"), Width = 16, Height = 16 } };
       mi.IsEnabled = !IsGroupHeader && !IsRequired;
-      mi.Click += miDelete_Click;
+      mi.Click += MiDelete_Click;
       l.Add(mi);
       if(!IsGroupHeader && !IsRequired) {
         mi = new MenuItem() { Header = "Rename", Icon = new Image() { Source = App.GetIcon("component/Images/Edit_Rename.png"), Width = 16, Height = 16 } };
-        mi.Click += miRename_Click;
+        mi.Click += MiRename_Click;
         l.Add(mi);
       }
     }
@@ -418,7 +415,7 @@ namespace X13.UI {
         if((v2 = kv.Value["hint"]).ValueType == JSC.JSValueType.String) {
           mi.ToolTip = v2.Value;
         }
-        mi.Click += miAktion_Click;
+        mi.Click += MiAktion_Click;
         ma.Items.Add(mi);
       }
 
@@ -440,8 +437,7 @@ namespace X13.UI {
       for(int j = 0; j < lvls.Length; j++) {
         mn = mm.Items.OfType<MenuItem>().FirstOrDefault(z => z.Header as string == lvls[j]);
         if(mn == null) {
-          mn = new MenuItem();
-          mn.Header = lvls[j];
+          mn = new MenuItem() { Header = lvls[j] }; 
           mm.Items.Add(mn);
         }
         mm = mn;
@@ -449,7 +445,7 @@ namespace X13.UI {
       mm.Items.Add(mi);
     }
 
-    private void miAdd_Click(object sender, System.Windows.RoutedEventArgs e) {
+    private void MiAdd_Click(object sender, System.Windows.RoutedEventArgs e) {
       var mi = sender as MenuItem;
       if(mi == null) {
         return;
@@ -482,55 +478,48 @@ namespace X13.UI {
         PropertyChangedReise("HasChildren");
       }
     }
-    private void miAktion_Click(object sender, System.Windows.RoutedEventArgs e) {
+    private void MiAktion_Click(object sender, System.Windows.RoutedEventArgs e) {
       var mi = sender as MenuItem;
       if(mi == null) {
         return;
       }
       var tag = mi.Tag as string;
       if(tag != null) {
-        _owner.Call(tag, _owner.path);
+        _owner.Call(tag, _owner.Path);
       }
 
     }
-    private void miOpen_Click(object sender, System.Windows.RoutedEventArgs e) {
-      App.Workspace.Open(_owner.fullPath);
+    private void MiOpen_Click(object sender, System.Windows.RoutedEventArgs e) {
+      App.Workspace.Open(_owner.FullPath);
     }
-    private void miDelConn_Click(object sender, System.Windows.RoutedEventArgs e) {
+    private void MiDelConn_Click(object sender, System.Windows.RoutedEventArgs e) {
       App.Workspace.Clients.Remove(_owner.Connection);
     }
 
-    private void miCut_Click(object sender, System.Windows.RoutedEventArgs e) {
-      System.Windows.Clipboard.SetText(_owner.fullPath, System.Windows.TextDataFormat.Text);
+    private void MiCut_Click(object sender, System.Windows.RoutedEventArgs e) {
+      System.Windows.Clipboard.SetText(_owner.FullPath, System.Windows.TextDataFormat.Text);
     }
-    private void miPaste_Click(object sender, System.Windows.RoutedEventArgs e) {
-      Uri uri;
+    private void MiPaste_Click(object sender, System.Windows.RoutedEventArgs e) {
       if(System.Windows.Clipboard.ContainsText(System.Windows.TextDataFormat.Text)
-        && Uri.TryCreate(System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.Text), UriKind.Absolute, out uri)
+        && Uri.TryCreate(System.Windows.Clipboard.GetText(System.Windows.TextDataFormat.Text), UriKind.Absolute, out Uri uri)
         && _owner.Connection.server==uri.DnsSafeHost) {
         System.Windows.Clipboard.Clear();
         App.Workspace.GetAsync(uri).ContinueWith(td => {
           if(td.IsCompleted && !td.IsFaulted && td.Result != null) {
-            td.Result.Move(_owner, td.Result.name);
+            td.Result.Move(_owner, td.Result.Name);
           }
         }, TaskScheduler.FromCurrentSynchronizationContext());
       }
     }
 
-    private void miDelete_Click(object sender, System.Windows.RoutedEventArgs e) {
+    private void MiDelete_Click(object sender, System.Windows.RoutedEventArgs e) {
       _owner.Delete();
     }
-    private void miRename_Click(object sender, System.Windows.RoutedEventArgs e) {
+    private void MiRename_Click(object sender, System.Windows.RoutedEventArgs e) {
       base.IsEdited = true;
       PropertyChangedReise("IsEdited");
     }
 
-    private void IconFromTypeLoaded(Task<DTopic> td, object o) {
-      var img = o as Image;
-      if(img != null && td.IsCompleted && td.Result != null) {
-        //img.Source = App.GetIcon(td.Result.GetField<string>("icon"));
-      }
-    }
     private enum RcUse : ushort {
       None = '0',
       Baned = 'B',
@@ -543,14 +532,14 @@ namespace X13.UI {
     #region IComparable<InBase> Members
     public override int CompareTo(InBase other) {
       var o = other as InTopic;
-      return o == null ? 1 : this.path.CompareTo(o.path);
+      return o == null ? 1 : this.Path.CompareTo(o.Path);
     }
-    private string path {
+    private string Path {
       get {
         if(_owner != null) {
-          return _owner.fullPath;
+          return _owner.FullPath;
         } else if(_parent != null && _parent._owner != null) {
-          return _parent._owner.fullPath;
+          return _parent._owner.FullPath;
         }
         return "/";
       }
@@ -562,7 +551,7 @@ namespace X13.UI {
       _collFunc(this, false);
       var o = System.Threading.Interlocked.Exchange(ref _owner, null);
       if(o != null) {
-        o.changed -= _owner_PropertyChanged;
+        o.Changed -= Owner_PropertyChanged;
 #pragma warning disable 420
         var its = System.Threading.Interlocked.Exchange(ref base._items, null);
 #pragma warning restore 420
@@ -579,13 +568,13 @@ namespace X13.UI {
       StringBuilder sb = new StringBuilder();
       if(_owner == null) {
         if(_parent != null && _parent._owner != null) {
-          sb.Append(_parent._owner.path);
+          sb.Append(_parent._owner.Path);
         } else {
           sb.Append("...");
         }
         sb.AppendFormat("/{0}", name);
       } else {
-        sb.Append(_owner.path);
+        sb.Append(_owner.Path);
       }
       return sb.ToString();
     }

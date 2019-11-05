@@ -14,7 +14,7 @@ namespace X13.UI {
       return new veDateTimePicker(owner, type);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
     private DateTime _oldValue;
     public veDateTimePicker(InBase owner, JSC.JSValue manifest) {
       _owner = owner;

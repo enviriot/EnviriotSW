@@ -14,7 +14,7 @@ namespace X13.UI {
     public static IValueEditor Create(InBase owner, JSC.JSValue manifest) {
       return new veEditor(owner, manifest);
     }
-    private InBase _owner;
+    private readonly InBase _owner;
 
     private veEditor(InBase owner, JSC.JSValue manifest) {
       this._owner = owner;

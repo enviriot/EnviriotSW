@@ -30,7 +30,7 @@
         </Style>
       </Border.Style>
       <Grid Margin="0">
-        <TextBox Name="tbAddress" Text="{Binding data.fullPath, Mode=OneWay}" IsKeyboardFocusedChanged="TextBox_IsKeyboardFocusedChanged" IsReadOnlyCaretVisible="True" Padding="5,6" Margin="0,0,0,0" BorderThickness="0" KeyUp="TextBox_KeyUp" Loaded="tbAddress_Loaded" TabIndex="1">
+        <TextBox Name="tbAddress" Text="{Binding data.fullPath, Mode=OneWay}" IsKeyboardFocusedChanged="TextBox_IsKeyboardFocusedChanged" IsReadOnlyCaretVisible="True" Padding="5,6" Margin="0,0,0,0" BorderThickness="0" KeyUp="TextBox_KeyUp" Loaded="TbAddress_Loaded" TabIndex="1">
           <TextBox.Style>
             <Style TargetType="TextBox">
               <Setter Property="IsReadOnly" Value="True" />
@@ -90,7 +90,7 @@
         </ItemsControl>
       </Grid>
     </Border>
-    <Button Name="buChangeView" Grid.Column="1" IsEnabled="{Binding ChangeViewEn}" Margin="7,0,7,0" Click="buChangeView_Click" HorizontalAlignment="Center" VerticalAlignment="Center">
+    <Button Name="buChangeView" Grid.Column="1" IsEnabled="{Binding ChangeViewEn}" Margin="7,0,7,0" Click="BuChangeView_Click" HorizontalAlignment="Center" VerticalAlignment="Center">
       <Button.Template>
         <ControlTemplate TargetType="{x:Type Button}">
           <aero:ButtonChrome BorderBrush="#00000000" Background="#FFD0FFFF" RenderMouseOver="{TemplateBinding IsMouseOver}" RenderPressed="{TemplateBinding IsPressed}" 

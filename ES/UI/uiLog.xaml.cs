@@ -17,7 +17,7 @@ using System.Windows.Shapes;
 
 namespace X13.UI {
   public partial class uiLog : BaseWindow {
-    private ObservableCollection<LogEntry> LogCollection;
+    private readonly ObservableCollection<LogEntry> LogCollection;
     private System.Text.RegularExpressions.Regex _filter;
     private bool _showDebug, _useFilter;
 

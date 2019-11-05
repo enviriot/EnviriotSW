@@ -88,7 +88,7 @@ namespace X13 {
       }
     }
 
-    private string _cfgPath;
+    private readonly string _cfgPath;
     private Mutex _singleInstance;
     private Thread _thread;
     private AutoResetEvent _tick;
@@ -113,9 +113,7 @@ namespace X13 {
       }
       _tick = new AutoResetEvent(false);
       _terminate = false;
-      _thread = new Thread(new ThreadStart(PrThread));
-      _thread.Priority = ThreadPriority.Highest;
-      _thread.IsBackground = false;
+      _thread = new Thread(new ThreadStart(PrThread)) { Priority = ThreadPriority.Highest, IsBackground = false };
       _thread.Start();
 
       return true;
@@ -214,7 +212,9 @@ namespace X13 {
       var catalog = new AggregateCatalog();
       catalog.Catalogs.Add(new AssemblyCatalog(Assembly.GetExecutingAssembly()));
       catalog.Catalogs.Add(new DirectoryCatalog(path));
+#pragma warning disable IDE0068 // Use recommended dispose pattern
       CompositionContainer _container = new CompositionContainer(catalog);
+#pragma warning restore IDE0068 // Use recommended dispose pattern
       try {
         _container.ComposeParts(this);
       }
@@ -232,6 +232,9 @@ namespace X13 {
           continue;
         }
         pName = i.Metadata.name ?? i.Value.GetType().FullName;
+        if(i.Value is Repository.Repo repo) {
+          repo.cfg = _cfgPath;
+        }
         try {
           i.Value.Init();
           Log.Debug("plugin {0} Initialized", pName);

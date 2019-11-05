@@ -11,9 +11,9 @@ using X13.Repository;
 
 namespace X13.Periphery {
   internal class MsGSerial : IMsGate { //-V3074
-    private static byte[] _disconnectAll;
+    private static readonly byte[] _disconnectAll;
     private static int _scanBusy;
-    private static AutoResetEvent _startScan;
+    private static readonly AutoResetEvent _startScan;
     private static MQTT_SNPl _pl;
 
     static MsGSerial() {
@@ -34,7 +34,7 @@ namespace X13.Periphery {
         return;
       }
       SerialPort port = null;
-      var serialT = Topic.root.Get("/$YS/MQTT-SN/serial");
+      var serialT = Topic.Root.Get("/$YS/MQTT-SN/serial");
       var scanAllT = serialT.Get("ScanAll", true, serialT);
       bool scanAllPorts = false;
 
@@ -46,7 +46,7 @@ namespace X13.Periphery {
         scanAllT.SetState(false, serialT);
       }
 
-      if(scanAllPorts || !_pl._devs.Any() || _pl._devs.Where(z => z.state == State.Lost || z.state == State.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").Value as string).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
+      if(scanAllPorts || !_pl._devs.Any() || _pl._devs.Where(z => z.State == StateEnum.Lost || z.State == StateEnum.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").Value as string).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
         var pns = SerialPort.GetPortNames().Where(z => !(z.StartsWith("tty") && z.Length>3 && char.IsNumber(z[3]))).ToArray();
         for(int i = 0; i < pns.Length; i++) {
           if(_pl._gates.Exists(z => z.name == pns[i])) {
@@ -67,15 +67,12 @@ namespace X13.Periphery {
             }
           }
           try {
-            port = new SerialPort(pns[i], 38400, Parity.None, 8, StopBits.One);
-            port.ReadBufferSize = 300;
-            port.WriteBufferSize = 300;
-            port.ReadTimeout = 5;
+            port = new SerialPort(pns[i], 38400, Parity.None, 8, StopBits.One) { ReadBufferSize = 300, WriteBufferSize = 300, ReadTimeout = 5 };
             port.Open();
             new MsGSerial(port);
           }
           catch(Exception ex) {
-            if(_pl.verbose) {
+            if(_pl.Verbose) {
               Log.Debug("MQTT-SN.Serial search on {0} - {1}", pns[i], ex.Message);
             }
             try {
@@ -91,7 +88,7 @@ namespace X13.Periphery {
           }
           port = null;
         }
-        foreach(var t in serialT.children.Where(z=>z.name != "ScanAll" && (z.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean || (bool)z.GetState()) && pns.All(z1 => !z1.EndsWith(z.name)))) {
+        foreach(var t in serialT.Children.Where(z=>z.Name != "ScanAll" && (z.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean || (bool)z.GetState()) && pns.All(z1 => !z1.EndsWith(z.Name)))) {
           t.Remove(serialT);
         }
       }
@@ -99,8 +96,8 @@ namespace X13.Periphery {
     }
 
     private SerialPort _port;
-    private Queue<MsMessage> _sendQueue;
-    private byte[] _sndBuf;
+    private readonly Queue<MsMessage> _sendQueue;
+    private readonly byte[] _sndBuf;
     private DateTime _advTick;
 
     internal bool _useSlip;
@@ -112,8 +109,7 @@ namespace X13.Periphery {
       _sendQueue = new Queue<MsMessage>();
       _sndBuf = new byte[384];
 
-      Topic t;
-      if(Topic.root.Exist("/$YS/MQTT-SN/radius", out t) && t.GetState().IsNumber) {
+      if(Topic.Root.Exist("/$YS/MQTT-SN/radius", out Topic t) && t.GetState().IsNumber) {
         gwRadius = (byte)(int)t.GetState();
         if(gwRadius < 1 || gwRadius > 3) {
           gwRadius = 0;
@@ -193,7 +189,7 @@ namespace X13.Periphery {
       }
       _port.Write(tmp, 0, j);
 
-      if(_pl.verbose) {
+      if(_pl.Verbose) {
         Log.Debug("s {0}: {1}  {2}", _port.PortName, BitConverter.ToString(buf), msg.ToString());
       }
     }
@@ -213,7 +209,7 @@ namespace X13.Periphery {
             if(cnt > 1 && cnt == length) {
               return true;
             } else {
-              if(_pl.verbose && cnt > 1) {
+              if(_pl.Verbose && cnt > 1) {
                 Log.Warning("r  {0}: {1}  size mismatch: {2}/{3}", _port.PortName, BitConverter.ToString(buf, 0, cnt), cnt, length);
               }
               cnt = -1;
@@ -243,7 +239,7 @@ namespace X13.Periphery {
         } else {
           if(!_useSlip) {
             if(b < 2 || b > MsMessage.MSG_MAX_LENGTH) {
-              if(_pl.verbose) {
+              if(_pl.Verbose) {
                 Log.Warning("r {0}:0x{1:X2} wrong length of the packet", _port.PortName, b);
               }
               cnt = -1;
@@ -275,7 +271,7 @@ namespace X13.Periphery {
 
           _port.DiscardInBuffer();
           _port.Write(_disconnectAll, 0, _disconnectAll.Length);   // Send Disconnect
-          if(_pl.verbose) {
+          if(_pl.Verbose) {
             Log.Debug("s {0}: {1}  DISCONNECT", _port.PortName, BitConverter.ToString(_disconnectAll));
           }
 
@@ -316,14 +312,14 @@ namespace X13.Periphery {
               if(cnt == len) {
                 found = true;
                 _useSlip = escChar;
-                if(_pl.verbose) {
+                if(_pl.Verbose) {
                   Log.Debug("I {0}: SLIP={1}", _port.PortName, escChar);
                 }
                 _pl.ProcessInPacket(this, this._gateAddr, buf, 0, cnt);
                 break;
               }
             }
-            if(_pl.verbose) {
+            if(_pl.Verbose) {
               Log.Debug("r {0}: {1}  {2}", _port.PortName, BitConverter.ToString(buf, 0, cnt), msgTyp);
             }
           }
@@ -331,7 +327,7 @@ namespace X13.Periphery {
         } while(--tryCnt > 0);
       }
       catch(Exception ex) {
-        if(_pl.verbose) {
+        if(_pl.Verbose) {
           Log.Debug("MQTT-SN.Serial search on {0} - {1}", _port!=null?_port.PortName:"Unknown", ex.Message);
         }
       }
@@ -355,8 +351,7 @@ namespace X13.Periphery {
         i = g.gwIdx >= i ? (byte)(g.gwIdx + 1) : i;
       }
       gwIdx = i;
-      int tmpAddr;
-      if(!int.TryParse(new string(_port.PortName.Where(z => char.IsDigit(z)).ToArray()), out tmpAddr) || tmpAddr == 0 || tmpAddr > 254) {
+      if(!int.TryParse(new string(_port.PortName.Where(z => char.IsDigit(z)).ToArray()), out int tmpAddr) || tmpAddr == 0 || tmpAddr > 254) {
         tmpAddr = (byte)(new Random()).Next(1, 254);
       }
       _gateAddr = new byte[] { gwIdx, (byte)tmpAddr };
@@ -401,14 +396,14 @@ namespace X13.Periphery {
         }
       }
       catch(IOException ex) {
-        if(_pl.verbose) {
+        if(_pl.Verbose) {
           Log.Error("MsGSerial({0}).CommThread() - {1}", gwIdx, ex.Message);
         }
       }
       catch(Exception ex) {
         Log.Error("MsGSerial({0}).CommThread() - {1}", gwIdx, ex.ToString());
       }
-      if(_pl.verbose) {
+      if(_pl.Verbose) {
         Log.Debug("MsGSerial({0}).CommThread - exit", gwIdx);
       }
       this.Dispose();

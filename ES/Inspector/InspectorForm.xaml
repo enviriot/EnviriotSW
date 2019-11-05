@@ -15,7 +15,7 @@
     <BitmapImage x:Key="NullImage" UriSource="/ES;component/Images/ty_topic.png" />
     <SolidColorBrush x:Key="SplitBrush" Color="#91B8C6" />
     <DataTemplate x:Key="EditTemplate">
-      <TextBox Text="{Binding name, Mode=OneTime}" MaxLines="1" UndoLimit="10" Margin="0,4,3,3" Background="Azure" VerticalAlignment="Top" BorderThickness="0" Loaded="tbItemName_Loaded" PreviewKeyDown="tbItemName_PreviewKeyDown" LostFocus="tbItemName_LostFocus" />
+      <TextBox Text="{Binding name, Mode=OneTime}" MaxLines="1" UndoLimit="10" Margin="0,4,3,3" Background="Azure" VerticalAlignment="Top" BorderThickness="0" Loaded="TbItemName_Loaded" PreviewKeyDown="TbItemName_PreviewKeyDown" LostFocus="TbItemName_LostFocus" />
     </DataTemplate>
     <AlternationConverter x:Key="altconvBackground">
       <SolidColorBrush Color="#D6F0FF"/>

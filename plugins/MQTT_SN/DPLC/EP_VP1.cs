@@ -463,7 +463,7 @@ namespace X13.DevicePLC {
 
       for(int i = 0; i < node.Initializers.Length; i++) {
         if((v=node.Initializers[i] as Variable)!=null) {
-          m = _compiler.DefineMerker(v.Descriptor);
+          _compiler.DefineMerker(v.Descriptor);
           continue;
         }
         if((a1 = node.Initializers[i] as Assignment) != null && (v = a1.Children[0] as Variable) != null) {
@@ -567,12 +567,12 @@ namespace X13.DevicePLC {
                 m.type = EP_Type.REFERENCE;
                 continue;
               } else {
-                m = _compiler.DefineMerker(v.Descriptor, t);
+                _compiler.DefineMerker(v.Descriptor, t);
               }
             } else if((c = a1.Children[1] as Constant) != null && c.Value != null && c.Value.ValueType == JSValueType.Boolean) {
-              m = _compiler.DefineMerker(v.Descriptor, EP_Type.BOOL);
+              _compiler.DefineMerker(v.Descriptor, EP_Type.BOOL);
             } else {
-              m = _compiler.DefineMerker(v.Descriptor, EP_Type.SINT32);
+              _compiler.DefineMerker(v.Descriptor, EP_Type.SINT32);
             }
           }
         }
@@ -609,7 +609,9 @@ namespace X13.DevicePLC {
       }
       _compiler.ScopePop();
     }
+#pragma warning disable IDE0051 // Remove unused private members
     private static bool IsProperty(EP_Type type) {
+#pragma warning restore IDE0051 // Remove unused private members
       return type == EP_Type.PropB1 || type == EP_Type.PropS1 || type == EP_Type.PropS2 || type == EP_Type.PropS4 || type == EP_Type.PropU1 || type == EP_Type.PropU2;
     }
 

@@ -11,22 +11,22 @@ using System.Windows.Media;
 using System.Globalization;
 
 namespace X13.UI {
-  internal class veByteArray : TextBox, IValueEditor {
+  internal class VE_ByteArray : TextBox, IValueEditor {
     public static IValueEditor Create(InBase owner, JSC.JSValue manifest) {
-      return new veByteArray(owner, manifest);
+      return new VE_ByteArray(owner, manifest);
     }
 
-    private InBase _owner;
+    private readonly InBase _owner;
     private string _oldValue;
 
-    private veByteArray(InBase owner, JSC.JSValue manifest) {
+    private VE_ByteArray(InBase owner, JSC.JSValue manifest) {
       _owner = owner;
       base.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
       base.Padding = new System.Windows.Thickness(10, 0, 10, 0);
       base.BorderBrush = Brushes.Black;
-      base.GotFocus += ve_GotFocus;
-      base.LostFocus += ve_LostFocus;
-      base.KeyUp += ve_KeyUp;
+      base.GotFocus += VE_GotFocus;
+      base.LostFocus += VE_LostFocus;
+      base.KeyUp += VE_KeyUp;
       ValueChanged(_owner.value);
       TypeChanged(manifest);
     }
@@ -34,9 +34,8 @@ namespace X13.UI {
       if(!_owner.IsReadonly && _oldValue != base.Text) {
         string[] v = (base.Text).Split(new char[] { ',', ':', '-', ' ' });
         List<byte> rez = new List<byte>();
-        byte tmp;
         for(int i = 0; i < v.Length; i++) {
-          if(byte.TryParse(v[i], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out tmp)) {
+          if(byte.TryParse(v[i], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte tmp)) {
             rez.Add(tmp);
           } else {
             base.Text = _oldValue;
@@ -46,7 +45,7 @@ namespace X13.UI {
         _owner.value = new ByteArray(rez.ToArray());
       }
     }
-    private void ve_KeyUp(object sender, System.Windows.Input.KeyEventArgs e) {
+    private void VE_KeyUp(object sender, System.Windows.Input.KeyEventArgs e) {
       if(e.Key == System.Windows.Input.Key.Enter) {
         e.Handled = true;
         Publish();
@@ -56,10 +55,10 @@ namespace X13.UI {
         base.Text = _oldValue;
       }
     }
-    private void ve_GotFocus(object sender, System.Windows.RoutedEventArgs e) {
+    private void VE_GotFocus(object sender, System.Windows.RoutedEventArgs e) {
       _owner.GotFocus(sender, e);
     }
-    private void ve_LostFocus(object sender, System.Windows.RoutedEventArgs e) {
+    private void VE_LostFocus(object sender, System.Windows.RoutedEventArgs e) {
       Publish();
     }
 

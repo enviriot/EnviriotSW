@@ -161,7 +161,7 @@ namespace X13.Periphery {
   }
 
   internal class MsAdvertise : MsMessage {
-    private byte[] _buf;
+    private readonly byte[] _buf;
     public MsAdvertise(byte[] buf, int start, int end)
       : base(buf, start, end) {
     }
@@ -190,7 +190,7 @@ namespace X13.Periphery {
   }
 
   internal class MsGwInfo : MsMessage {
-    private byte _gwIdx;
+    private readonly byte _gwIdx;
     public MsGwInfo(byte[] buf, int start, int end)
       : base(buf, start, end) {
     }
@@ -234,7 +234,7 @@ namespace X13.Periphery {
   }
 
   internal class MsConnack : MsMessage {
-    private MsReturnCode _retCode;
+    private readonly MsReturnCode _retCode;
     public MsConnack(MsReturnCode code)
       : base(MsMessageType.CONNACK) {
       _retCode=code;
@@ -337,10 +337,10 @@ namespace X13.Periphery {
       return buf;
     }
 
-    private QoS _qualityOfService;
-    private ushort _topicId;
-    private ushort _msgId;
-    private MsReturnCode _retCode;
+    private readonly QoS _qualityOfService;
+    private readonly ushort _topicId;
+    private readonly ushort _msgId;
+    private readonly MsReturnCode _retCode;
   }
 
   internal class MsRegister : MsMessage {
@@ -414,7 +414,7 @@ namespace X13.Periphery {
   }
   
   internal class MsPublish : MsMessage {
-    private MsDevice.TopicInfo _ti;
+    private readonly MsDevice.TopicInfo _ti;
     private byte[] _payload;
 
     public MsPublish(byte[] buf, int start, int end)
@@ -602,9 +602,9 @@ namespace X13.Periphery {
     }
   }
   internal class MsDhcpAck : MsMessage {
-    private byte _gwIdx;
-    private ushort _xId;
-    private byte[]  _resp;
+    private readonly byte _gwIdx;
+    private readonly ushort _xId;
+    private readonly byte[]  _resp;
     public MsDhcpAck(byte gwIdx, ushort xId, byte[] addr)
       : base(MsMessageType.DHCP_ACK) {
       _gwIdx=gwIdx;

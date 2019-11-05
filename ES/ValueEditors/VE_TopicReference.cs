@@ -17,34 +17,28 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 
 namespace X13.UI {
-  internal class veDefault : TextBlock, IValueEditor {
-    public veDefault(InBase owner, JSC.JSValue type) { //-V3117
+  internal class VE_TopicReference : TextBlock, IValueEditor {
+    public static IValueEditor Create(InBase owner, JSC.JSValue type) {
+      return new VE_TopicReference(owner, type);
+    }
+
+
+    public VE_TopicReference(InBase owner, JSC.JSValue type) { //-V3117
       base.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
       base.Padding = new System.Windows.Thickness(10, 0, 10, 0);
       ValueChanged(owner.value);
     }
 
     public void ValueChanged(JSC.JSValue value) {
-      string rez=null;
-      if(value == null) {
-        rez = "";
+      string rez;
+      if(value != null && value.ValueType==JSC.JSValueType.String && (rez= value.Value as string)!=null && rez.StartsWith("¤TR")) {
+        this.Text = rez.Substring(3);
+        base.Foreground = Brushes.Black;
       } else {
-        if(value.ValueType == JSC.JSValueType.Object) {
-          if(value.Value == null) {
-            rez = "";
-          } else {
-            var sc = value["$type"];
-            if((rez = sc.Value as string) == null) {
-              rez = "Object";
-            }
-          }
-        } else {
-          rez = value.ToString();
-        }
+        this.Text = "###-##";
+        base.Foreground = Brushes.OrangeRed;
       }
-      this.Text = rez;
     }
-
     public void TypeChanged(JSC.JSValue type) {
     }
   }
