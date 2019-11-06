@@ -24,12 +24,12 @@ namespace X13.UI {
       _parent = null;
       base._compactView = false;
       _collFunc = collFunc;
-      name = "state";
+      Name = "state";
       _path = string.Empty;
       _isVisible = true;
       _isExpanded = true; // fill _valueVC
       base.IsGroupHeader = true;
-      levelPadding = 1;
+      LevelPadding = 1;
       _items = new List<InBase>();
       _value = _data.State;
       UpdateType(_data.Manifest);
@@ -43,12 +43,12 @@ namespace X13.UI {
       base._compactView = false;
       _collFunc = collFunc;
       _path = _parent._path + "." + name;
-      base.name = name;
+      base.Name = name;
       _items = new List<InBase>();
       _isVisible = true;
       _isExpanded = true; // fill _valueVC
       base.IsGroupHeader = false;
-      levelPadding = _parent.levelPadding + 8;
+      LevelPadding = _parent.LevelPadding + 8;
       _value = value;
       UpdateType(type);
       UpdateData(value);
@@ -59,9 +59,9 @@ namespace X13.UI {
       base._compactView = false;
       base._manifest = manifest;
       base._collFunc = parent._collFunc;
-      base.name = string.Empty;
+      base.Name = string.Empty;
       this._path = _parent._path + ".";
-      base.levelPadding = _parent.levelPadding + 8;
+      base.LevelPadding = _parent.LevelPadding + 8;
       base._items = new List<InBase>();
       base.IsEdited = true;
     }
@@ -75,12 +75,12 @@ namespace X13.UI {
         InValue vc;
         int i;
         foreach(var kv in _value.OrderBy(z => z.Key)) {
-          vc = _items.OfType<InValue>().FirstOrDefault(z => z.name == kv.Key);
+          vc = _items.OfType<InValue>().FirstOrDefault(z => z.Name == kv.Key);
           if(vc != null) {
             vc.UpdateData(kv.Value);
           } else {
             for(i = _items.Count - 1; i >= 0; i--) {
-              if(string.Compare(_items[i].name, kv.Key) < 0) {
+              if(string.Compare(_items[i].Name, kv.Key) < 0) {
                 break;
               }
             }
@@ -100,7 +100,7 @@ namespace X13.UI {
         }
         var keys = _value.Select(z => z.Key).ToArray();
         for(i = _items.Count - 1; i >= 0; i--) {
-          if(!keys.Contains(_items[i].name)) {
+          if(!keys.Contains(_items[i].Name)) {
             if(_isVisible && _isExpanded) {
               _items[i].Deleted();
             }
@@ -108,11 +108,11 @@ namespace X13.UI {
           }
         }
       }
-      if(editor == null) {
-        editor = InspectorForm.GetEditor(_editorName, this, _manifest);
+      if(Editor == null) {
+        Editor = InspectorForm.GetEditor(_editorName, this, _manifest);
         PropertyChangedReise("editor");
       } else {
-        editor.ValueChanged(_value);
+        Editor.ValueChanged(_value);
       }
       if(o_hc != this.HasChildren) {
         PropertyChangedReise("HasChildren");
@@ -138,7 +138,7 @@ namespace X13.UI {
         if(_parent == null) {
           _data.SetValue(jo);
         } else {
-          _parent.ChangeValue(this.name, jo);
+          _parent.ChangeValue(this.Name, jo);
         }
       } else {
         throw new NotImplementedException();
@@ -175,7 +175,7 @@ namespace X13.UI {
         if(pr != null) {
           InValue vc;
           foreach(var kv in pr) {
-            vc = _items.OfType<InValue>().FirstOrDefault(z => z.name == kv.Key);
+            vc = _items.OfType<InValue>().FirstOrDefault(z => z.Name == kv.Key);
             if(vc != null) {
               vc.UpdateType(kv.Value);
             }
@@ -186,7 +186,7 @@ namespace X13.UI {
     public override bool HasChildren {
       get { return _items.Any(); }
     }
-    public override JSC.JSValue value {
+    public override JSC.JSValue Value {
       get {
         return _value;
       }
@@ -194,7 +194,7 @@ namespace X13.UI {
         if(_parent == null) {
           _data.SetValue(value);
         } else {
-          _parent.ChangeValue(name, value);
+          _parent.ChangeValue(Name, value);
         }
       }
     }
@@ -216,7 +216,7 @@ namespace X13.UI {
         MenuItem ma = new MenuItem() { Header = "Add" };
         if(_manifest != null && (v1 = _manifest["Fields"]).ValueType == JSC.JSValueType.Object) {
           foreach(var kv in v1.Where(z => z.Value != null && z.Value.ValueType == JSC.JSValueType.Object && z.Value["default"].Defined)) {
-            if(_items.Any(z => z.name == kv.Key)) {
+            if(_items.Any(z => z.Name == kv.Key)) {
               continue;
             }
             mi = new MenuItem() { Header = kv.Key, Tag = kv.Value };
@@ -293,7 +293,7 @@ namespace X13.UI {
     }
     private void MiDelete_Click(object sender, RoutedEventArgs e) {
       if(_parent != null && !IsRequired) {
-        _parent.ChangeValue(name, null);
+        _parent.ChangeValue(Name, null);
       }
     }
     #endregion ContextMenu

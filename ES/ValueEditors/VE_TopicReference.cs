@@ -26,7 +26,7 @@ namespace X13.UI {
     public VE_TopicReference(InBase owner, JSC.JSValue type) { //-V3117
       base.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
       base.Padding = new System.Windows.Thickness(10, 0, 10, 0);
-      ValueChanged(owner.value);
+      ValueChanged(owner.Value);
     }
 
     public void ValueChanged(JSC.JSValue value) {

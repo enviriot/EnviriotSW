@@ -28,12 +28,12 @@ namespace X13.UI {
       _parent = null;
       base._compactView = false;
       base._collFunc = collFunc;
-      name = "Manifest";
+      Name = "Manifest";
       _path = string.Empty;
       base._isVisible = true;
       base._isExpanded = true;
       base.IsGroupHeader = true;
-      base.levelPadding = 1;
+      base.LevelPadding = 1;
       base._items = new List<InBase>();
       _data.Changed += Data_PropertyChanged;
       _data.GetAsync("/$YS/TYPES/Ext/Manifest").ContinueWith(ManifestLoaded, TaskScheduler.FromCurrentSynchronizationContext());
@@ -53,12 +53,12 @@ namespace X13.UI {
       base._compactView = false;
       this._data = _parent._data;
       base._collFunc = _parent._collFunc;
-      base.name = name;
+      base.Name = name;
       this._path = string.IsNullOrEmpty(_parent._path) ? name : (_parent._path + "." + name);
       base._isVisible = _parent._isExpanded;
       base._items = new List<InBase>();
       base.IsGroupHeader = false;
-      base.levelPadding = _parent.levelPadding + 8;
+      base.LevelPadding = _parent.LevelPadding + 8;
       this._value = value;
       UpdateType(type, value);
     }
@@ -68,9 +68,9 @@ namespace X13.UI {
       base._compactView = false;
       base._manifest = manifest;
       base._collFunc = parent._collFunc;
-      base.name = string.Empty;
+      base.Name = string.Empty;
       this._path = _parent._path + ".";
-      base.levelPadding = _parent.levelPadding + 8;
+      base.LevelPadding = _parent.LevelPadding + 8;
       base._items = new List<InBase>();
       base.IsEdited = true;
     }
@@ -89,7 +89,7 @@ namespace X13.UI {
     private void SetFieldResp(Task<JSC.JSValue> r) {
       if(r.IsCompleted) {
         if(r.IsFaulted) {
-          UpdateType(_tManifest?.State, value);
+          UpdateType(_tManifest?.State, Value);
           Log.Warning("{0}.{1} - {2}", _data.FullPath, _path, r.Exception.InnerException);
         }
       }
@@ -140,7 +140,7 @@ namespace X13.UI {
 
       bool o_hc = _items.Any();
       base.UpdateType(type);
-      base.editor.ValueChanged(_value);
+      base.Editor.ValueChanged(_value);
 
       if(_value.ValueType == JSC.JSValueType.Object) {
         InManifest vc;
@@ -158,13 +158,13 @@ namespace X13.UI {
               cs.__proto__ = cs_p.ToObject();
             }
           }
-          vc = _items.OfType<InManifest>().FirstOrDefault(z => z.name == kv.Key);
+          vc = _items.OfType<InManifest>().FirstOrDefault(z => z.Name == kv.Key);
           if(vc != null) {
             vc.UpdateType(cs, kv.Value);
           } else {
             var ni = new InManifest(this, kv.Key, kv.Value, cs);
             for(i = _items.Count - 1; i >= 0; i--) {
-              if(string.Compare(_items[i].name, kv.Key) < 0) {
+              if(string.Compare(_items[i].Name, kv.Key) < 0) {
                 break;
               }
             }
@@ -176,7 +176,7 @@ namespace X13.UI {
         }
         var keys = _value.Select(z => z.Key).ToArray();
         for(i = _items.Count - 1; i >= 0; i--) {
-          if(!keys.Contains(_items[i].name)) {
+          if(!keys.Contains(_items[i].Name)) {
             if(_isVisible && _isExpanded) {
               _items[i].Deleted();
             }
@@ -208,7 +208,7 @@ namespace X13.UI {
       }
     }
     public override bool HasChildren { get { return _items.Any(); } }
-    public override JSC.JSValue value {
+    public override JSC.JSValue Value {
       get {
         return _value;
       }
@@ -244,7 +244,7 @@ namespace X13.UI {
           }
 
           foreach(var kv in iArr.Where(z => z.Value != null && z.Value.ValueType == JSC.JSValueType.Object && z.Value["default"].Defined)) {
-            if(_items.Any(z => z.name == kv.Key)) {
+            if(_items.Any(z => z.Name == kv.Key)) {
               continue;
             }
             mi = new MenuItem() { Header = kv.Key, Tag = kv.Value };

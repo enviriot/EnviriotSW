@@ -33,7 +33,7 @@ namespace X13.UI {
       base.GotFocus += ve_GotFocus;
       base.LostFocus += ve_LostFocus;
       base.KeyUp += ve_KeyUp;
-      ValueChanged(_owner.value);
+      ValueChanged(_owner.Value);
       TypeChanged(manifest);
     }
     public new void ValueChanged(JSC.JSValue value) {
@@ -61,10 +61,10 @@ namespace X13.UI {
       if(!_owner.IsReadonly) {
         if(base.Value.HasValue) {
           if(_oldValue != base.Value.Value) {
-            _owner.value = JSC.JSValue.Marshal(base.Value.Value);
+            _owner.Value = JSC.JSValue.Marshal(base.Value.Value);
           }
         } else {
-          _owner.value = JSC.JSValue.Undefined;
+          _owner.Value = JSC.JSValue.Undefined;
         }
       }
     }

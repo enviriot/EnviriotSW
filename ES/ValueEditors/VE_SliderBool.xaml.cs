@@ -29,7 +29,7 @@ namespace X13.UI {
     public VE_SliderBool(InBase owner, JSC.JSValue type) { //-V3117
       _owner = owner;
       InitializeComponent();
-      ValueChanged(_owner.value);
+      ValueChanged(_owner.Value);
 
       tbBoolean.Checked += CbBool_Checked;
       tbBoolean.Unchecked += CbBool_Unchecked;
@@ -44,11 +44,11 @@ namespace X13.UI {
     }
 
     private void CbBool_Checked(object sender, RoutedEventArgs e) {
-      _owner.value = new JSL.Boolean(true);
+      _owner.Value = new JSL.Boolean(true);
     }
 
     private void CbBool_Unchecked(object sender, RoutedEventArgs e) {
-      _owner.value = new JSL.Boolean(false);
+      _owner.Value = new JSL.Boolean(false);
     }
 
     private void UserControl_GotFocus(object sender, RoutedEventArgs e) {

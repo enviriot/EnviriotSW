@@ -26,7 +26,7 @@ namespace X13.UI {
       base.GotFocus += ve_GotFocus;
       base.LostFocus += ve_LostFocus;
       base.KeyUp += ve_KeyUp;
-      ValueChanged(_owner.value);
+      ValueChanged(_owner.Value);
       TypeChanged(manifest);
     }
 
@@ -53,7 +53,7 @@ namespace X13.UI {
 
     private void Publish() {
       if(!_owner.IsReadonly && _oldValue != base.Text) {
-        _owner.value = new JSL.String(base.Text);
+        _owner.Value = new JSL.String(base.Text);
       }
     }
 

@@ -23,19 +23,19 @@
         <Style TargetType="Border" >
           <Setter Property="Background" Value="White" />
           <Style.Triggers>
-            <DataTrigger Binding="{Binding connected}" Value="False">
+            <DataTrigger Binding="{Binding Connected}" Value="False">
               <Setter Property="Background" Value="#FFE2FCFF" />
             </DataTrigger>
           </Style.Triggers>
         </Style>
       </Border.Style>
       <Grid Margin="0">
-        <TextBox Name="tbAddress" Text="{Binding data.fullPath, Mode=OneWay}" IsKeyboardFocusedChanged="TextBox_IsKeyboardFocusedChanged" IsReadOnlyCaretVisible="True" Padding="5,6" Margin="0,0,0,0" BorderThickness="0" KeyUp="TextBox_KeyUp" Loaded="TbAddress_Loaded" TabIndex="1">
+        <TextBox Name="tbAddress" Text="{Binding Data.FullPath, Mode=OneWay}" IsKeyboardFocusedChanged="TextBox_IsKeyboardFocusedChanged" IsReadOnlyCaretVisible="True" Padding="5,6" Margin="0,0,0,0" BorderThickness="0" KeyUp="TextBox_KeyUp" Loaded="TbAddress_Loaded" TabIndex="1">
           <TextBox.Style>
             <Style TargetType="TextBox">
               <Setter Property="IsReadOnly" Value="True" />
               <Style.Triggers>
-                <DataTrigger Binding="{Binding connected}" Value="False">
+                <DataTrigger Binding="{Binding Connected}" Value="False">
                   <Setter Property="IsReadOnly" Value="False" />
                   <Setter Property="Background" Value="#FFE2FCFF" />
                 </DataTrigger>
@@ -54,7 +54,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="7"/>
                       </Grid.ColumnDefinitions>
-                      <TextBlock Grid.Column="0" Name="tbNamePart" Text="{Binding name}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="0" Name="tbNamePart" Text="{Binding Name}" VerticalAlignment="Center" />
                       <TextBlock Grid.Column="1" Text="/" VerticalAlignment="Center" />
                     </Grid>
                     <ControlTemplate.Triggers>
@@ -103,7 +103,7 @@
         <Image Source="{Binding Icon}" Width="16" Height="16" />
       </Button.Content>
     </Button>
-    <ContentControl Name="ccMain" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,0" Focusable="False" TabIndex="3" Content='{Binding Path=contentForm, TargetNullValue="Loading.."}' >
+    <ContentControl Name="ccMain" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,0" Focusable="False" TabIndex="3" Content='{Binding Path=ContentForm, TargetNullValue="Loading.."}' >
     </ContentControl>
   </Grid>
 </x13ui:BaseWindow>

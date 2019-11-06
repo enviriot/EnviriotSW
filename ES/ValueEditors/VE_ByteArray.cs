@@ -27,7 +27,7 @@ namespace X13.UI {
       base.GotFocus += VE_GotFocus;
       base.LostFocus += VE_LostFocus;
       base.KeyUp += VE_KeyUp;
-      ValueChanged(_owner.value);
+      ValueChanged(_owner.Value);
       TypeChanged(manifest);
     }
     private void Publish() {
@@ -42,7 +42,7 @@ namespace X13.UI {
             return;
           }
         }
-        _owner.value = new ByteArray(rez.ToArray());
+        _owner.Value = new ByteArray(rez.ToArray());
       }
     }
     private void VE_KeyUp(object sender, System.Windows.Input.KeyEventArgs e) {

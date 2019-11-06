@@ -34,7 +34,7 @@ namespace X13.UI {
       InitializeComponent();
       base.Padding = new System.Windows.Thickness(10, 0, 10, 0);
       base.BorderBrush = Brushes.Black;
-      ValueChanged(_owner.value);
+      ValueChanged(_owner.Value);
       TypeChanged(manifest);
       this.textEditor.ShowLineNumbers = true;
       this.textEditor.Options.EnableHyperlinks = false;
@@ -69,7 +69,7 @@ namespace X13.UI {
 
     private void Publish() {
       if(!_owner.IsReadonly && textEditor.IsModified) {
-        _owner.value = textEditor.Text;
+        _owner.Value = textEditor.Text;
       }
     }
 

@@ -24,7 +24,7 @@ namespace X13.UI {
       base.Padding = new System.Windows.Thickness(10, 0, 10, 0);
       base.MinWidth = 90;
       base.GotFocus += ve_GotFocus;
-      ValueChanged(_owner.value);
+      ValueChanged(_owner.Value);
       TypeChanged(manifest);
       base.SelectionChanged += ve_SelectionChanged;
     }
@@ -36,11 +36,11 @@ namespace X13.UI {
       _owner.GotFocus(sender, e);
     }
     private void Publish() {
-      string ov = _owner.value.Value as string;
+      string ov = _owner.Value.Value as string;
       string nv = base.SelectedValue as string;
       if(ov != nv) {
         if(!_owner.IsReadonly) {
-          _owner.value = nv;
+          _owner.Value = nv;
         } else {
           base.SelectedValue = ov;
         }

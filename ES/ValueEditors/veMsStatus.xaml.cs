@@ -30,7 +30,7 @@ namespace X13.UI{
     public veMsStatus(InBase owner, JSC.JSValue manifest) {
       _owner = owner;
       InitializeComponent();
-      ValueChanged(_owner.value);
+      ValueChanged(_owner.Value);
       TypeChanged(manifest);
     }
     #region IValueEditor Members

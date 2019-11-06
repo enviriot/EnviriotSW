@@ -36,7 +36,7 @@ namespace X13.UI {
       _stateT = _owner.CompactView?((InTopic)_owner).Owner:((InValue)_owner).Data;
       InitializeComponent();
       _stateT.GetAsync("src").ContinueWith(SrcLoaded);
-      ValueChanged(_owner.value);
+      ValueChanged(_owner.Value);
       TypeChanged(manifest);
       if(_owner.CompactView) {
         buStart.Visibility = System.Windows.Visibility.Collapsed;

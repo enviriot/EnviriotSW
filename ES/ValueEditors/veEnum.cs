@@ -112,7 +112,7 @@ namespace X13.UI {
           }
           this.Items.Add(new TextBlock { Tag = isArr ? ((JSC.JSValue)new JSL.Number(int.Parse(kv.Key))) : ((JSC.JSValue)new JSL.String(kv.Key)), Text = text, Background = bg_b, Foreground = fg_b });
         }
-        ValueChanged(_owner.value);
+        ValueChanged(_owner.Value);
       }
     }
 
@@ -123,9 +123,9 @@ namespace X13.UI {
       var v = base.SelectedItem as TextBlock;
       JSC.JSValue k;
       if(v==null || (k = v.Tag as JSC.JSValue)==null) {
-        ValueChanged(_owner.value);  // restore value
+        ValueChanged(_owner.Value);  // restore value
       } else if(_oldValue!=k) {
-        _owner.value = k;
+        _owner.Value = k;
       }
     }
 

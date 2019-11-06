@@ -24,7 +24,7 @@ namespace X13.UI {
     protected object _sync = new object();
     protected bool _compactView;
 
-    public double levelPadding { get; protected set; }
+    public double LevelPadding { get; protected set; }
     public virtual bool IsExpanded {
       get {
         return _isExpanded;
@@ -60,14 +60,14 @@ namespace X13.UI {
     }
     public bool IsGroupHeader { get; protected set; }
     public bool IsEdited { get; protected set; }
-    public string name { get; set; }
-    public BitmapSource icon { get; protected set; }
-    public IValueEditor editor { get; protected set; }
+    public string Name { get; set; }
+    public BitmapSource Icon { get; protected set; }
+    public IValueEditor Editor { get; protected set; }
     public bool IsReadonly { get; private set; }
     public bool IsRequired { get; private set; }
     public bool CompactView { get { return _compactView; } }
 
-    public abstract JSC.JSValue value { get; set; }
+    public abstract JSC.JSValue Value { get; set; }
     public abstract ObservableCollection<Control> MenuItems(FrameworkElement src);
     public abstract void FinishNameEdit(string name);
     public void GotFocus(object sender, RoutedEventArgs e) {
@@ -109,10 +109,10 @@ namespace X13.UI {
       IsReadonly = (attr&2)!=0;
       IsRequired = (attr&1)!=0;
       if(nv == null){
-        nv = DTopic.JSV2Type(value);
+        nv = DTopic.JSV2Type(Value);
       }
       if(ni == null) {
-        if(value.ValueType == JSC.JSValueType.Object && value.Value == null) {
+        if(Value.ValueType == JSC.JSValueType.Object && Value.Value == null) {
           ni = App.GetIcon((this is InTopic) ? string.Empty : "Null");  // Folder or Null
         }
       }
@@ -120,16 +120,16 @@ namespace X13.UI {
         ni = App.GetIcon(nv);
       }
 
-      if(ni != icon) {
-        icon = ni;
+      if(ni != Icon) {
+        Icon = ni;
         PropertyChangedReise("icon");
       }
       if(nv != _editorName) {
         _editorName = nv;
-        editor = InspectorForm.GetEditor(_editorName, this, _manifest);
+        Editor = InspectorForm.GetEditor(_editorName, this, _manifest);
         PropertyChangedReise("editor");
       }
-      this.editor.TypeChanged(_manifest);
+      this.Editor.TypeChanged(_manifest);
     }
 
     public void Deleted() {

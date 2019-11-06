@@ -28,11 +28,11 @@ namespace X13.UI {
       IsGroupHeader = _parent == null;
       _owner.Changed += Owner_PropertyChanged;
       if(IsGroupHeader) {
-        name = string.IsNullOrWhiteSpace(owner.Connection.Alias)?owner.Connection.server:owner.Connection.Alias;
+        Name = string.IsNullOrWhiteSpace(owner.Connection.Alias)?owner.Connection.server:owner.Connection.Alias;
         _manifest = _owner.Manifest;  // if(IsGroupHeader) don't use UpdateType(...)
-        icon = App.GetIcon("children");
-        editor = null;
-        levelPadding = 1;
+        Icon = App.GetIcon("children");
+        Editor = null;
+        LevelPadding = 1;
 
         if(_owner.Children != null && _owner.Children.Any()) {
           _populated = true;
@@ -42,9 +42,9 @@ namespace X13.UI {
         }
         base._isExpanded = true;
       } else {
-        name = _owner.Name;
+        Name = _owner.Name;
         base.UpdateType(_owner.Manifest);
-        levelPadding = _parent.levelPadding + 8;
+        LevelPadding = _parent.LevelPadding + 8;
         base._isExpanded = false;
       }
       base._isVisible = IsGroupHeader || (_parent._isVisible && _parent._isExpanded);
@@ -54,9 +54,9 @@ namespace X13.UI {
       _parent = parent;
       base._compactView = true;
       _collFunc = parent._collFunc;
-      name = string.Empty;
+      Name = string.Empty;
       IsEdited = true;
-      levelPadding = _parent == null ? 1 : _parent.levelPadding + 8;
+      LevelPadding = _parent == null ? 1 : _parent.LevelPadding + 8;
       _createTag = tag;
     }
 
@@ -79,7 +79,7 @@ namespace X13.UI {
         return (_owner != null && _owner.Children != null && _owner.Children.Any()) || (_items != null && _items.Any());
       }
     }
-    public override JSC.JSValue value { get { return _owner != null ? _owner.State : JSC.JSValue.NotExists; } set { if(_owner != null) { _owner.SetValue(value); } } }
+    public override JSC.JSValue Value { get { return _owner != null ? _owner.State : JSC.JSValue.NotExists; } set { if(_owner != null) { _owner.SetValue(value); } } }
     public override DTopic Root {
       get { return _owner.Connection.Root; }
     }
@@ -117,7 +117,7 @@ namespace X13.UI {
         //PropertyChangedReise("name");
       } else {
         if(td.IsFaulted) {
-          Log.Warning("{0}/{1} - {2}", _parent._owner.FullPath, base.name, td.Exception.Message);
+          Log.Warning("{0}/{1} - {2}", _parent._owner.FullPath, base.Name, td.Exception.Message);
         }
         if(_parent._items != null) {
           _parent._items.Remove(this);
@@ -157,7 +157,7 @@ namespace X13.UI {
       var tt = await t.GetAsync(null);
       if(tt != null) {
         bool o_hc = _items != null && _items.Any();
-        if((tmp = _items.OfType<InTopic>().FirstOrDefault(z => z.name == tt.Name)) != null) {
+        if((tmp = _items.OfType<InTopic>().FirstOrDefault(z => z.Name == tt.Name)) != null) {
           _items.Remove(tmp);
           _collFunc(tmp, false);
           tmp.RefreshOwner(tt);
@@ -166,7 +166,7 @@ namespace X13.UI {
         }
         int i;
         for(i = 0; i < _items.Count; i++) {
-          if(string.Compare(_items[i].name, tt.Name) > 0) {
+          if(string.Compare(_items[i].Name, tt.Name) > 0) {
             break;
           }
         }
@@ -189,7 +189,7 @@ namespace X13.UI {
         }
       }
       _owner = tt;
-      name = tt.Name;
+      Name = tt.Name;
       if(_populated && _owner.Children != null) {
         InsertItems(_owner.Children);
       }
@@ -214,7 +214,7 @@ namespace X13.UI {
           this.UpdateType(_owner.Manifest);
         } else if(art == DTopic.Art.value) {
           this.UpdateType(_owner.Manifest);
-          this.editor.ValueChanged(_owner.State);
+          this.Editor.ValueChanged(_owner.State);
         }
       }
       if(_populated) {
@@ -226,7 +226,7 @@ namespace X13.UI {
           }
         } else if(art == DTopic.Art.RemoveChild) {
           if(_items != null) {
-            var it = _items.FirstOrDefault(z => z.name == child.Name);
+            var it = _items.FirstOrDefault(z => z.Name == child.Name);
             if(it != null) {
               it.Deleted();
               _items.Remove(it);
@@ -572,7 +572,7 @@ namespace X13.UI {
         } else {
           sb.Append("...");
         }
-        sb.AppendFormat("/{0}", name);
+        sb.AppendFormat("/{0}", Name);
       } else {
         sb.Append(_owner.Path);
       }
