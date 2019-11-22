@@ -164,9 +164,10 @@ namespace X13.Periphery {
       if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
         return;
       }
-      var d = _plcs.FirstOrDefault(z => z.path == path);
-      if(d != null) {
-        d.Run();
+      var plc = _plcs.FirstOrDefault(z => z.path == path);
+      var d = _devs.FirstOrDefault(z => path.StartsWith(z.owner.path+"/"));
+      if(plc != null) {
+        plc.Run(d);
       }
     }
 

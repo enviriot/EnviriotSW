@@ -746,7 +746,7 @@ namespace X13.Periphery {
           rez.it = TopicIdType.PreDefined;
           rez.registred = true;
         } else {
-          var nt = _NTTable.FirstOrDefault(z => tag.StartsWith(z.Item1));
+          var nt = NTTable.FirstOrDefault(z => tag.StartsWith(z.Item1));
           if(nt != null) {
             rez.TopicId = CalculateTopicId(rez.topic.path);
             rez.dType = nt.Item2;
@@ -863,6 +863,27 @@ namespace X13.Periphery {
       return ti;
     }
 
+    internal void ReReg(List<Tuple<Topic, string>> rereg) {
+      TopicInfo ti;
+      foreach(var tt in rereg) {   // First delete
+        ti = _topics.FirstOrDefault(z => z.topic == tt.Item1);
+        if(ti!=null) {
+          Send(new MsRegister(0xFFFF, ti.tag));  // unregister
+          ti.registred = false;
+        }
+      }
+      foreach(var tt in rereg) {   // Register after
+        if(string.IsNullOrEmpty(tt.Item2) || (ti = _topics.FirstOrDefault(z => z.topic == tt.Item1))==null) {
+          tt.Item1.Remove(owner);
+        } else {
+          ti.tag = tt.Item2;
+          Send(new MsRegister(ti.TopicId, ti.tag));  // register
+          ti.registred = true;
+          ti.topic.SetField("MQTT-SN.tag", ti.tag);
+        }
+      }
+    }
+
     private void PublishTopic(Perform p, SubRec sb) {
       if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.prim == owner && p.art != Perform.Art.subscribe) || p.src == owner) {
         return;
@@ -879,6 +900,12 @@ namespace X13.Periphery {
         }
       }
       if(p.art == Perform.Art.changedField && ti != null) {
+        var sTag = p.src.GetField("MQTT-SN.tag").Value as string;
+        if(ti.tag!=sTag) {
+          Send(new MsRegister(0xFFFF, ti.tag));  // unregister
+          ti.tag = sTag;
+          Send(new MsRegister(ti.TopicId, ti.tag));  // register
+        }
         UpdateConverters(ti);
         UpdateSuppressedInputs();
       }
@@ -893,7 +920,7 @@ namespace X13.Periphery {
           Send(new MsPublish(ti));
         }
       } else if(p.art == Perform.Art.remove) {          // Remove by device
-        if(ti.it == TopicIdType.Normal) {
+        if(ti.it == TopicIdType.Normal && ti.registred) {
           Send(new MsRegister(0xFFFF, ti.tag));
         }
         _topics.Remove(ti);
@@ -1272,7 +1299,7 @@ namespace X13.Periphery {
       TWI = 0x300,
       PLC = 0x400,
     }
-    private static Tuple<string, DType>[] _NTTable = new Tuple<string, DType>[]{ 
+    internal static Tuple<string, DType>[] NTTable = new Tuple<string, DType>[]{ 
       new Tuple<string, DType>("In", DType.Boolean),
       new Tuple<string, DType>("Ip", DType.Boolean),
       new Tuple<string, DType>("Op", DType.Boolean),

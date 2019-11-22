@@ -76,13 +76,13 @@ namespace X13.Periphery {
     public void StopPlc() {
       _pub(new byte[] { (byte)Cmd.PlcStopReq });
     }
-    public void Run() {
+    public void Run(MsDevice dev) {
       var c = this.Build();
       if(c == null) {
         return;
       }
       if(c.ioList != null) {
-        foreach(var v in c.ioList) {
+        foreach(var v in c.ioList) {  // register IO variables
           var t = _owner.parent.Get(v, true, _owner);
           t.SetField("MQTT-SN.tag", v);
         }
@@ -99,11 +99,25 @@ namespace X13.Periphery {
           mqo["tag"] = kv.Value;
           mo["MQTT-SN"] = mqo;
           o["manifest"] = mo;
-          if(kv.Value.StartsWith("i") || kv.Value.StartsWith("o")) {
+          var nt = MsDevice.NTTable.FirstOrDefault(z => kv.Value.StartsWith(z.Item1));
+          MsDevice.DType vt = nt==null?MsDevice.DType.Integer:nt.Item2;
+          switch(vt) {
+          case MsDevice.DType.Boolean:
             o["default"] = false;
-          } else {
+            o["type"] = "Boolean";
+            break;
+          case MsDevice.DType.ByteArray:
+            o["default"] = null;
+            o["type"] = "ByteArray";
+            break;
+          case MsDevice.DType.String:
+            o["default"] = string.Empty;
+            o["type"] = "String";
+            break;
+          default:
             o["default"] = 0;
             o["type"] = "Integer";
+            break;
           }
           o["menu"] = "plc";
           ch_t[n] = o;
@@ -111,9 +125,19 @@ namespace X13.Periphery {
       }
       _owner.parent.SetField("Children", ch_t, _owner);
       string sTag;
-      var ToDel = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").Value as string) != null && sTag.StartsWith("M") && c.varList.All(z1 => sTag != z1.Value)).ToArray();
-      foreach(var t in ToDel) {
-        t.Remove(_owner);
+      var varLst = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").Value as string) != null && sTag.StartsWith("M")).ToArray();
+      var rereg = new List<Tuple<Topic, string>>();
+      foreach(var t in varLst) {
+        sTag = t.GetField("MQTT-SN.tag").Value as string;
+        var vt = c.varList.FirstOrDefault(z => t.name == z.Key);
+        if(vt.Key==null) {
+          rereg.Add(new Tuple<Topic, string>(t, string.Empty));
+        } else if(sTag!=vt.Value) {
+          rereg.Add(new Tuple<Topic,string>(t, vt.Value));
+        }
+      }
+      if(rereg.Any()) {
+        dev.ReReg(rereg);
       }
       _stackBottom = (c.StackBottom + 3) / 4;
       _prg = new SortedSet<Chunk>();
