@@ -39,6 +39,8 @@ namespace X13.Periphery {
       RPC.Register("MQTT_SN.PLC.Start", PlcStartRpc);
       RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
       RPC.Register("MqsDev", MqsDevCctor);
+      RPC.Register("MQTT_SN.RefreshPorts", RefreshPortsRpc);
+
     }
 
     public void Start() {
@@ -177,6 +179,10 @@ namespace X13.Periphery {
         dev = new MsDevice(this, t);
         _devs.Add(dev);
       }
+    }
+
+    private void RefreshPortsRpc(JSC.JSValue[] obj) {
+      MsGSerial.StartScan();
     }
 
     #endregion RPC

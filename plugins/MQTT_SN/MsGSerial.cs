@@ -1,4 +1,6 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using JSC = NiL.JS.Core;
+using JSL = NiL.JS.BaseLibrary;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,6 +17,8 @@ namespace X13.Periphery {
     private static int _scanBusy;
     private static AutoResetEvent _startScan;
     private static MQTT_SNPl _pl;
+    private static Topic _portsTopic;
+    private static SubRec _portValuesSR;
 
     static MsGSerial() {
       _scanBusy = 0;
@@ -26,28 +30,38 @@ namespace X13.Periphery {
       _pl = pl;
       ThreadPool.RegisterWaitForSingleObject(_startScan, ScanSerialPorts, null, 45000, false);
       _scanBusy = 1;
+      _portsTopic = Topic.root.Get("/$YS/MQTT-SN/ports");
+      if(!_portsTopic.CheckAttribute(Topic.Attribute.Required)) {
+        _portsTopic.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
+        var act = new JSL.Array(1);
+        var r_a = JSC.JSObject.CreateObject();
+        r_a["name"] = "MQTT_SN.RefreshPorts";
+        r_a["text"] = "Refresh";
+        act[0] = r_a;
+        _portsTopic.SetField("Action", act);
+        _portsTopic.SetState(JSC.JSObject.CreateObject());
+      }
+      _portValuesSR = _portsTopic.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Value, PortValuesChanged);
+
       _startScan.Set();
     }
 
-    private static void ScanSerialPorts(object o, bool b) {
+    private static void PortValuesChanged(Perform p, SubRec sr) {
+      _startScan.Set();
+    }
+
+    public static void StartScan() {
+      _startScan.Set();
+    }
+
+    private static void ScanSerialPorts(object o, bool intervalScan) {
       if(Interlocked.CompareExchange(ref _scanBusy, 2, 1) != 1) {
         return;
       }
       SerialPort port = null;
-      var serialT = Topic.root.Get("/$YS/MQTT-SN/serial");
-      var scanAllT = serialT.Get("ScanAll", true, serialT);
-      bool scanAllPorts = false;
 
-      if(scanAllT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
-        scanAllT.SetAttribute(Topic.Attribute.DB);
-        scanAllT.SetState(false, serialT);
-      } else if((bool)scanAllT.GetState()) {
-        scanAllPorts = true;
-        scanAllT.SetState(false, serialT);
-      }
-
-      if(scanAllPorts || !_pl._devs.Any() || _pl._devs.Where(z => z.state == State.Lost || z.state == State.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").Value as string).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
-        var pns = SerialPort.GetPortNames().Where(z => !z.StartsWith("/dev/tty") || z.StartsWith("/dev/ttyS") || z.StartsWith("/dev/ttyUSB") || z.StartsWith("/dev/ttyAMA")).ToArray();
+      if(!intervalScan || !_pl._devs.Any() || _pl._devs.Where(z => z.state == State.Lost || z.state == State.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").Value as string).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
+        var pns = SerialPort.GetPortNames().Where(z => !z.StartsWith("/dev/tty") || z.StartsWith("/dev/ttyS") || z.StartsWith("/dev/ttyUSB") || z.StartsWith("/dev/ttyAMA") || z.StartsWith("/dev/ttyAMS")).ToArray();
         for(int i = 0; i < pns.Length; i++) {
           if(_pl._gates.Exists(z => z.name == pns[i])) {
             continue;
@@ -58,10 +72,10 @@ namespace X13.Periphery {
             if(si>=0){
               pn = pn.Substring(si+1);
             }
-            var portT = serialT.Get(pn, true, serialT);
+            var portT = _portsTopic.Get(pn, true, _portsTopic);
             if(portT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
               portT.SetAttribute(Topic.Attribute.Config);
-              portT.SetState(true, serialT);
+              portT.SetState(true, _portsTopic);
             } else if((bool)portT.GetState() == false) {
               continue;
             }
@@ -91,8 +105,8 @@ namespace X13.Periphery {
           }
           port = null;
         }
-        foreach(var t in serialT.children.Where(z=>z.name != "ScanAll" && (z.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean || (bool)z.GetState()) && pns.All(z1 => !z1.EndsWith(z.name)))) {
-          t.Remove(serialT);
+        foreach(var t in _portsTopic.children.Where(z=>z.name != "ScanAll" && (z.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean || (bool)z.GetState()) && pns.All(z1 => !z1.EndsWith(z.name)))) {
+          t.Remove(_portsTopic);
         }
       }
       _scanBusy = 1;
