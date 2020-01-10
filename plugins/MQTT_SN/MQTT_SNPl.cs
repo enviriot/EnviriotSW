@@ -47,7 +47,7 @@ namespace X13.Periphery {
       _owner = Topic.root.Get("/$YS/MQTT-SN");
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
 #if DEBUG
         _verbose.SetState(true);
 #else
@@ -56,7 +56,7 @@ namespace X13.Periphery {
       }
       _stat = _owner.Get("statistic");
       if(_stat.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _stat.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+        _stat.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         _stat.SetState(false);
       }
 
