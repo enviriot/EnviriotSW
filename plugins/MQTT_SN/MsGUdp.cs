@@ -1,4 +1,6 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using JSC = NiL.JS.Core;
+using JSL = NiL.JS.BaseLibrary;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,24 +14,70 @@ using X13.Repository;
 namespace X13.Periphery {
   internal class MsGUdp : IMsGate {
     private MQTT_SNPl _pl;
+    private Topic _udpT;
     private byte[][] _myIps;
     private IPAddress[] _bcIps;
     private UdpClient _udp;
     private Timer _advTick;
     private byte _gwRadius;
     private AddrWithMask[] _whiteList;
+    private static int _scanBusy;
 
     public MsGUdp(MQTT_SNPl pl) {
       _pl = pl;
-      var udpT = Topic.root.Get("/$YS/MQTT-SN/udp");
-      if(udpT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
-        udpT.SetAttribute(Topic.Attribute.Config);
-        udpT.SetState(true);
-      } else if(!(bool)udpT.GetState()) {
+      _scanBusy = 0;
+      _udpT = Topic.root.Get("/$YS/MQTT-SN/udp");
+
+      if(!_udpT.CheckAttribute(Topic.Attribute.Required) || _udpT.GetState().ValueType!=JSC.JSValueType.Boolean) {
+        _udpT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
+        var act = new JSL.Array(1);
+        var r_a = JSC.JSObject.CreateObject();
+        r_a["name"] = "MQTT_SN.RefreshNIC";
+        r_a["text"] = "Refresh";
+        act[0] = r_a;
+        _udpT.SetField("Action", act);
+        _udpT.SetState(true);
+      } else if(!(bool)_udpT.GetState()) {
         return;  // udp disabled
       }
+      _scanBusy = 1;
+      ScanNIC();
+
+      try {
+        _udp = new UdpClient(1883);
+        _udp.EnableBroadcast = true;
+        _udp.BeginReceive(new AsyncCallback(ReceiveCallback), null);
+        _advTick = new Timer(SendAdv, null, 4500, 900000);
+        Topic t;
+        if(Topic.root.Exist("/$YS/MQTT-SN/radius", out t) && t.GetState().IsNumber) {
+          _gwRadius = (byte)(int)t.GetState();
+          if(_gwRadius < 1 || _gwRadius > 3) {
+            _gwRadius = 0;
+          }
+        } else {
+          _gwRadius = 1;
+        }
+      }
+      catch(Exception ex) {
+        Log.Error("MsGUdp.ctor() {0}", ex.Message);
+      }
+    }
+    public void RefreshNIC() {
+      ThreadPool.QueueUserWorkItem((o) => ScanNIC());
+    }
+
+    private void ScanNIC() {
+      if(_udpT.GetState().ValueType==JSC.JSValueType.Boolean && (bool)_udpT.GetState()) {
+        Interlocked.CompareExchange(ref _scanBusy, 1, 0);  // turn on scan
+      } else {
+        Interlocked.CompareExchange(ref _scanBusy, 0, 1);  // turn off scan
+      }
+      if(Interlocked.CompareExchange(ref _scanBusy, 2, 1) != 1) {
+        return;
+      }
+
       List<AddrWithMask> wl = new List<AddrWithMask>();
-      foreach(var c in udpT.children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
+      foreach(var c in _udpT.children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
         var we = AddrWithMask.Parse(c.GetState().Value as string, c.name);
         if(we == null) {
           Log.Warning("{0} = {1} is not IpAddress with Mask", c.path, c.GetState().Value as string);
@@ -77,31 +125,13 @@ namespace X13.Periphery {
       if(wl != null) {
         _whiteList = wl.ToArray();
         foreach(var we in wl) {
-          var t = udpT.Get(we.name, true, udpT);
+          var t = _udpT.Get(we.name, true, _udpT);
           t.SetAttribute(Topic.Attribute.DB);
           t.SetState(we.ToString());
         }
         wl = null;
       }
-
-      try {
-        _udp = new UdpClient(1883);
-        _udp.EnableBroadcast = true;
-        _udp.BeginReceive(new AsyncCallback(ReceiveCallback), null);
-        _advTick = new Timer(SendAdv, null, 4500, 900000);
-        Topic t;
-        if(Topic.root.Exist("/$YS/MQTT-SN/radius", out t) && t.GetState().IsNumber) {
-          _gwRadius = (byte)(int)t.GetState();
-          if(_gwRadius < 1 || _gwRadius > 3) {
-            _gwRadius = 0;
-          }
-        } else {
-          _gwRadius = 1;
-        }
-      }
-      catch(Exception ex) {
-        Log.Error("MsGUdp.ctor() {0}", ex.Message);
-      }
+      _scanBusy = 1;
     }
     private void ReceiveCallback(IAsyncResult ar) {
       if(_udp == null || _udp.Client == null) {
@@ -279,5 +309,6 @@ namespace X13.Periphery {
         return (new IPAddress(_addr)).ToString() + "/" + (new IPAddress(_mask)).ToString();
       }
     }
+
   }
 }

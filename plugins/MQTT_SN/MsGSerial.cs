@@ -28,10 +28,9 @@ namespace X13.Periphery {
 
     public static void Init(MQTT_SNPl pl) {
       _pl = pl;
-      ThreadPool.RegisterWaitForSingleObject(_startScan, ScanSerialPorts, null, 45000, false);
-      _scanBusy = 1;
+      ThreadPool.RegisterWaitForSingleObject(_startScan, ScanSerialPorts, null, 289012, false);
       _portsTopic = Topic.root.Get("/$YS/MQTT-SN/ports");
-      if(!_portsTopic.CheckAttribute(Topic.Attribute.Required)) {
+      if(!_portsTopic.CheckAttribute(Topic.Attribute.Required) || _portsTopic.GetState().ValueType!=JSC.JSValueType.Boolean) {
         _portsTopic.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         var act = new JSL.Array(1);
         var r_a = JSC.JSObject.CreateObject();
@@ -39,7 +38,8 @@ namespace X13.Periphery {
         r_a["text"] = "Refresh";
         act[0] = r_a;
         _portsTopic.SetField("Action", act);
-        _portsTopic.SetState(JSC.JSObject.CreateObject());
+        _portsTopic.SetState(true);
+        _scanBusy = 1;
       }
       _portValuesSR = _portsTopic.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Value, PortValuesChanged);
 
@@ -55,6 +55,11 @@ namespace X13.Periphery {
     }
 
     private static void ScanSerialPorts(object o, bool intervalScan) {
+      if(_portsTopic.GetState().ValueType==JSC.JSValueType.Boolean && (bool)_portsTopic.GetState()) {
+        Interlocked.CompareExchange(ref _scanBusy, 1, 0);  // turn on scan
+      } else {
+        Interlocked.CompareExchange(ref _scanBusy, 0, 1);  // turn off scan
+      }
       if(Interlocked.CompareExchange(ref _scanBusy, 2, 1) != 1) {
         return;
       }
@@ -122,7 +127,6 @@ namespace X13.Periphery {
 
     public MsGSerial(SerialPort port) {
       _port = port;
-
       _sendQueue = new Queue<MsMessage>();
       _sndBuf = new byte[384];
 

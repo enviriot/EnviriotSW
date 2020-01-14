@@ -40,7 +40,7 @@ namespace X13.Periphery {
       RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
       RPC.Register("MqsDev", MqsDevCctor);
       RPC.Register("MQTT_SN.RefreshPorts", RefreshPortsRpc);
-
+      RPC.Register("MQTT_SN.RefreshNIC", RefreshNICRpc);
     }
 
     public void Start() {
@@ -59,18 +59,6 @@ namespace X13.Periphery {
         _stat.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         _stat.SetState(false);
       }
-
-      //var verV = _owner.GetField("ver");
-      //string verS;
-      //Version ver, verC = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-
-      //if(verV.ValueType != JSC.JSValueType.String || (verS = verV.Value as string) == null || !verS.StartsWith("¤VR") || !Version.TryParse(verS.Substring(3), out ver) || ver < verC) {
-      //  var man = Topic.root.Get("/$YS/TYPES/Ext/Manifest");
-      //  var manJ = JsLib.Clone(man.GetState());
-      //  JsLib.SetField(ref manJ, "Fields.MQTT-SN", JSL.JSON.parse(X13.Periphery.Properties.Resources.MQTT_SN_MANIFEST));
-      //  man.SetState(manJ);
-      //  _owner.SetField("version", "¤VR" + verC.ToString());
-      //}
       _gates.Add(new MsGUdp(this));
       MsGSerial.Init(this);
     }
@@ -183,6 +171,13 @@ namespace X13.Periphery {
 
     private void RefreshPortsRpc(JSC.JSValue[] obj) {
       MsGSerial.StartScan();
+    }
+
+    private void RefreshNICRpc(JSC.JSValue[] obj) {
+      var ug = _gates.OfType<MsGUdp>().FirstOrDefault();
+      if(ug!=null) {
+        ug.RefreshNIC();
+      }
     }
 
     #endregion RPC
