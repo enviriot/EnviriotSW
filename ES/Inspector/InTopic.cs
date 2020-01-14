@@ -28,7 +28,11 @@ namespace X13.UI {
       IsGroupHeader = _parent == null;
       _owner.changed += _owner_PropertyChanged;
       if(IsGroupHeader) {
-        name = string.IsNullOrWhiteSpace(owner.Connection.alias)?owner.Connection.server:owner.Connection.alias;
+        if(owner.Connection.root == _owner) {
+          name = string.IsNullOrWhiteSpace(owner.Connection.alias)?owner.Connection.server:owner.Connection.alias;
+        } else {
+          name = "children";
+        }
         _manifest = _owner.Manifest;  // if(IsGroupHeader) don't use UpdateType(...)
         icon = App.GetIcon("children");
         editor = null;
