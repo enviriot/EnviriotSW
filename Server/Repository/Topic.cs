@@ -296,6 +296,7 @@ namespace X13.Repository {
       public static void Init(Repo repo) {
         Topic._repo = repo;
         Topic.root = new Topic(null, "/", false);
+        Topic.root._manifest = JSObject.CreateObject();
         Topic.root._manifest["attr"] =  new JST.Number((int)(Attribute.Required | Attribute.Internal));
       }
 
