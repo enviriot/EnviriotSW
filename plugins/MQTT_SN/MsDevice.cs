@@ -652,7 +652,12 @@ namespace X13.Periphery {
           if(!msg.IsRequest || msg.tryCnt > 0) {
             SendIntern(msg);
             return;
+          } else if(_pl.verbose) {
+            Log.Warning("{0} $ {1} tryCnt=0", owner.path, msg.ToString());
           }
+        } else {
+          //Log.Warning("no msgs");
+          ResetTimer();
         }
         state = State.Lost;
         if(owner != null) {
