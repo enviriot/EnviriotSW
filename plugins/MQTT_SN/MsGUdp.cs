@@ -21,7 +21,7 @@ namespace X13.Periphery {
     private Timer _advTick;
     private byte _gwRadius;
     private AddrWithMask[] _whiteList;
-    private static int _scanBusy;
+    private int _scanBusy;
 
     public MsGUdp(MQTT_SNPl pl) {
       _pl = pl;
@@ -41,7 +41,7 @@ namespace X13.Periphery {
         return;  // udp disabled
       }
       _scanBusy = 1;
-      ScanNIC();
+      ScanNIC(false);
 
       try {
         _udp = new UdpClient(1883);
@@ -63,32 +63,28 @@ namespace X13.Periphery {
       }
     }
     public void RefreshNIC() {
-      ThreadPool.QueueUserWorkItem((o) => ScanNIC());
+      ThreadPool.QueueUserWorkItem((o) => ScanNIC(true));
     }
 
-    private void ScanNIC() {
-      if(_udpT.GetState().ValueType==JSC.JSValueType.Boolean && (bool)_udpT.GetState()) {
-        Interlocked.CompareExchange(ref _scanBusy, 1, 0);  // turn on scan
-      } else {
-        Interlocked.CompareExchange(ref _scanBusy, 0, 1);  // turn off scan
-      }
+    private void ScanNIC(bool rescan) {
       if(Interlocked.CompareExchange(ref _scanBusy, 2, 1) != 1) {
         return;
       }
-
       List<AddrWithMask> wl = new List<AddrWithMask>();
-      foreach(var c in _udpT.children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
-        var we = AddrWithMask.Parse(c.GetState().Value as string, c.name);
-        if(we == null) {
-          Log.Warning("{0} = {1} is not IpAddress with Mask", c.path, c.GetState().Value as string);
-        } else {
-          wl.Add(we);
+      if(!rescan) {
+        foreach(var c in _udpT.children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
+          var we = AddrWithMask.Parse(c.GetState().Value as string, c.name);
+          if(we == null) {
+            Log.Warning("{0} = {1} is not IpAddress with Mask", c.path, c.GetState().Value as string);
+          } else {
+            wl.Add(we);
+          }
         }
-      }
 
-      if(wl.Any()) {
-        _whiteList = wl.ToArray();
-        wl = null;
+        if(wl.Any()) {
+          _whiteList = wl.ToArray();
+          wl = null;
+        }
       }
       _myIps = Dns.GetHostEntry(Dns.GetHostName()).AddressList.Where(z => z.AddressFamily == AddressFamily.InterNetwork).Union(new IPAddress[] { IPAddress.Loopback }).Select(z => z.GetAddressBytes()).ToArray();
       List<IPAddress> bc = new List<IPAddress>();
@@ -105,10 +101,10 @@ namespace X13.Periphery {
             for(int i = 0; i < ip.Length; ++i) {
               result[i] = (Byte)(ip[i] | (mask[i] ^ 255));
             }
-            X13.Log.Info("{0} - {1}/{2} - {3}", nic.Name, addr.Address, addr.IPv4Mask, nic.OperationalStatus);
             if(nic.NetworkInterfaceType == NetworkInterfaceType.Loopback || nic.OperationalStatus!=OperationalStatus.Up) {
               continue;
             }
+            X13.Log.Info("{0} - {1}/{2} - {3}", nic.Name, addr.Address, addr.IPv4Mask, nic.OperationalStatus);
             bc.Add(new IPAddress(result));
             if(wl != null) {
               wl.Add(new AddrWithMask(ip, mask, nic.Name));
@@ -116,17 +112,19 @@ namespace X13.Periphery {
           }
         }
       }
-      catch(Exception) {    // MONO: NotImplementedException
+      catch(Exception ex) {    // MONO: NotImplementedException
+        Log.Debug("ScanNIC().GetAllNetworkInterfaces - {0}", ex.Message);
       }
       if(bc.Count == 0) {
         bc.Add(new IPAddress(new byte[] { 255, 255, 255, 255 }));
+        Log.Info("ScanNIC() - set default bradcast");
       }
       _bcIps = bc.ToArray();
       if(wl != null) {
         _whiteList = wl.ToArray();
         foreach(var we in wl) {
           var t = _udpT.Get(we.name, true, _udpT);
-          t.SetAttribute(Topic.Attribute.DB);
+          t.SetAttribute(Topic.Attribute.Config);
           t.SetState(we.ToString());
         }
         wl = null;
@@ -192,6 +190,10 @@ namespace X13.Periphery {
       IPAddress addr;
       if(dev == null) {
         addr = IPAddress.Broadcast;
+        if(_bcIps==null) {
+          Log.Error("bcIps == null");
+          return;
+        }
         foreach(var bc in _bcIps) {
           try {
             _udp.Send(buf, buf.Length, new IPEndPoint(bc, 1883));

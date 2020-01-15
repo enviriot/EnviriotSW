@@ -293,7 +293,7 @@ namespace X13.UI {
     }
     private async void FillContextMenuFromChildren(ObservableCollection<Control> l, Task<DTopic> tt) {
       var acts = new Dictionary<string, JSC.JSValue>();
-      if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null) {
+      if(tt.IsCompleted && !tt.IsFaulted && tt.Result != null && tt.Result.children!=null) {
         foreach(var t in tt.Result.children) {
           var z = await t.GetAsync(null);
           if(z.State.ValueType == JSC.JSValueType.Object && z.State.Value != null && (z.State["default"].Defined || z.State["manifest"].Defined)) {
