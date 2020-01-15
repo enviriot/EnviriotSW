@@ -233,7 +233,7 @@ namespace X13.UI {
       var l = new ObservableCollection<Control>();
       JSC.JSValue v1, v2;
       MenuItem mi;
-      if(!base.IsReadonly && _value.ValueType == JSC.JSValueType.Object) {
+      if(!base.IsReadonly && (_value==null || _value.ValueType == JSC.JSValueType.Object)) {
         MenuItem ma = new MenuItem() { Header = "Add" };
         if(_manifest != null && (v1 = _manifest["mi"]).ValueType == JSC.JSValueType.Object) {
           KeyValuePair<string, JSC.JSValue>[] iArr;
