@@ -655,10 +655,8 @@ namespace X13.Periphery {
           } else if(_pl.verbose) {
             Log.Warning("{0} $ {1} tryCnt=0", owner.path, msg.ToString());
           }
-        } else {
-          //Log.Warning("no msgs");
-          ResetTimer();
-        }
+        } // else ping timeout
+
         state = State.Lost;
         if(owner != null) {
           Disconnect();
