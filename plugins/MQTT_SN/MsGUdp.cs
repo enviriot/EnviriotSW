@@ -22,10 +22,12 @@ namespace X13.Periphery {
     private byte _gwRadius;
     private AddrWithMask[] _whiteList;
     private int _scanBusy;
+    private System.Collections.Concurrent.ConcurrentQueue<Tuple<byte[], byte[]>> _inBuf;
 
     public MsGUdp(MQTT_SNPl pl) {
       _pl = pl;
       _scanBusy = 0;
+      _inBuf = new System.Collections.Concurrent.ConcurrentQueue<Tuple<byte[], byte[]>>();
       _udpT = Topic.root.Get("/$YS/MQTT-SN/udp");
 
       if(!_udpT.CheckAttribute(Topic.Attribute.Required) || _udpT.GetState().ValueType!=JSC.JSValueType.Boolean) {
@@ -64,6 +66,17 @@ namespace X13.Periphery {
     }
     public void RefreshNIC() {
       ThreadPool.QueueUserWorkItem((o) => ScanNIC(true));
+    }
+    public void Tick() {
+      Tuple<byte[], byte[]> pck;
+      while(_inBuf.TryDequeue(out pck)) {
+        try {
+          _pl.ProcessInPacket(this, pck.Item1, pck.Item2, 0, pck.Item2.Length);
+        }
+        catch(Exception ex) {
+          Log.Error("ReceiveCallback({0}, {1}) - {2}", new IPAddress(pck.Item1), pck.Item2 == null ? "null" : BitConverter.ToString(pck.Item2), ex.ToString());
+        }
+      }
     }
 
     private void ScanNIC(bool rescan) {
@@ -144,7 +157,7 @@ namespace X13.Periphery {
           if(buf.Length > 1) {
             var mt = (MsMessageType)(buf[0] > 1 ? buf[1] : buf[3]);
             if((mt != MsMessageType.CONNECT && mt != MsMessageType.SEARCHGW) || _whiteList.Any(z => z.Check(addr))) {
-              _pl.ProcessInPacket(this, addr, buf, 0, buf.Length);
+              _inBuf.Enqueue(new Tuple<byte[],byte[]>(addr, buf));
             } else if(_pl.verbose) {
               var msg = MsMessage.Parse(buf, 0, buf.Length);
               if(msg != null) {
@@ -311,6 +324,5 @@ namespace X13.Periphery {
         return (new IPAddress(_addr)).ToString() + "/" + (new IPAddress(_mask)).ToString();
       }
     }
-
   }
 }

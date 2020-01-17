@@ -67,6 +67,11 @@ namespace X13.Periphery {
       for(int i = _devs.Count - 1; i >= 0; i--) {
         _devs[i].Tick();
       }
+      MsGUdp udp = _gates.OfType<MsGUdp>().FirstOrDefault();
+      if(udp!=null) {
+        udp.Tick();
+      }
+      
     }
 
     public void Stop() {

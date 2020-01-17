@@ -90,7 +90,7 @@ namespace X13.Periphery {
     private bool _waitAck;
     private int _duration;
     private int _messageIdGen;
-    private DateTime _toActive;
+    private volatile uint _toActive;
     private string _willPath;
     private byte[] _wilMsg;
     private bool _willRetain;
@@ -99,7 +99,9 @@ namespace X13.Periphery {
     private DateTime _last_RTC;
     private JSC.JSObject _self;
     private byte[] _suppressedInputs;
-
+#if DEBUG
+    private MsMessage _to_Msg;
+#endif
     public readonly Topic owner;
     public IMsGate _gate;
     public byte[] addr;
@@ -268,7 +270,7 @@ namespace X13.Periphery {
         return;
       }
       _duration = msg.Duration * 1100;
-      ResetTimer();
+      ResetTimer(0, msg);
       if(msg.Will) {
         _willPath = string.Empty;
         _wilMsg = null;
@@ -321,7 +323,7 @@ namespace X13.Periphery {
       case MsMessageType.SUBSCRIBE: {
           var tmp = msg as MsSubscribe;
 
-          SyncMsgId(msg.MessageId);
+          SyncMsgId(msg.MessageId, msg);
           int idx;
           ushort topicId = tmp.topicId;
           TopicInfo ti = null;
@@ -372,7 +374,7 @@ namespace X13.Periphery {
         break;
       case MsMessageType.REGISTER: {
           var tmp = msg as MsRegister;
-          ResetTimer();
+          ResetTimer(0, msg);
           try {
             TopicInfo ti;
 
@@ -429,12 +431,12 @@ namespace X13.Periphery {
             ti = GetTopicInfo(tmp.TopicId, tmp.topicIdType, false);
           }
           if(tmp.qualityOfService == QoS.AtMostOnce || (tmp.qualityOfService == QoS.MinusOne && (tmp.topicIdType == TopicIdType.PreDefined || tmp.topicIdType == TopicIdType.ShortName))) {
-            ResetTimer();
+            ResetTimer(0, msg);
           } else if(tmp.qualityOfService == QoS.AtLeastOnce) {
-            SyncMsgId(tmp.MessageId);
+            SyncMsgId(tmp.MessageId, msg);
             Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
           } else if(tmp.qualityOfService == QoS.ExactlyOnce) {
-            SyncMsgId(tmp.MessageId);
+            SyncMsgId(tmp.MessageId, msg);
             // QoS2 not supported, use QoS1
             Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
           } else {
@@ -446,7 +448,7 @@ namespace X13.Periphery {
             _lastInPub = tmp;
             switch(ti.dType & ~DType.TypeMask) {
             case DType.None:
-                SetValue(ti, tmp.Data, tmp.Retained);
+              SetValue(ti, tmp.Data, tmp.Retained);
               break;
             case DType.RTC:
               if(tmp.Data != null && tmp.Data.Length == 6) {
@@ -508,7 +510,7 @@ namespace X13.Periphery {
               Log.Warning("{0} PingReq from unknown device: {1}", owner.path, tmp.ClientId);
             }
           } else {
-            ResetTimer();
+            ResetTimer(0, msg);
             if(_gate != null) {
               _gate.SendGw(this, new MsMessage(MsMessageType.PINGRESP));
               if(_pl.Statistic) {
@@ -640,7 +642,7 @@ namespace X13.Periphery {
     }
 
     public void Tick() {
-      if(_state != State.Lost && _state != State.Disconnected && _toActive < DateTime.Now) {
+      if(_state != State.Lost && _state != State.Disconnected && ((int)_toActive - (int)(DateTime.Now.Ticks>>16)) < 0) {
         MsMessage msg = null;
         lock(_sendQueue) {
           if(_sendQueue.Count > 0) {
@@ -652,11 +654,20 @@ namespace X13.Periphery {
           if(!msg.IsRequest || msg.tryCnt > 0) {
             SendIntern(msg);
             return;
-          } else if(_pl.verbose) {
-            Log.Warning("{0} $ {1} tryCnt=0", owner.path, msg.ToString());
+          } else {
+#if DEBUG
+            if(_pl.verbose) {
+              Log.Warning("{0} $ {1} tryCnt=0", owner.path, msg.ToString());
+            }
+#endif
           }
-        } // else ping timeout
-
+        } else { // ping timeout
+#if DEBUG
+          if(_pl.verbose) {
+            Log.Warning("timeout Msg={0}", _to_Msg!=null?_to_Msg.ToString():"null");
+          }
+#endif
+        }
         state = State.Lost;
         if(owner != null) {
           Disconnect();
@@ -768,7 +779,6 @@ namespace X13.Periphery {
           rez.extension = p;
           _pl._plcs.Add(p);
         }
-        //UpdateInMute();
       }
       if(!rez.registred) {
         if(sendRegister) {
@@ -1016,8 +1026,8 @@ namespace X13.Periphery {
       Interlocked.CompareExchange(ref _messageIdGen, 1, 0xFFFF);
       return (ushort)rez;
     }
-    private void SyncMsgId(ushort p) {
-      ResetTimer();
+    private void SyncMsgId(ushort p, MsMessage msg) {
+      ResetTimer(0, msg);
       int nid = p;
       if(nid == 0xFFFE) {
         nid++;
@@ -1089,7 +1099,7 @@ namespace X13.Periphery {
       si.Add(0);
       int idx, i;
       JSC.JSValue sj;
-      foreach(var ti in _topics.Where(z=>z.tag.StartsWith("I") || z.tag.StartsWith("A"))) {
+      foreach(var ti in _topics.Where(z => z.tag.StartsWith("I") || z.tag.StartsWith("A"))) {
         if(ti.tag.Length > 2 && int.TryParse(ti.tag.Substring(2), out idx) && (sj = ti.topic.GetField("MQTT-SN.suppressed")).ValueType == JSC.JSValueType.Boolean && ((bool)sj)) {
           i = idx / 8;
           while(si.Count <= i) {
@@ -1132,7 +1142,7 @@ namespace X13.Periphery {
       if(msg != null || state == State.AWake) {
         SendIntern(msg);
       } else if(!_waitAck) {
-        ResetTimer();
+        ResetTimer(0, rMsg);
       }
     }
     internal void Send(MsMessage msg) {
@@ -1190,14 +1200,15 @@ namespace X13.Periphery {
         msg = null;
         lock(_sendQueue) {
           if(_sendQueue.Count == 0 && state == State.AWake) {
+            var msg_sl = new MsMessage(MsMessageType.PINGRESP);
             if(_gate != null) {
-              _gate.SendGw(this, new MsMessage(MsMessageType.PINGRESP));
+              _gate.SendGw(this, msg_sl);
               if(_pl.Statistic) {
                 Stat(true, MsMessageType.PINGRESP, false);
               }
             }
             var st = owner.GetField("MQTT-SN.SleepTime");
-            ResetTimer(st.IsNumber && (int)st > 0 ? (3100 + (int)st * 1550) : _duration);  // t_wakeup
+            ResetTimer(st.IsNumber && (int)st > 0 ? (3100 + (int)st * 1550) : _duration, msg_sl);  // t_wakeup
             state = State.ASleep;
             break;
           }
@@ -1207,9 +1218,12 @@ namespace X13.Periphery {
         }
       }
     }
-    private void ResetTimer(int period = 0) {
+    private void ResetTimer(int period = 0, MsMessage msg = null) {
       if(period == 0) {
         if(_waitAck) {
+#if DEBUG
+          Log.Debug("$ {0}.ResetTimer _waitAck", owner.name);
+#endif
           return;
         }
         if(_sendQueue.Count > 0) {
@@ -1218,8 +1232,14 @@ namespace X13.Periphery {
           period = _duration;
         }
       }
-      //Log.Debug("$ {0}._activeTimer={1}", owner.name, period);
-      _toActive = DateTime.Now.AddMilliseconds(period);
+      var dt = DateTime.Now.AddMilliseconds(period);
+      _toActive = (uint)(dt.Ticks >> 16);
+#if DEBUG
+      _to_Msg = msg;
+      if(_pl.verbose) {
+        Log.Debug("$ {0}._activeTimer={1:HH:mm:ss.ff} msg={2}", owner.name, dt, msg!=null?msg.ToString():"null");
+      }
+#endif
     }
     internal void Disconnect(ushort duration = 0) {
       if(duration == 0 && !string.IsNullOrEmpty(_willPath)) {
@@ -1232,7 +1252,7 @@ namespace X13.Periphery {
         if(state == State.ASleep) {
           state = State.AWake;
         }
-        ResetTimer(3100 + duration * 1550);  // t_wakeup
+        ResetTimer(3100 + duration * 1550, new MsMessage(MsMessageType.PINGRESP));  // t_wakeup
         this.Send(new MsDisconnect());
         state = State.ASleep;
         owner.SetField("MQTT-SN.SleepTime", new JSL.Number(duration), owner);
