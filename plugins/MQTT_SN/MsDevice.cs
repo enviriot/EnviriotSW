@@ -1222,7 +1222,9 @@ namespace X13.Periphery {
       if(period == 0) {
         if(_waitAck) {
 #if DEBUG
-          Log.Debug("$ {0}.ResetTimer _waitAck", owner.name);
+          if(_pl.verbose) {
+            Log.Debug("$ {0}.ResetTimer _waitAck", owner.name);
+          }
 #endif
           return;
         }

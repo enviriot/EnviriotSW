@@ -1,6 +1,7 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
+using NiL.JS.Extensions;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
@@ -16,7 +17,7 @@ namespace X13.Periphery {
   [ExportMetadata("name", "MQTT_SN")]
   public class MQTT_SNPl : IPlugModul {
     private Topic _owner;
-    private Topic _verbose;
+    private SubRec _verboserSR;
     private Topic _stat;
     private Random _rand;
 
@@ -45,15 +46,16 @@ namespace X13.Periphery {
 
     public void Start() {
       _owner = Topic.root.Get("/$YS/MQTT-SN");
-      _verbose = _owner.Get("verbose");
-      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
+      var verboseT = _owner.Get("verbose");
+      if(verboseT.GetState().ValueType != JSC.JSValueType.Boolean) {
+        verboseT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
 #if DEBUG
-        _verbose.SetState(true);
+        verboseT.SetState(true);
 #else
-        _verbose.SetState(false);
+        verboseT.SetState(false);
 #endif
       }
+      _verboserSR = verboseT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, (p, s) => verbose = (_verboserSR.setTopic != null && _verboserSR.setTopic.GetState().As<bool>()));
       _stat = _owner.Get("statistic");
       if(_stat.GetState().ValueType != JSC.JSValueType.Boolean) {
         _stat.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
@@ -101,11 +103,7 @@ namespace X13.Periphery {
     }
     #endregion IPlugModul Members
 
-    public bool verbose {
-      get {
-        return _verbose != null && (bool)_verbose.GetState();
-      }
-    }
+    public bool verbose;
 
     public bool Statistic {
       get {

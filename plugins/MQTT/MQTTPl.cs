@@ -1,6 +1,7 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
+using NiL.JS.Extensions;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
@@ -15,7 +16,7 @@ namespace X13.MQTT {
   [ExportMetadata("name", "MQTT")]
   public class MQTTPl : IPlugModul {
     private Topic _owner;
-    private Topic _verbose;
+    private SubRec _verboserSR;
     private SubRec _subMq;
     private List<MqSite> _sites;
     private List<MqClient> _clients;
@@ -31,15 +32,16 @@ namespace X13.MQTT {
     }
     public void Start() {
       _owner = Topic.root.Get("/$YS/MQTT");
-      _verbose = _owner.Get("verbose");
-      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+      var verboseT = _owner.Get("verbose");
+      if(verboseT.GetState().ValueType != JSC.JSValueType.Boolean) {
+        verboseT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
 //#if DEBUG
-//        _verbose.SetState(true);
+//        verboseT.SetState(true);
 //#else
-        _verbose.SetState(false);
+        verboseT.SetState(false);
 //#endif
       }
+      _verboserSR = verboseT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, (p, s) => verbose = (_verboserSR.setTopic != null && _verboserSR.setTopic.GetState().As<bool>()));
       _subMq = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "MQTT.uri", SubFunc);
     }
     public void Tick() {
@@ -71,11 +73,7 @@ namespace X13.MQTT {
     }
     #endregion IPlugModul Members
 
-    public bool verbose {
-      get {
-        return _verbose != null && (bool)_verbose.GetState();
-      }
-    }
+    public bool verbose;
 
     #region RPC
     private void ReconnectRpc(JSC.JSValue[] obj) {
