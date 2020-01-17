@@ -22,10 +22,21 @@ namespace X13.MQTT {
     private const int KEEP_ALIVE = 30000;
     private bool _waitPingResp;
     private Timer _tOut;
+    private Status _status;
 
     public readonly List<MqSite> Sites;
     public readonly string Signature;
-    public Status status { get; private set; }
+    public Status status {
+      get {
+        return _status;
+      }
+      private set {
+        _status = value;
+        var t = Topic.root.Get("/$YS/MQTT/Connections").Get(_host);
+        t.SetAttribute(Topic.Attribute.Readonly);
+        t.SetState(value.ToString());
+      }
+    }
 
     public MqClient(MQTTPl pl, string host, int port, string uName, string uPass) {
       _tOut = new Timer(new TimerCallback(TimeOut));
@@ -55,6 +66,10 @@ namespace X13.MQTT {
     }
     public void Dispose() {
       _tOut.Change(Timeout.Infinite, Timeout.Infinite);
+      Disconnect();
+    }
+
+    private void Disconnect() {
       status = Status.Disconnected;
       _waitPingResp = false;
       var s = Interlocked.Exchange(ref _stream, null);
@@ -134,7 +149,7 @@ namespace X13.MQTT {
       case MessageType.PINGRESP:
         _waitPingResp = false;
         break;
-      case MessageType.PUBLISH:{
+      case MessageType.PUBLISH: {
           MqPublish pm=msg as MqPublish;
           if(msg.MessageID!=0) {
             if(msg.QualityOfService==QoS.AtLeastOnce) {
@@ -166,9 +181,9 @@ namespace X13.MQTT {
 
     private void ProccessPublishMsg(MqPublish pm) {
       string path=pm.Path;
-      if(string.IsNullOrEmpty(path)){
+      if(string.IsNullOrEmpty(path)) {
         path="/";
-      } else if(path[0]!='/'){
+      } else if(path[0]!='/') {
         path="/"+path;
       }
       foreach(var s in Sites.Where(z => path.StartsWith(z.remotePrefix))) {
@@ -200,6 +215,17 @@ namespace X13.MQTT {
         Dispose();
         _tOut.Change(1500, KEEP_ALIVE);
       }
+    }
+
+    public void Restart(object o) {
+      Log.Info("mqtt://{0}:{1} - {2}", _host, _port, status);
+      if(status == Status.Connected) {
+        Disconnect();
+      }
+      if(status == Status.Disconnected) {
+        Connect();
+      }
+      Log.Info("mqtt://{0}:{1} - {2}", _host, _port, status);
     }
 
     /*

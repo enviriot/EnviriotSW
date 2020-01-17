@@ -27,6 +27,7 @@ namespace X13.MQTT {
 
     #region IPlugModul Members
     public void Init() {
+      RPC.Register("MQTT.Reconnect", ReconnectRpc);
     }
     public void Start() {
       _owner = Topic.root.Get("/$YS/MQTT");
@@ -75,6 +76,21 @@ namespace X13.MQTT {
         return _verbose != null && (bool)_verbose.GetState();
       }
     }
+
+    #region RPC
+    private void ReconnectRpc(JSC.JSValue[] obj) {
+      string path;
+      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+        return;
+      }
+      var s = _sites.FirstOrDefault(z => z.Owner.path==path);
+      if(s==null) {
+        Log.Warning("No MQTT binding for {0}", path);
+      }
+      System.Threading.ThreadPool.QueueUserWorkItem(s.Client.Restart);
+    }
+    #endregion RPC
+
 
     private void SubFunc(Perform p, SubRec sr) {
       if(p.art == Perform.Art.create) {

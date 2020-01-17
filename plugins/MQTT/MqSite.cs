@@ -44,6 +44,28 @@ namespace X13.MQTT {
       if(Client.status == MqClient.Status.Connected) {
         this.Connected();
       }
+      var act = this.Owner.GetField("Action");
+      
+      JSC.JSValue txt;
+      if(act==null || !act.Any(z => z.Value.ValueType==JSC.JSValueType.Object && (txt=z.Value["name"]).ValueType == JSC.JSValueType.String && (txt.Value as string) == "MQTT.Reconnect")) {
+        int i;
+        JSL.Array act_n;
+        if(act==null) {
+          act_n = new JSL.Array(1);
+          i = 0;
+        } else {
+          int j = act.Count();
+          act_n = new JSL.Array(j+1);
+          for(i = 0; i<j; i++) {
+            act_n[i] = act[i.ToString()];
+          }
+        }
+        var r_a = JSC.JSObject.CreateObject();
+        r_a["name"] = "MQTT.Reconnect";
+        r_a["text"] = "Reconnect MQTT connection";
+        act_n[i] = r_a;
+        this.Owner.SetField("Action", act_n);
+      }
     }
     public void Publish(string path, string payload) {
       string lp = (path.Length > remotePrefix.Length) ? path.Substring(remotePrefix.Length + 1) : string.Empty;
