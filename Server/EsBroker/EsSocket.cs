@@ -74,7 +74,7 @@ namespace X13.EsBroker {
     public void Dispose() {
       Dispose(false);
     }
-    protected IPEndPoint EndPoint { get { return (IPEndPoint)_socket.Client.RemoteEndPoint; } }
+    protected IPEndPoint EndPoint { get { return  (_socket==null || !_socket.Connected || _socket.Client==null || !_socket.Client.Connected)?(new IPEndPoint(IPAddress.Broadcast, 65535)):(IPEndPoint)_socket.Client.RemoteEndPoint; } }
     public override string ToString() {
       var rep=(IPEndPoint)_socket.Client.RemoteEndPoint;
       return Convert.ToBase64String(rep.Address.GetAddressBytes().Union(BitConverter.GetBytes((ushort)rep.Port)).ToArray()).TrimEnd('=').Replace('/', '*');

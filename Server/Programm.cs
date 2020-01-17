@@ -45,7 +45,6 @@ namespace X13 {
         var srv = new Programm(cfgPath);
         if(srv.Start()) {
           Console.ForegroundColor = ConsoleColor.Green;
-          Console.WriteLine("Enviriot v.{0}", Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
           Console.WriteLine("Press Enter to Exit");
           Console.ResetColor();
           Console.Read();
@@ -97,6 +96,7 @@ namespace X13 {
 
     internal Programm(string cfgPath) {
       _cfgPath = cfgPath;
+      Log.Info("Enviriot v.{0}", Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
     }
     internal bool Start() {
       _singleInstance = new Mutex(true, "Global\\X13.enviriot");
