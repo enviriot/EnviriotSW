@@ -21,6 +21,7 @@ namespace X13.Repository {
     private List<Action<Perform>> _subscribers;
     private int _busyFlag;
     private int _pfPos;
+    private DateTime? _saveConfigT;
 
     internal void DoCmd(Perform cmd, bool intern) {
       if(intern && _prOp.Count > 0 && _pfPos < _prOp.Count) {
@@ -194,12 +195,21 @@ namespace X13.Repository {
       }
     }
 
+    private void PublishSaveConfig(Perform p) {
+      if(p.art==Perform.Art.changedField || p.art==Perform.Art.changedState || p.art==Perform.Art.remove) {
+        if(p.src.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config)) {
+          _saveConfigT = DateTime.Now.AddSeconds(5);
+        }
+      }
+    }
+
     #endregion internal Members
 
     public Repo() {
       _tcQueue = new ConcurrentQueue<Perform>();
       _prOp = new List<Perform>(128);
       _subscribers = new List<Action<Perform>>();
+      _saveConfigT = null;
     }
 
     #region Import/Export
@@ -340,6 +350,7 @@ namespace X13.Repository {
 
     public void Start() {
       Repo.Import("../data/base.xst");
+      SubscribeAll(PublishSaveConfig);
     }
 
     public void Tick() {
@@ -388,6 +399,11 @@ namespace X13.Repository {
 
       //int PC = _prOp.Count, DB = _db_q.Count;
       _prOp.Clear();
+
+      if(_saveConfigT!=null && _saveConfigT<DateTime.Now) {
+        _saveConfigT=null;
+        Export("../data/server.xst", Topic.root, true);
+      }
 
       //if(QC!=0 || PC!=0 || DB!=0) X13.Log.Debug("PLC.Tick QC="+QC.ToString()+", PC="+PC.ToString()+", DB="+ DB.ToString());
       _busyFlag = 1;

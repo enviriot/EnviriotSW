@@ -211,7 +211,11 @@ namespace X13.Repository {
       if(_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
         attr = new JST.Number((int)value);
       } else {
-        attr = new JST.Number((int)value | (int)attr);
+        int old = (int)attr;
+        if(value == Attribute.DB || value == Attribute.Config) {
+          old &= ~((int)Attribute.Saved);
+        }
+        attr = new JST.Number((int)value | old);
       }
       var c = Perform.Create(this, "attr", attr, null);
       _repo.DoCmd(c, false);
