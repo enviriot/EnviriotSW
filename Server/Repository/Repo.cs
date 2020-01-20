@@ -343,13 +343,16 @@ namespace X13.Repository {
       Topic.I.Init(this);
       _busyFlag = 1;
       if(File.Exists("../data/server.xst")) {
-        Import("../data/Server.xst");
+        Import("../data/server.xst");
       }
+      this.Tick();
       this.Tick();
     }
 
     public void Start() {
       Repo.Import("../data/base.xst");
+      this.Tick();
+      this.Tick();
       SubscribeAll(PublishSaveConfig);
     }
 

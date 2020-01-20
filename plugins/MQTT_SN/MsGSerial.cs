@@ -31,7 +31,6 @@ namespace X13.Periphery {
       ThreadPool.RegisterWaitForSingleObject(_startScan, ScanSerialPorts, null, 289012, false);
       _portsTopic = Topic.root.Get("/$YS/MQTT-SN/ports");
       if(!_portsTopic.CheckAttribute(Topic.Attribute.Required) || _portsTopic.GetState().ValueType!=JSC.JSValueType.Boolean) {
-        _portsTopic.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         var act = new JSL.Array(1);
         var r_a = JSC.JSObject.CreateObject();
         r_a["name"] = "MQTT_SN.RefreshPorts";
@@ -39,6 +38,7 @@ namespace X13.Periphery {
         act[0] = r_a;
         _portsTopic.SetField("Action", act);
         _portsTopic.SetState(true);
+        _portsTopic.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         _scanBusy = 1;
       }
       _portValuesSR = _portsTopic.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Value, PortValuesChanged);
