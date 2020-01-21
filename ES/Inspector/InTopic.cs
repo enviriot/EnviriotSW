@@ -208,6 +208,18 @@ namespace X13.UI {
         }
         //Log.Debug("$ " + pr._owner.path + "(" + art.ToString() + ", " + (child != null ? child.path : "null") + ")");
       }
+      if(art == DTopic.Art.Refresh) {
+        if(_items!=null) {
+          if(_isExpanded) {
+            foreach(var ch in _items) {
+              _collFunc(ch, false);
+            }
+            _isExpanded = false;
+          }
+          _populated = false;
+          _items.Clear();
+        }
+      }
       if(IsGroupHeader) {
         if(art == DTopic.Art.type) {
           _manifest = _owner.Manifest;

@@ -222,6 +222,9 @@ namespace X13.Data {
         Log.AddEntry((LogLevel)(int)msg[2], (msg[1].Value as JSL.Date).ToDateTime(), msg[3].Value as string);
         break;
       case 99:  // EsSocket Closed
+        _connEvnt.Clear();
+        _reqs.Clear();
+        root.Clear();
         Status = ClientState.Offline;
         break;
       }

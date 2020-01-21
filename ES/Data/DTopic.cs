@@ -306,6 +306,23 @@ namespace X13.Data {
       }
     }
 
+    internal void Clear() {
+      if(_children!=null) {
+        foreach(var ch in _children) {
+          ch.Clear();
+        }
+        _children = null;
+      }
+      _state = null;
+      _manifest = null;
+      if(_req!=null) {
+        _req.Response(false, new JSL.Array { this.ToString(), "Offline" });
+        App.PostMsg(_req);
+        _req = null;
+      }
+      ChangedReise(Art.Refresh, this);
+    }
+
     public override string ToString() {
       return this.fullPath;
     }
@@ -442,7 +459,7 @@ namespace X13.Data {
 
           }
         } else {
-          _tcs.SetException(new ApplicationException((value == null ? "TopicReqError" : value.ToString())));
+          _tcs.TrySetException(new ApplicationException((value == null ? "TopicReqError" : value.ToString())));
         }
       }
 
@@ -602,6 +619,7 @@ namespace X13.Data {
       type,
       addChild,
       RemoveChild,
+      Refresh
     }
   }
 }
