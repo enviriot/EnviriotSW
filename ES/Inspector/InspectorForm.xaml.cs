@@ -33,6 +33,7 @@ namespace X13.UI {
       _editors["Double"] = veDouble.Create;
       _editors["Editor"] = veEditor.Create;
       _editors["Enum"] = veEnum.Create;
+      _editors["EsStatus"] = veEsStatus.Create;
       _editors["Integer"] = veInteger.Create;
       _editors["JS"] = veJS.Create;
       _editors["Hexadecimal"] = veHexadecimal.Create;

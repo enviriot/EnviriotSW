@@ -30,12 +30,13 @@ namespace X13.UI {
       if(IsGroupHeader) {
         if(owner.Connection.root == _owner) {
           name = string.IsNullOrWhiteSpace(owner.Connection.alias)?owner.Connection.server:owner.Connection.alias;
+          editor = veEsStatus.Create(this, _owner.Manifest);
         } else {
           name = "children";
+          editor = null;
         }
         _manifest = _owner.Manifest;  // if(IsGroupHeader) don't use UpdateType(...)
         icon = App.GetIcon("children");
-        editor = null;
         levelPadding = 1;
 
         if(_owner.children != null && _owner.children.Any()) {
@@ -261,7 +262,7 @@ namespace X13.UI {
         l.Add(new Separator());
       }
       if(_owner.Connection.Status!=ClientState.Ready) {
-        if(_owner.Connection.root==_owner) {
+        if(_owner.Connection.root==_owner && (_owner.Connection.Status==ClientState.Idle || _owner.Connection.Status==ClientState.Offline)) {
           mi = new MenuItem() { Header = "Connect" };
           mi.Click += miOpen_Click;
           l.Add(mi);

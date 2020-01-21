@@ -161,6 +161,7 @@
       <DependentUpon>veDevicePLC.xaml</DependentUpon>
     </Compile>
     <Compile Include="ValueEditors\veEnum.cs" />
+    <Compile Include="ValueEditors\veEsStatus.cs" />
     <Compile Include="ValueEditors\veHexadecimal.cs" />
     <Compile Include="ValueEditors\veEditor.cs" />
     <Compile Include="ValueEditors\veJS.xaml.cs">

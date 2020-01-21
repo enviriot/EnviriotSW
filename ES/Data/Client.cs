@@ -48,6 +48,7 @@ namespace X13.Data {
       _reqs = new LinkedList<ClRequest>();
       root = new DTopic(this);
     }
+
     public bool Connect() {
       Status = ClientState.Connecting;
       try {
@@ -62,7 +63,7 @@ namespace X13.Data {
       }
       catch(Exception ex) {
         Log.Warning("{0}.Connect - {1}", this.ToString(), ex.Message);
-        Status = ClientState.Idle;
+        Status = ClientState.Offline;
         return false;
       }
       return true;
@@ -130,7 +131,7 @@ namespace X13.Data {
         lock(_connEvnt) {
           _connEvnt.Add(new WaitConnect(msg, this));
         }
-        if(Status == ClientState.Idle) {
+        if(Status == ClientState.Idle || Status == ClientState.Offline) {
           this.Connect();
         }
       }
@@ -220,6 +221,9 @@ namespace X13.Data {
         }
         Log.AddEntry((LogLevel)(int)msg[2], (msg[1].Value as JSL.Date).ToDateTime(), msg[3].Value as string);
         break;
+      case 99:  // EsSocket Closed
+        Status = ClientState.Offline;
+        break;
       }
     }
 
@@ -238,8 +242,6 @@ namespace X13.Data {
         }
       }
     }
-
-
 
     private class ClRequest : INotMsg {
       public int msgId;
@@ -296,6 +298,7 @@ namespace X13.Data {
   }
   public enum ClientState {
     Idle,
+    Offline,
     Connecting,
     Ready,
     BadAuth,

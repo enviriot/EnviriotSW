@@ -103,7 +103,7 @@
         <Image Source="{Binding Icon}" Width="16" Height="16" />
       </Button.Content>
     </Button>
-    <ContentControl Name="ccMain" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,0" Focusable="False" TabIndex="3" Content='{Binding Path=contentForm, TargetNullValue="Loading.."}' >
+    <ContentControl Name="ccMain" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,0" Focusable="False" TabIndex="3" Content='{Binding Path=contentForm, TargetNullValue="Offline"}' >
     </ContentControl>
   </Grid>
 </x13ui:BaseWindow>
