@@ -109,7 +109,7 @@ namespace X13.Data {
         ActiveDocument = catalog;
         return catalog;
       } else {
-        var doc = Files.OfType<UI.UIDocument>().FirstOrDefault(z => z != null && ((z.data != null && z.data.fullPath == path) || z.ContentId == id));
+        var doc = Files.OfType<UI.UIDocument>().FirstOrDefault(z => z != null && ((z.data != null && z.data.fullPath == path) || ContentIdEqual(z.ContentId, path, view)));
         if(doc==null) {
           doc = new UI.UIDocument(path, view);
           Files.Add(doc);
@@ -117,6 +117,22 @@ namespace X13.Data {
         ActiveDocument = doc;
         return doc;
       }
+    }
+    private bool ContentIdEqual(string id, string path, string view) {
+      Uri u;
+      if(!Uri.TryCreate(id, UriKind.Absolute, out u)) {
+        return false;
+      }
+      string id_view = u.Query;
+      if(id_view != null && id_view.StartsWith("?view=")) {
+        id_view = id_view.Substring(6);
+      } else {
+        id_view = null;
+      }
+      if(u.GetLeftPart(UriPartial.Path) != path) {
+        return false;
+      }
+      return (id_view??"IN")==(view??"IN");
     }
     public Task<DTopic> GetAsync(Uri url) {
       var up = Uri.UnescapeDataString(url.UserInfo).Split(':');

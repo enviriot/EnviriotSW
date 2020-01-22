@@ -276,7 +276,7 @@ namespace X13.UI {
       if(_owner.Connection.Status!=ClientState.Ready) {
         if(_owner.Connection.root==_owner && (_owner.Connection.Status==ClientState.Idle || _owner.Connection.Status==ClientState.Offline)) {
           mi = new MenuItem() { Header = "Connect" };
-          mi.Click += miOpen_Click;
+          mi.Click += miConnect_Click;
           l.Add(mi);
           mi = new MenuItem() { Header = "Delete connection" };
           mi.Click += miDelConn_Click;
@@ -512,6 +512,12 @@ namespace X13.UI {
     }
     private void miOpen_Click(object sender, System.Windows.RoutedEventArgs e) {
       App.Workspace.Open(_owner.fullPath);
+    }
+    private void miConnect_Click(object sender, System.Windows.RoutedEventArgs e) {
+      var cl = _owner.Connection;
+      if(cl!=null && (cl.Status==ClientState.Idle || cl.Status==ClientState.Offline)) {
+        cl.Connect();
+      }
     }
     private void miDelConn_Click(object sender, System.Windows.RoutedEventArgs e) {
       App.Workspace.Clients.Remove(_owner.Connection);

@@ -76,18 +76,21 @@ namespace X13.UI {
 
     private void ClientChanged(object sender, PropertyChangedEventArgs e) {
       if(e.PropertyName == "Status") {
-        if(this.connected) {
-          Uri url;
-          if(_data == null && _path != null && Uri.TryCreate(_path, UriKind.Absolute, out url)) {
-            RequestData(url);
-          }
-        } else {
-          contentForm = null;
-          _data = null;
-          PropertyChangedReise("data");
-        }
-        PropertyChangedReise("connected");
+        Dispatcher.BeginInvoke(new Action(ClientStatusChanged));
       }
+    }
+    private void ClientStatusChanged() {
+      if(this.connected) {
+        Uri url;
+        if(_data == null && _path != null && Uri.TryCreate(_path, UriKind.Absolute, out url)) {
+          RequestData(url);
+        }
+      } else {
+        contentForm = null;
+        _data = null;
+        PropertyChangedReise("data");
+      }
+      PropertyChangedReise("connected");
     }
 
     private void RequestData(Uri url) {
