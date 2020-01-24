@@ -438,6 +438,7 @@ namespace X13.PersistentStorage {
 
       _tr = new Thread(new ThreadStart(ThreadM));
       _tr.IsBackground = true;
+      _tr.Name = "PersistentStorage";
       _tr.Priority = ThreadPriority.BelowNormal;
       _tr.Start();
       _tick.WaitOne();  // wait load

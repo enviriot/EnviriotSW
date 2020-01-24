@@ -20,7 +20,7 @@ namespace X13 {
         if(string.IsNullOrWhiteSpace(args[i])) {
           continue;
         }
-        if(args[i].Length > 1 && ( args[i][0] == '/' || args[i][0] == '-' )) {
+        if(args[i].Length > 1 && (args[i][0] == '/' || args[i][0] == '-')) {
           switch(args[i][1]) {
           case 's':
             flag = 1;
@@ -83,7 +83,7 @@ namespace X13 {
     public static bool IsLinux {
       get {
         int p = (int)Environment.OSVersion.Platform;
-        return ( p == 4 ) || ( p == 6 ) || ( p == 128 );
+        return (p == 4) || (p == 6) || (p == 128);
       }
     }
 
@@ -115,6 +115,7 @@ namespace X13 {
       _terminate = false;
       _thread = new Thread(new ThreadStart(PrThread));
       _thread.Priority = ThreadPriority.Highest;
+      _thread.Name = "MainTick";
       _thread.IsBackground = false;
       _thread.Start();
 
@@ -133,12 +134,13 @@ namespace X13 {
       Log.Finish();
     }
     private void PrThread() {
-      DateTime today = DateTime.Now.Date;
+      DateTime today = DateTime.Now.Date, perfomanceDT = DateTime.Now.AddSeconds(10), now = DateTime.Now;
+      Tuple<bool, DateTime, double> perf_cpu = new Tuple<bool, DateTime, double>(true, now, 0);
 
       if(!IsLinux) {
         int cpuCnt = System.Environment.ProcessorCount;
         if(cpuCnt > 1) {
-          int r = CSWindowsServiceRecoveryProperty.Win32.SetThreadAffinityMask(CSWindowsServiceRecoveryProperty.Win32.GetCurrentThread(), 1 << ( cpuCnt - 1 ));
+          int r = CSWindowsServiceRecoveryProperty.Win32.SetThreadAffinityMask(CSWindowsServiceRecoveryProperty.Win32.GetCurrentThread(), 1 << (cpuCnt - 1));
         }
       }
       InitPlugins();
@@ -146,17 +148,44 @@ namespace X13 {
 
       _tickTimer = new Timer(Tick, null, 100, 15);  // Tick = 1000/64 = 15.625 mS
       int i;
-      //TimeSpan max_w = TimeSpan.Zero, max_a = TimeSpan.Zero, cur_w, cur_a;
-      //var sw_w = new System.Diagnostics.Stopwatch();
-      //var sw_a = new System.Diagnostics.Stopwatch();
-      //int ovr, ovr_cnt=0;
-      //double sum_a = 0, sum_w = 0;
-
+      //int j=1920;
+      //TimeSpan t = TimeSpan.Zero;
+      //var sw = new System.Diagnostics.Stopwatch();
+      //sw.Start();
       do {
-        //sw_a.Start();
+        now = DateTime.Now;
+        if(perfomanceDT < now) {
+          perfomanceDT = now.AddSeconds(500);
+          var perf = X13.Repository.Topic.root.Get("/$YS/Perfomance");
+          if(perf.GetState().ValueType!=NiL.JS.Core.JSValueType.Boolean) {
+            perf.SetAttribute(Repository.Topic.Attribute.DB | Repository.Topic.Attribute.Required);
+            perf.SetState(false);
+          } else if((bool)perf.GetState()) {
+            perf.Get("GC").SetState(GC.GetTotalMemory(false) / 1048576.0);  // MB
+            using(var proc = System.Diagnostics.Process.GetCurrentProcess()) {
+              perf.Get("Memory").SetState(proc.PrivateMemorySize64 / 1048576.0);  // MB
+              perf.Get("Virtual").SetState(proc.VirtualMemorySize64 / 1048576.0);  // MB
+              var cpu = proc.TotalProcessorTime.TotalSeconds;
+              if(perf_cpu.Item1) {
+                perf.Get("CPU").SetState((cpu - perf_cpu.Item3)*100 / (now - perf_cpu.Item2).TotalSeconds);  // Sec
+              }
+              perf_cpu = new Tuple<bool, DateTime, double>(true, now, cpu);
+              perf.Get("Physical").SetState(proc.WorkingSet64 / 1048576.0);  // MB
+            }
+            perf.Get("Updated").SetState(NiL.JS.Core.JSValue.Marshal(now));
+          } else {
+            perf_cpu = new Tuple<bool, DateTime, double>(false, now, 0);
+          }
+        }
         _tick.WaitOne();
-        //sw_w.Start();
-
+        //sw.Stop();
+        //t+=sw.Elapsed;
+        //if(--j<=0) {
+        //  j=1920;
+        //  Log.Debug("Tick = {0:0.000} mS", t.TotalMilliseconds/1920);
+        //  t = TimeSpan.Zero;
+        //}
+        //sw.Restart();
         JsExtLib.Tick();
         for(i = 0; i < _modules.Length; i++) {
           try {
@@ -166,44 +195,13 @@ namespace X13 {
             Log.Error("{0}.Tick() - {1}", _modules[i].GetType().FullName, ex.ToString());
           }
         }
-        var now = DateTime.Now.Date;
-        if(today!=now) {
-          today = now;
-          Log.Info(today.ToLongDateString());
+        if(today!=now.Date) {
+          today = now.Date;
+          Log.Info("{0} v.{1}", today.ToLongDateString(), Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
         }
-        //sw_w.Stop();
-        //sw_a.Stop();
-        //cur_w=sw_w.Elapsed;
-        //cur_a=sw_a.Elapsed;
-        //ovr = ( ( cur_a > max_a )?1:0 ) + ( ( cur_w > max_w )?2:0 );
-        //if(ovr > 0) {
-        //  Log.Warning("Tick Cur A={0:f2} mS, W={1:f2} mS", cur_a.TotalMilliseconds, cur_w.TotalMilliseconds);
-        //  if(( ovr & 1 ) == 1) {
-        //    max_a = cur_a;
-        //  }
-        //  if(( ovr & 2 ) == 2) {
-        //    max_w = cur_w;
-        //  }
-        //}
-        //sum_a += cur_a.TotalMilliseconds;
-        //sum_w += cur_w.TotalMilliseconds;
-        //if(++ovr_cnt > 2000) {
-        //  sum_a = sum_a/ovr_cnt;
-        //  sum_w = sum_w/ovr_cnt;
-        //  Log.Info("Tick Mid A={0:f2} mS, W={1:f2} mS Memory = {2:f3} MB", sum_a, sum_w, GC.GetTotalMemory(false)/1048576.0);
-        //  max_a = TimeSpan.FromMilliseconds((max_a.TotalMilliseconds + sum_a)/2);
-        //  max_w = TimeSpan.FromMilliseconds((max_w.TotalMilliseconds + sum_w)/2);
-
-        //  ovr_cnt = 0;
-        //  sum_a = 0;
-        //  sum_w = 0;
-        //}
-        //sw_a.Reset();
-        //sw_w.Reset();
       } while(!_terminate);
       _tickTimer.Change(-1, -1);
-      //sw_w.Stop();
-      //sw_a.Stop();
+      //sw.Stop();
       StopPlugins();
     }
     private void Tick(object o) {
