@@ -67,17 +67,6 @@ namespace X13.Periphery {
     public void RefreshNIC() {
       ThreadPool.QueueUserWorkItem((o) => ScanNIC(true));
     }
-    public void Tick() {
-      Tuple<byte[], byte[]> pck;
-      while(_inBuf.TryDequeue(out pck)) {
-        try {
-          _pl.ProcessInPacket(this, pck.Item1, pck.Item2, 0, pck.Item2.Length);
-        }
-        catch(Exception ex) {
-          Log.Error("ReceiveCallback({0}, {1}) - {2}", new IPAddress(pck.Item1), pck.Item2 == null ? "null" : BitConverter.ToString(pck.Item2), ex.ToString());
-        }
-      }
-    }
 
     private void ScanNIC(bool rescan) {
       if(Interlocked.CompareExchange(ref _scanBusy, 2, 1) != 1) {
@@ -234,6 +223,18 @@ namespace X13.Periphery {
         Log.Debug("s {0}: {1}  {2}", addr, BitConverter.ToString(buf), msg.ToString());
       }
     }
+    public void Tick() {
+      Tuple<byte[], byte[]> pck;
+      while(_inBuf.TryDequeue(out pck)) {
+        try {
+          _pl.ProcessInPacket(this, pck.Item1, pck.Item2, 0, pck.Item2.Length);
+        }
+        catch(Exception ex) {
+          Log.Error("ReceiveCallback({0}, {1}) - {2}", new IPAddress(pck.Item1), pck.Item2 == null ? "null" : BitConverter.ToString(pck.Item2), ex.ToString());
+        }
+      }
+    }
+
     public byte gwIdx { get { return 0; } }
     public byte gwRadius { get { return _gwRadius; } }
     public string name { get { return "UDP"; } }

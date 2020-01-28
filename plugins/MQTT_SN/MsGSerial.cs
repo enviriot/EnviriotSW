@@ -114,6 +114,7 @@ namespace X13.Periphery {
           t.Remove(_portsTopic);
         }
       }
+      Thread.Sleep(200); // prevent rescan
       _scanBusy = 1;
     }
 
@@ -122,6 +123,12 @@ namespace X13.Periphery {
     private byte[] _sndBuf;
     private DateTime _advTick;
 
+    private byte[] _inBuffer;
+    private bool _inEscChar;
+    private int _inCnt;
+    private int _inLen;
+    private DateTime _busyTime;
+
     internal bool _useSlip;
     internal byte[] _gateAddr;
 
@@ -129,6 +136,11 @@ namespace X13.Periphery {
       _port = port;
       _sendQueue = new Queue<MsMessage>();
       _sndBuf = new byte[384];
+      _inBuffer = new byte[384];
+      _inEscChar = false;
+      _inCnt = -1;
+      _inLen = -1;
+      _busyTime = DateTime.Now;
 
       Topic t;
       if(Topic.root.Exist("/$YS/MQTT-SN/radius", out t) && t.GetState().IsNumber) {
@@ -139,7 +151,7 @@ namespace X13.Periphery {
       } else {
         gwRadius = 1;
       }
-      ThreadPool.QueueUserWorkItem(CommThread);
+      ThreadPool.QueueUserWorkItem(DiscoveryGate);
     }
 
     #region IMsGate Members
@@ -154,6 +166,49 @@ namespace X13.Periphery {
       lock(_sendQueue) {
         _sendQueue.Enqueue(msg);
       }
+    }
+    public void Tick() {
+      MsMessage msg = null;
+      try {
+        if(_port != null && _port.IsOpen) {
+          if(GetPacket(ref _inLen, _inBuffer, ref _inCnt, ref _inEscChar)) {
+            if(_inLen == 5 && _inBuffer[1] == (byte)MsMessageType.SUBSCRIBE) {
+              _advTick = DateTime.Now.AddMilliseconds(100);   // Send Advertise
+            }
+            if(!_pl.ProcessInPacket(this, _gateAddr, _inBuffer, 0, _inLen)) {
+              _port.DiscardInBuffer();
+            }
+            _inCnt = -1;
+          }
+          if(_busyTime <= DateTime.Now) {
+            lock(_sendQueue) {
+              if(_sendQueue.Count > 0) {
+                msg = _sendQueue.Dequeue();
+              }
+            }
+            if(msg != null) {
+              SendRaw(msg, _sndBuf);
+              _busyTime = DateTime.Now.AddMilliseconds(msg.IsRequest ? 20 : 5);
+            } else if(_advTick < DateTime.Now) {
+              SendRaw(new MsAdvertise(gwIdx, 900), _sndBuf);
+              _advTick = DateTime.Now.AddMinutes(15);
+            }
+          }
+          return;
+        }
+      }
+      catch(IOException ex) {
+        if(_pl.verbose) {
+          Log.Error("MsGSerial({0}).CommThread() - {1}", gwIdx, ex.Message);
+        }
+      }
+      catch(Exception ex) {
+        Log.Error("MsGSerial({0}).CommThread() - {1}", gwIdx, ex.ToString());
+      }
+      if(_pl.verbose) {
+        Log.Debug("MsGSerial({0}).CommThread - exit", gwIdx);
+      }
+      this.Dispose();
     }
     public byte gwIdx { get; private set; }
     public byte gwRadius { get; private set; }
@@ -275,21 +330,15 @@ namespace X13.Periphery {
       }
       return false;
     }
-    private void CommThread(object o) {
-      byte[] buf = new byte[256];
-      bool escChar = false;
-      int cnt = -1;
-      int len = -1;
-      MsMessage msg;
-      DateTime busyTime = DateTime.Now;
+    private void DiscoveryGate(object o) {
       bool found = false;
 
       try {
         var tryCnt = 3;
         do {
-          busyTime = DateTime.Now.AddMilliseconds(1100);
-          cnt = -1;
-          len = -1;
+          _busyTime = DateTime.Now.AddMilliseconds(1100);
+          _inCnt = -1;
+          _inLen = -1;
 
           _port.DiscardInBuffer();
           _port.Write(_disconnectAll, 0, _disconnectAll.Length);   // Send Disconnect
@@ -297,52 +346,52 @@ namespace X13.Periphery {
             Log.Debug("s {0}: {1}  DISCONNECT", _port.PortName, BitConverter.ToString(_disconnectAll));
           }
 
-          while(busyTime > DateTime.Now) {
+          while(_busyTime > DateTime.Now) {
             if(_port.BytesToRead > 0) {
-              busyTime = DateTime.Now.AddMilliseconds(100);
-              if(cnt >= 0) {
-                buf[cnt] = (byte)_port.ReadByte();
+              _busyTime = DateTime.Now.AddMilliseconds(100);
+              if(_inCnt >= 0) {
+                _inBuffer[_inCnt] = (byte)_port.ReadByte();
               } else {
-                len = _port.ReadByte();
+                _inLen = _port.ReadByte();
               }
-              cnt++;
+              _inCnt++;
             }
             Thread.Sleep(0);
           }
 
-          if(cnt > 2 && cnt >= len) {
-            var msgTyp = (MsMessageType)(buf[0] > 1 ? buf[1] : buf[3]);
+          if(_inCnt > 2 && _inCnt >= _inLen) {
+            var msgTyp = (MsMessageType)(_inBuffer[0] > 1 ? _inBuffer[1] : _inBuffer[3]);
             if(msgTyp == MsMessageType.SEARCHGW || msgTyp == MsMessageType.DHCP_REQ) {   // Received Ack
-              escChar = false;
-              if(cnt > len && buf[cnt - 1] == 0xC0) {
+              _inEscChar = false;
+              if(_inCnt > _inLen && _inBuffer[_inCnt - 1] == 0xC0) {
                 int j, k = -1;
-                for(j = 0; j < cnt; j++) {
-                  if(buf[j] == 0xDB) {
-                    escChar = true;
+                for(j = 0; j < _inCnt; j++) {
+                  if(_inBuffer[j] == 0xDB) {
+                    _inEscChar = true;
                     continue;
                   }
-                  if(escChar) {
-                    buf[++k] = (byte)(buf[j] ^ 0x20);
-                    escChar = false;
+                  if(_inEscChar) {
+                    _inBuffer[++k] = (byte)(_inBuffer[j] ^ 0x20);
+                    _inEscChar = false;
                   } else {
-                    buf[++k] = buf[j];
+                    _inBuffer[++k] = _inBuffer[j];
                   }
                 }
-                escChar = true;
-                cnt = k;
+                _inEscChar = true;
+                _inCnt = k;
               }
-              if(cnt == len) {
+              if(_inCnt == _inLen) {
                 found = true;
-                _useSlip = escChar;
+                _useSlip = _inEscChar;
                 if(_pl.verbose) {
-                  Log.Debug("I {0}: SLIP={1}", _port.PortName, escChar);
+                  Log.Debug("I {0}: SLIP={1}", _port.PortName, _inEscChar);
                 }
-                _pl.ProcessInPacket(this, this._gateAddr, buf, 0, cnt);
+                _pl.ProcessInPacket(this, this._gateAddr, _inBuffer, 0, _inCnt);
                 break;
               }
             }
             if(_pl.verbose) {
-              Log.Debug("r {0}: {1}  {2}", _port.PortName, BitConverter.ToString(buf, 0, cnt), msgTyp);
+              Log.Debug("r {0}: {1}  {2}", _port.PortName, BitConverter.ToString(_inBuffer, 0, _inCnt), msgTyp);
             }
           }
           Thread.Sleep(90);
@@ -367,6 +416,10 @@ namespace X13.Periphery {
         return;
       }
 
+      _inCnt = -1;
+      _inLen = -1;
+      _inEscChar = false;
+
       byte i = 1;
       _pl._gates.Add(this);
       foreach(var g in _pl._gates) {
@@ -378,58 +431,6 @@ namespace X13.Periphery {
         tmpAddr = (byte)(new Random()).Next(1, 254);
       }
       _gateAddr = new byte[] { gwIdx, (byte)tmpAddr };
-
-      cnt = -1;
-      len = -1;
-      escChar = false;
-
-      try {
-        while(_port != null && _port.IsOpen) {
-          if(GetPacket(ref len, buf, ref cnt, ref escChar)) {
-            if(len == 5 && buf[1] == (byte)MsMessageType.SUBSCRIBE) {
-              _advTick = DateTime.Now.AddMilliseconds(100);   // Send Advertise
-            }
-            if(!_pl.ProcessInPacket(this, _gateAddr, buf, 0, len)) {
-              _port.DiscardInBuffer();
-            }
-            cnt = -1;
-            msg = null;
-            continue;
-          }
-          msg = null;
-          if(busyTime > DateTime.Now) {
-            Thread.Sleep(0);
-            continue;
-          }
-          lock(_sendQueue) {
-            if(_sendQueue.Count > 0) {
-              msg = _sendQueue.Dequeue();
-            }
-          }
-          if(msg != null) {
-            SendRaw(msg, _sndBuf);
-            busyTime = DateTime.Now.AddMilliseconds(msg.IsRequest ? 20 : 5);
-            continue;
-          }
-          if(_advTick < DateTime.Now) {
-            SendRaw(new MsAdvertise(gwIdx, 900), _sndBuf);
-            _advTick = DateTime.Now.AddMinutes(15);
-          }
-          Thread.Sleep(15);
-        }
-      }
-      catch(IOException ex) {
-        if(_pl.verbose) {
-          Log.Error("MsGSerial({0}).CommThread() - {1}", gwIdx, ex.Message);
-        }
-      }
-      catch(Exception ex) {
-        Log.Error("MsGSerial({0}).CommThread() - {1}", gwIdx, ex.ToString());
-      }
-      if(_pl.verbose) {
-        Log.Debug("MsGSerial({0}).CommThread - exit", gwIdx);
-      }
-      this.Dispose();
     }
     private void Dispose() {
       var p = Interlocked.Exchange(ref _port, null);

@@ -9,6 +9,7 @@ namespace X13.Periphery {
   internal interface IMsGate {
     void SendGw(byte[] addr, MsMessage msg);
     void SendGw(MsDevice dev, MsMessage msg);
+    void Tick();
     byte gwIdx { get; }
     byte gwRadius { get; }
     string name { get; }

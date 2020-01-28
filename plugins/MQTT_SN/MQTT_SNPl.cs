@@ -66,14 +66,13 @@ namespace X13.Periphery {
     }
 
     public void Tick() {
-      for(int i = _devs.Count - 1; i >= 0; i--) {
+      int i;
+      for(i = _devs.Count - 1; i >= 0; i--) {
         _devs[i].Tick();
       }
-      MsGUdp udp = _gates.OfType<MsGUdp>().FirstOrDefault();
-      if(udp!=null) {
-        udp.Tick();
+      for(i = _gates.Count - 1; i >= 0; i--) {
+        _gates[i].Tick();
       }
-      
     }
 
     public void Stop() {
