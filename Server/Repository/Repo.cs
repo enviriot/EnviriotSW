@@ -323,10 +323,17 @@ namespace X13.Repository {
       if(!configOnly || xCur.HasElements || t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config)) {
         var s = t.GetState();
         if(s.Exists && (t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config) || (!configOnly && t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)))) {
-          xCur.Add(new XAttribute("s", JsLib.Stringify(s)));
+          var state_json = JsLib.Stringify(s);
+          if(state_json!=null) {
+            xCur.Add(new XAttribute("s", state_json));
+          }
         }
+
         var m = t.GetField(null);
-        xCur.Add(new XAttribute("m", JsLib.Stringify(m)));
+        var manifest_json = JsLib.Stringify(m);
+        if(manifest_json!=null){
+          xCur.Add(new XAttribute("m", manifest_json));
+        }
 
         x.Add(xCur);
       }
