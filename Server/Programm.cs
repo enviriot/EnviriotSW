@@ -11,6 +11,8 @@ using System.Threading;
 
 namespace X13 {
   internal class Programm {
+    private static bool _isLinux;
+
     private static void Main(string[] args) {
       string name = Assembly.GetExecutingAssembly().Location;
       string path = Path.GetDirectoryName(name);
@@ -41,6 +43,9 @@ namespace X13 {
         if(!CSWindowsServiceRecoveryProperty.Win32.AttachConsole(-1))  // Attach to a parent process console
           CSWindowsServiceRecoveryProperty.Win32.AllocConsole(); // Alloc a new console if none available
       }
+        int p = (int)Environment.OSVersion.Platform;
+      _isLinux = (p == 4) || (p == 6) || (p == 128);
+
       if(flag == 0) {
         var srv = new Programm(cfgPath);
         if(srv.Start()) {
@@ -80,12 +85,7 @@ namespace X13 {
         }
       }
     }
-    public static bool IsLinux {
-      get {
-        int p = (int)Environment.OSVersion.Platform;
-        return (p == 4) || (p == 6) || (p == 128);
-      }
-    }
+    public static bool IsLinux { get { return _isLinux; } }
 
     private string _cfgPath;
     private Mutex _singleInstance;
@@ -134,7 +134,7 @@ namespace X13 {
       Log.Finish();
     }
     private void PrThread() {
-      DateTime today = DateTime.Now.Date, perfomanceDT = DateTime.Now.AddSeconds(10), now = DateTime.Now;
+      DateTime now = DateTime.Now, today = now.Date, perfomanceDT = now.AddSeconds(10), gcTick = now.AddSeconds(5);
       Tuple<bool, DateTime, double> perf_cpu = new Tuple<bool, DateTime, double>(true, now, 0);
 
       if(!IsLinux) {
@@ -155,27 +155,31 @@ namespace X13 {
       do {
         now = DateTime.Now;
         if(perfomanceDT < now) {
-          perfomanceDT = now.AddSeconds(500);
+          perfomanceDT = now.AddSeconds(317);
           var perf = X13.Repository.Topic.root.Get("/$YS/Perfomance");
           if(perf.GetState().ValueType!=NiL.JS.Core.JSValueType.Boolean) {
             perf.SetAttribute(Repository.Topic.Attribute.DB | Repository.Topic.Attribute.Required);
             perf.SetState(false);
           } else if((bool)perf.GetState()) {
-            perf.Get("GC").SetState(GC.GetTotalMemory(false) / 1048576.0);  // MB
+            perf.Get("GC").SetState(Math.Round(GC.GetTotalMemory(false) / 1048576.0, 2));  // MB
             using(var proc = System.Diagnostics.Process.GetCurrentProcess()) {
-              perf.Get("Memory").SetState(proc.PrivateMemorySize64 / 1048576.0);  // MB
-              perf.Get("Virtual").SetState(proc.VirtualMemorySize64 / 1048576.0);  // MB
+              perf.Get("Memory").SetState(Math.Round(proc.PrivateMemorySize64 / 1048576.0, 2));  // MB
+              perf.Get("Virtual").SetState(Math.Round(proc.VirtualMemorySize64 / 1048576.0, 2));  // MB
               var cpu = proc.TotalProcessorTime.TotalSeconds;
               if(perf_cpu.Item1) {
-                perf.Get("CPU").SetState((cpu - perf_cpu.Item3)*100 / (now - perf_cpu.Item2).TotalSeconds);  // Sec
+                perf.Get("CPU").SetState(Math.Round((cpu - perf_cpu.Item3)*100 / (now - perf_cpu.Item2).TotalSeconds, 2));  // Sec
               }
               perf_cpu = new Tuple<bool, DateTime, double>(true, now, cpu);
-              perf.Get("Physical").SetState(proc.WorkingSet64 / 1048576.0);  // MB
+              perf.Get("Physical").SetState(Math.Round(proc.WorkingSet64 / 1048576.0, 2));  // MB
             }
             perf.Get("Updated").SetState(NiL.JS.Core.JSValue.Marshal(now));
           } else {
             perf_cpu = new Tuple<bool, DateTime, double>(false, now, 0);
           }
+        }
+        if(_isLinux && gcTick < now) {
+          gcTick = now.AddSeconds(887);
+          GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
         }
         _tick.WaitOne();
         //sw.Stop();
