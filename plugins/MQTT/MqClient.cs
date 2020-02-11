@@ -84,11 +84,18 @@ namespace X13.MQTT {
     }
 
     private void Connect() {
-      status = Status.Connecting;
-      TcpClient _tcp = new TcpClient();
-      _tcp.SendTimeout = 900;
-      _tcp.ReceiveTimeout = 10;
-      _tcp.BeginConnect(_host, _port, new AsyncCallback(ConnectCB), _tcp);
+      try {
+        status = Status.Connecting;
+        TcpClient _tcp = new TcpClient();
+        _tcp.SendTimeout = 900;
+        _tcp.ReceiveTimeout = 10;
+        _tcp.BeginConnect(_host, _port, new AsyncCallback(ConnectCB), _tcp);
+      }
+      catch(Exception ex) {
+        status = Status.Disconnected;
+        _tOut.Change((new Random()).Next(KEEP_ALIVE * 3, KEEP_ALIVE * 6), Timeout.Infinite);
+        Log.Warning("{0} Connection FAILED - {1}", this.Signature, ex.Message);
+      }
     }
     private void ConnectCB(IAsyncResult rez) {
       var _tcp = rez.AsyncState as TcpClient;
@@ -118,7 +125,7 @@ namespace X13.MQTT {
           status = Status.NotAccepted;
           _tOut.Change(Timeout.Infinite, Timeout.Infinite);
         }
-        Log.Error("{0} Connection FAILED - {1}", this.Signature, ex.Message);
+        Log.Warning("{0} Connection FAILED - {1}", this.Signature, ex.Message);
 
       }
     }
