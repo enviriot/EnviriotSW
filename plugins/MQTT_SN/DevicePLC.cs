@@ -129,7 +129,7 @@ namespace X13.Periphery {
       var rereg = new List<Tuple<Topic, string>>();
       foreach(var t in varLst) {
         sTag = t.GetField("MQTT-SN.tag").Value as string;
-        var vt = c.varList.FirstOrDefault(z => t.name == z.Key);
+        var vt = c.varList.FirstOrDefault(z => t.name == z.Key.Replace('.', '_'));
         if(vt.Key==null) {
           rereg.Add(new Tuple<Topic, string>(t, string.Empty));
         } else if(sTag!=vt.Value) {
