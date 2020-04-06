@@ -558,6 +558,10 @@ namespace X13.UI {
       mi = new MenuItem() { Header = "Open in new tab", Tag = t };
       mi.Click += miOpen_Click;
       l.Add(mi);
+      mi = new MenuItem() { Header = "Show in Workspace", Tag = t };
+      mi.Click += miShow_Click;
+      l.Add(mi);
+
       l.Add(new Separator());
       if(ctrl is loPin) {
         bool ic = JsLib.ofBool(JsLib.GetField(t.Manifest, "Logram.trace"), false);
@@ -757,6 +761,16 @@ namespace X13.UI {
 
       App.Workspace.Open(t.fullPath);
     }
+    private void miShow_Click(object sender, RoutedEventArgs e) {
+      DTopic t;
+      var mi = sender as MenuItem;
+      if(mi == null || (t = mi.Tag as DTopic)==null) {
+        return;
+      }
+
+      App.Workspace.Show(t.fullPath);
+    }
+
     private void miTrace_Click(object sender, RoutedEventArgs e) {
       DTopic t;
       var mi = sender as MenuItem;

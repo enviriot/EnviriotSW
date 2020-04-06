@@ -42,7 +42,7 @@ namespace X13.UI {
         if(_owner.children != null && _owner.children.Any()) {
           _populated = true;
           if(_owner.children != null) {
-            InsertItems(_owner.children);
+            var tsk = InsertItems(_owner.children);
           }
         }
         base._isExpanded = true;
@@ -70,11 +70,8 @@ namespace X13.UI {
         return _isExpanded && HasChildren;
       }
       set {
-        if(value && _owner != null && _items == null) {
-          _populated = true;
-          if(_owner.children != null) {
-            InsertItems(_owner.children);
-          }
+        if(value){
+          var tsk = Expand();
         }
         base.IsExpanded = value;
       }
@@ -111,6 +108,16 @@ namespace X13.UI {
       }
     }
 
+    public async Task Expand() {
+      if(_owner != null && _items == null) {
+        _populated = true;
+        if(_owner.children != null) {
+          await InsertItems(_owner.children);
+        }
+      }
+      base.IsExpanded = true;
+    }
+
     private void SetNameComplete(Task<DTopic> td) {
       if(td.IsCompleted && td.Result != null) {
         //_owner = td.Result;
@@ -136,7 +143,7 @@ namespace X13.UI {
         }
       }
     }
-    private void InsertItems(ReadOnlyCollection<DTopic> its) {
+    private async Task InsertItems(ReadOnlyCollection<DTopic> its) {
       bool pc_items = false;
       if(_items == null) {
         lock(this._sync) {
@@ -146,9 +153,7 @@ namespace X13.UI {
           }
         }
       }
-      foreach(var t in its.ToArray()) {
-        var td = AddTopic(t);
-      }
+      await Task.WhenAll(its.ToArray().Select(z => AddTopic(z)));
       if(pc_items) {
         PropertyChangedReise("items");
         PropertyChangedReise("HasChildren");
@@ -196,7 +201,7 @@ namespace X13.UI {
       _owner = tt;
       name = tt.name;
       if(_populated && _owner.children != null) {
-        InsertItems(_owner.children);
+        var tsk = InsertItems(_owner.children);
       }
     }
     private void _owner_PropertyChanged(DTopic.Art art, DTopic child) {
@@ -237,7 +242,7 @@ namespace X13.UI {
       if(_populated) {
         if(art == DTopic.Art.addChild) {
           if(_items == null) {
-            InsertItems(_owner.children);
+            var tsk = InsertItems(_owner.children);
           } else {
             var td = AddTopic(child);
           }

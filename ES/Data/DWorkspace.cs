@@ -118,6 +118,15 @@ namespace X13.Data {
         return doc;
       }
     }
+
+    public event Action<string> ShowTopicInWorkspace;
+    public void Show(string fullPath) {
+      var e = ShowTopicInWorkspace;
+      if(e!=null) {
+        e(fullPath);
+      }
+    }
+
     private bool ContentIdEqual(string id, string path, string view) {
       Uri u;
       if(!Uri.TryCreate(id, UriKind.Absolute, out u)) {
@@ -236,6 +245,5 @@ namespace X13.Data {
       }
       return defaultValue;
     }
-
   }
 }

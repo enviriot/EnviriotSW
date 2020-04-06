@@ -68,10 +68,48 @@ namespace X13.UI {
         CollectionChange(new InValue(_data, CollectionChange), true);
         CollectionChange(new InManifest(_data, CollectionChange), true);
         CollectionChange(new InTopic(_data, null, CollectionChange), true);
+      } else {
+        App.Workspace.ShowTopicInWorkspace+=Workspace_ShowTopicInWorkspace;
       }
       InitializeComponent();
       lvValue.ItemsSource = _valueVC;
     }
+
+    private void Workspace_ShowTopicInWorkspace(string path) {
+      Uri url;
+      if(path == null || !Uri.TryCreate(path, UriKind.Absolute, out url)) {
+        return;
+      }
+      App.Workspace.GetAsync(url).ContinueWith(ShowTopicT, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    private void ShowTopicT(Task<DTopic> tt) {
+      if(tt==null || !tt.IsCompleted || tt.Result==null) {
+        return;
+      }
+      var t = tt.Result;
+      var tsk = ShowTopicT2(t);
+    }
+
+    private async Task ShowTopicT2(DTopic t) {
+      List<DTopic> lst = new List<DTopic>();
+      InTopic tv = null;
+      while(t!=null) {
+        lst.Add(t);
+        t = t.parent;
+      }
+      for(int i = lst.Count-1; i>= 0; i--) {
+        tv = _valueVC.OfType<InTopic>().FirstOrDefault(z => z.Owner == lst[i]);
+        if(tv!=null) {
+          await tv.Expand();
+        }
+      }
+      if(tv!=null) {
+        lvValue.SelectedItem = tv;
+        lvValue.ScrollIntoView(tv);
+      }
+    }
+
     internal void CollectionChange(InBase item, bool visible) {
       if(item == null) {
         throw new ArgumentNullException("item");
