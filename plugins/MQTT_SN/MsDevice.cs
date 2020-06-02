@@ -1337,6 +1337,8 @@ namespace X13.Periphery {
       new Tuple<string, DType>("AI", DType.Integer),   //uint16 Analog ref2
       new Tuple<string, DType>("Av", DType.Integer),   //uint16
       new Tuple<string, DType>("Ae", DType.Integer),   //uint16
+      new Tuple<string, DType>("Cp", DType.Integer),   //uint16 Counter rising
+      new Tuple<string, DType>("Cn", DType.Integer),   //uint16 Counter falling
       new Tuple<string, DType>("Pp", DType.Integer),   //uint16 PWM positive
       new Tuple<string, DType>("Pn", DType.Integer),   //uint16 PWM negative
       new Tuple<string, DType>("Mb", DType.Integer),   //int8
