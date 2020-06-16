@@ -9,23 +9,10 @@ using System.Text;
 
 namespace X13.DevicePLC {
   internal class EP_Compiler {
-    private static SortedList<string, EP_Type> _predefs;
     private static bool Verbose {
       get {
         return true;
       }
-    }
-
-    static EP_Compiler() {
-      _predefs = new SortedList<string, EP_Type>();
-      _predefs["Op"] = EP_Type.OUTPUT;
-      _predefs["On"] = EP_Type.OUTPUT;
-      _predefs["Pp"] = EP_Type.OUTPUT;
-      _predefs["Pn"] = EP_Type.OUTPUT;
-      _predefs["Ip"] = EP_Type.INPUT;
-      _predefs["In"] = EP_Type.INPUT;
-      _predefs["Av"] = EP_Type.INPUT;
-      _predefs["Ai"] = EP_Type.INPUT;
     }
 
     internal Stack<Instruction> _sp;
@@ -244,7 +231,6 @@ namespace X13.DevicePLC {
     internal Merker DefineMerker(VariableDescriptor v, EP_Type type = EP_Type.NONE) {
       Merker m = null;
       uint addr;
-      EP_Type ioType;
 
       m = cur.memory.FirstOrDefault(z => z.vd == v);
       if(m == null) {
@@ -252,9 +238,11 @@ namespace X13.DevicePLC {
       }
       if(m == null) {
         addr = uint.MaxValue;
-        if(v.Name.Length > 2 && _predefs.TryGetValue(v.Name.Substring(0, 2), out ioType) && UInt32.TryParse(v.Name.Substring(2), out addr)) {
+        var nt = Periphery.MsDevice.NTTable.FirstOrDefault(z => v.Name.StartsWith(z.Item1));
+
+        if(v.Name.Length > 2 && (nt.Item2 & (Periphery.MsDevice.DType.Input | Periphery.MsDevice.DType.Output))!=0  && UInt32.TryParse(v.Name.Substring(2), out addr)) {
           addr = (uint)( (uint)( ( (byte)v.Name[0] ) << 24 ) | (uint)( ( (byte)v.Name[1] ) << 16 ) | addr & 0xFFFF );
-          type = ioType;
+          type = (nt.Item2 & Periphery.MsDevice.DType.Input)!=0?EP_Type.INPUT:EP_Type.OUTPUT;
         } else if(type == EP_Type.NONE) {
           if(v.Initializer != null && v.Initializer is FunctionDefinition) {
             type = EP_Type.FUNCTION;

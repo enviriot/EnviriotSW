@@ -1323,24 +1323,26 @@ namespace X13.Periphery {
       LOG = 0x200,
       TWI = 0x300,
       PLC = 0x400,
+      Input = 0x10000,
+      Output = 0x20000,
     }
     internal static Tuple<string, DType>[] NTTable = new Tuple<string, DType>[]{ 
-      new Tuple<string, DType>("In", DType.Boolean),
-      new Tuple<string, DType>("Ip", DType.Boolean),
-      new Tuple<string, DType>("Op", DType.Boolean),
-      new Tuple<string, DType>("On", DType.Boolean),
+      new Tuple<string, DType>("In", DType.Boolean | DType.Input),
+      new Tuple<string, DType>("Ip", DType.Boolean | DType.Input),
+      new Tuple<string, DType>("Op", DType.Boolean | DType.Output),
+      new Tuple<string, DType>("On", DType.Boolean | DType.Output),
       new Tuple<string, DType>("OA", DType.Boolean),   // output high if active
       new Tuple<string, DType>("Oa", DType.Boolean),   // output low if active
       new Tuple<string, DType>("Mz", DType.Boolean),   // Merkers
 
-      new Tuple<string, DType>("Ai", DType.Integer),   //uint16 Analog ref
-      new Tuple<string, DType>("AI", DType.Integer),   //uint16 Analog ref2
-      new Tuple<string, DType>("Av", DType.Integer),   //uint16
-      new Tuple<string, DType>("Ae", DType.Integer),   //uint16
-      new Tuple<string, DType>("Cp", DType.Integer),   //uint16 Counter rising
-      new Tuple<string, DType>("Cn", DType.Integer),   //uint16 Counter falling
-      new Tuple<string, DType>("Pp", DType.Integer),   //uint16 PWM positive
-      new Tuple<string, DType>("Pn", DType.Integer),   //uint16 PWM negative
+      new Tuple<string, DType>("Ai", DType.Integer | DType.Input),   //uint16 Analog ref
+      new Tuple<string, DType>("AI", DType.Integer | DType.Input),   //uint16 Analog ref2
+      new Tuple<string, DType>("Av", DType.Integer | DType.Input),   //uint16
+      new Tuple<string, DType>("Ae", DType.Integer | DType.Input),   //uint16
+      new Tuple<string, DType>("Cp", DType.Integer | DType.Input),   //uint16 Counter rising
+      new Tuple<string, DType>("Cn", DType.Integer | DType.Input),   //uint16 Counter falling
+      new Tuple<string, DType>("Pp", DType.Integer | DType.Output),   //uint16 PWM positive
+      new Tuple<string, DType>("Pn", DType.Integer | DType.Output),   //uint16 PWM negative
       new Tuple<string, DType>("Mb", DType.Integer),   //int8
       new Tuple<string, DType>("MB", DType.Integer),   //uint8
       new Tuple<string, DType>("Mw", DType.Integer),   //int16
@@ -1351,8 +1353,8 @@ namespace X13.Periphery {
 
       new Tuple<string, DType>("Ms", DType.String),
 
-      new Tuple<string, DType>("St", DType.String),  // Serial port transmit
-      new Tuple<string, DType>("Sr", DType.String),  // Serial port recieve
+      new Tuple<string, DType>("St", DType.String | DType.Output),  // Serial port transmit
+      new Tuple<string, DType>("Sr", DType.String | DType.Input),  // Serial port recieve
       new Tuple<string, DType>("Ma", DType.ByteArray),  // Merkers
 
       new Tuple<string, DType>("pa", DType.ByteArray | DType.PLC),    // Program
