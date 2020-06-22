@@ -381,7 +381,7 @@ namespace X13.Periphery {
             ti = GetTopicInfo(tmp.TopicPath, false);
             if(ti != null) {
               Send(new MsRegAck(ti.TopicId, tmp.MessageId, MsReturnCode.Accepted));
-              if((ti.dType == DType.Boolean || ti.dType == DType.Integer) && !ti.topic.GetState().Defined) {
+              if(((ti.dType & DType.TypeMask) == DType.Boolean || (ti.dType & DType.TypeMask) == DType.Integer) && !ti.topic.GetState().Defined) {
                 SetValue(ti, new byte[] { 0 }, false);
               }
             } else {
@@ -446,7 +446,7 @@ namespace X13.Periphery {
             && (!tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId)) {  // else arready recieved
 
             _lastInPub = tmp;
-            switch(ti.dType & ~DType.TypeMask) {
+            switch(ti.dType & DType.ExtensionType) {
             case DType.None:
               SetValue(ti, tmp.Data, tmp.Retained);
               break;
@@ -771,7 +771,7 @@ namespace X13.Periphery {
           }
           _topics.Add(rez);
         }
-        var extMask = rez.dType & ~DType.TypeMask;
+        var extMask = rez.dType & DType.ExtensionType;
         if(extMask == DType.TWI && rez.tag.StartsWith("Ta")) {
           rez.extension = new TWI(rez.topic, rez.PublishWithPayload);
         } else if(extMask == DType.PLC && rez.tag == "pa0") {
@@ -929,7 +929,7 @@ namespace X13.Periphery {
         return;
       }
       if((p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe)) {
-        if((ti.dType & ~DType.TypeMask) == DType.None) {
+        if((ti.dType & DType.ExtensionType) == DType.None) {
           Send(new MsPublish(ti));
         }
       } else if(p.art == Perform.Art.remove) {          // Remove by device
@@ -964,7 +964,7 @@ namespace X13.Periphery {
           return;     // not allowed publish
         }
         JSC.JSValue val;
-        switch(ti.dType) {
+        switch(ti.dType & DType.TypeMask) {
         case DType.Boolean:
           val = new JSL.Boolean((msgData[0] != 0));
           break;
@@ -1323,8 +1323,9 @@ namespace X13.Periphery {
       LOG = 0x200,
       TWI = 0x300,
       PLC = 0x400,
+      ExtensionType = 0xFF00, // don't send publish on change
       Input = 0x10000,
-      Output = 0x20000,
+      Output = 0x20000,  // DevicePLC can write in variable
     }
     internal static Tuple<string, DType>[] NTTable = new Tuple<string, DType>[]{ 
       new Tuple<string, DType>("In", DType.Boolean | DType.Input),
@@ -1339,8 +1340,8 @@ namespace X13.Periphery {
       new Tuple<string, DType>("AI", DType.Integer | DType.Input),   //uint16 Analog ref2
       new Tuple<string, DType>("Av", DType.Integer | DType.Input),   //uint16
       new Tuple<string, DType>("Ae", DType.Integer | DType.Input),   //uint16
-      new Tuple<string, DType>("Cp", DType.Integer | DType.Input),   //uint16 Counter rising
-      new Tuple<string, DType>("Cn", DType.Integer | DType.Input),   //uint16 Counter falling
+      new Tuple<string, DType>("Cp", DType.Integer | DType.Input | DType.Output),   //uint16 Counter rising
+      new Tuple<string, DType>("Cn", DType.Integer | DType.Input | DType.Output),   //uint16 Counter falling
       new Tuple<string, DType>("Pp", DType.Integer | DType.Output),   //uint16 PWM positive
       new Tuple<string, DType>("Pn", DType.Integer | DType.Output),   //uint16 PWM negative
       new Tuple<string, DType>("Mb", DType.Integer),   //int8

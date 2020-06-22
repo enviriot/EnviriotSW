@@ -601,25 +601,26 @@ namespace X13.DevicePLC {
       foreach(var vd in node.Body.Select(z => z as VariableDefinition).Where(z => z != null)) {
         inList.AddRange(vd.Initializers.Select(z => z as Assignment).Where(z => z != null));
       }
-
-      foreach(var v in node.Variables) {
-        if(v.Initializer is ClassDefinition) {
-          continue;
-        }
-        m = _compiler.GetMerker(v);
-        if(m == null) {
-          throw new ApplicationException("Unknown Merker in Pass2: " + v.Name);
-        }
-        if(m.vd.Initializer != null) {
-          m.vd.Initializer.Visit(this);
-        } else if(m.type == EP_Type.LOCAL) {
-          var a2 = inList.FirstOrDefault(z => (z.Children[0] as Variable) != null && (z.Children[0] as Variable).Descriptor == m.vd);
-          if(a2 != null) {
-            a2.Children[1].Visit(this);
-            m.initialized = true;
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LABEL, null, a2));
-          } else {
-            _compiler.cur.AddInst(EP_InstCode.LDI_0, 0, 1);
+      if(node.Variables!=null) {
+        foreach(var v in node.Variables) {
+          if(v.Initializer is ClassDefinition) {
+            continue;
+          }
+          m = _compiler.GetMerker(v);
+          if(m == null) {
+            throw new ApplicationException("Unknown Merker in Pass2: " + v.Name);
+          }
+          if(m.vd.Initializer != null) {
+            m.vd.Initializer.Visit(this);
+          } else if(m.type == EP_Type.LOCAL) {
+            var a2 = inList.FirstOrDefault(z => (z.Children[0] as Variable) != null && (z.Children[0] as Variable).Descriptor == m.vd);
+            if(a2 != null) {
+              a2.Children[1].Visit(this);
+              m.initialized = true;
+              _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LABEL, null, a2));
+            } else {
+              _compiler.cur.AddInst(EP_InstCode.LDI_0, 0, 1);
+            }
           }
         }
       }

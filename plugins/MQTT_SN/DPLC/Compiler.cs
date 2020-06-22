@@ -240,9 +240,9 @@ namespace X13.DevicePLC {
         addr = uint.MaxValue;
         var nt = Periphery.MsDevice.NTTable.FirstOrDefault(z => v.Name.StartsWith(z.Item1));
 
-        if(v.Name.Length > 2 && (nt.Item2 & (Periphery.MsDevice.DType.Input | Periphery.MsDevice.DType.Output))!=0  && UInt32.TryParse(v.Name.Substring(2), out addr)) {
+        if(nt!=null && v.Name.Length > 2 && UInt32.TryParse(v.Name.Substring(2), out addr)) {
           addr = (uint)( (uint)( ( (byte)v.Name[0] ) << 24 ) | (uint)( ( (byte)v.Name[1] ) << 16 ) | addr & 0xFFFF );
-          type = (nt.Item2 & Periphery.MsDevice.DType.Input)!=0?EP_Type.INPUT:EP_Type.OUTPUT;
+          type = (nt.Item2 & Periphery.MsDevice.DType.Output)!=0?EP_Type.OUTPUT:EP_Type.INPUT;
         } else if(type == EP_Type.NONE) {
           if(v.Initializer != null && v.Initializer is FunctionDefinition) {
             type = EP_Type.FUNCTION;

@@ -364,16 +364,17 @@ namespace X13.DevicePLC {
     protected override EP_VP1 Visit(CodeBlock node) {
       //EP_Compiler.Merker m;
       FunctionDefinition fd;
-
-      foreach(var v in node.Variables) {
-        if((fd = v.Initializer as FunctionDefinition) != null) {
-          var fm = _compiler.DefineMerker(v, EP_Type.FUNCTION);
-          DefineFunction(fd, fm, null);
+      if(node.Variables!=null) {
+        foreach(var v in node.Variables) {
+          if((fd = v.Initializer as FunctionDefinition) != null) {
+            var fm = _compiler.DefineMerker(v, EP_Type.FUNCTION);
+            DefineFunction(fd, fm, null);
+          }
+          //m = _compiler.DefineMerker(v);
+          //if(m.vd.Initializer != null) {
+          //  m.vd.Initializer.Visit(this);
+          //}
         }
-        //m = _compiler.DefineMerker(v);
-        //if(m.vd.Initializer != null) {
-        //  m.vd.Initializer.Visit(this);
-        //}
       }
 
       for(var i = 0; i < node.Body.Length; i++) {
