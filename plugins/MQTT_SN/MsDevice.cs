@@ -364,6 +364,7 @@ namespace X13.Periphery {
           Send(new MsSuback(tmp.qualityOfService, topicId, msg.MessageId, retCode));
           if(state == State.PreConnect) {
             state = State.Connected;
+            _suppressedInputs = null;
             UpdateSuppressedInputs();
           }
           if(t != null) {
@@ -1099,7 +1100,11 @@ namespace X13.Periphery {
       si.Add(0);
       int idx, i;
       JSC.JSValue sj;
-      foreach(var ti in _topics.Where(z => z.tag.StartsWith("I") || z.tag.StartsWith("A"))) {
+      foreach(var ti in _topics) {
+        var nt = NTTable.FirstOrDefault(z => ti.tag.StartsWith(z.Item1));
+        if(nt==null || (nt.Item2 & DType.Input)!=DType.Input) {
+          continue;
+        }
         if(ti.tag.Length > 2 && int.TryParse(ti.tag.Substring(2), out idx) && (sj = ti.topic.GetField("MQTT-SN.suppressed")).ValueType == JSC.JSValueType.Boolean && ((bool)sj)) {
           i = idx / 8;
           while(si.Count <= i) {
