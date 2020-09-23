@@ -26,6 +26,9 @@ namespace X13 {
       Context.DefineVariable("clearInterval").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimeout)));
       Context.DefineConstructor(typeof(XMLHttpRequest));
       Context.DefineVariable("console").Assign(JSC.JSValue.Marshal(new X13.JsExtLib.Console()));
+      var fs = JSC.JSObject.CreateObject();
+      fs["AppendText"] = JSC.JSValue.Marshal(new Action<string, string>(AppendFile));
+      Context.DefineVariable("File").Assign(fs);
     }
 
     #region XMLHttpRequest
@@ -176,7 +179,7 @@ namespace X13 {
       double idx = -1;
       if(((f = func as JSL.Function) != null || (f = func.Value as JSL.Function)!=null) && to>0) {
         idx = Interlocked.Increment(ref _timerCnt);
-        Interlocked.CompareExchange(ref _timerCnt, 1, ( (long)1<<52 )-1);
+        Interlocked.CompareExchange(ref _timerCnt, 1, ((long)1<<52)-1);
         AddTimer(new TimerContainer { func = f, to = DateTime.Now.AddMilliseconds(to), interval = interval, ctx = ctx, idx=idx });
       }
       return new JSL.Number(idx);
@@ -252,6 +255,37 @@ namespace X13 {
       }
     }
     #endregion Tick
+
+    #region Filesystem
+    private static void AppendFile(string path, string data) {
+      if(string.IsNullOrWhiteSpace(path) || string.IsNullOrEmpty(data)) {
+        return;
+      }
+      try {
+        var pp = path.Split(new char[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        var sb = new StringBuilder();
+        for(int i = pp.Length-2; i>=0; i--){
+          if(pp[i]==".." || pp[i]=="." || pp[i].IndexOf(Path.VolumeSeparatorChar) >=0){
+            break;
+          }
+          sb.Insert(0, Path.DirectorySeparatorChar);
+          sb.Insert(0, pp[i]);
+        }
+        sb.Insert(0, Path.DirectorySeparatorChar);
+        sb.Insert(0, Directory.GetParent(Directory.GetCurrentDirectory()).ToString());
+        sb.Append(Path.GetFileName(path));
+        var p2 = sb.ToString();
+        var dir = Path.GetDirectoryName(p2);
+        if(!Directory.Exists(dir)) {
+          Directory.CreateDirectory(dir);
+        }
+        File.AppendAllText(p2, data);
+      }
+      catch(Exception ex) {
+        Log.Warning("AppendFile({0}, {1}) - {2}", path, data, ex.Message);
+      }
+    }
+    #endregion Filesystem
 
     #region Log
     private class Console : JSL.JSConsole, IDisposable {

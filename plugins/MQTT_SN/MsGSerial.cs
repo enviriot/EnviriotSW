@@ -383,9 +383,7 @@ namespace X13.Periphery {
               if(_inCnt == _inLen) {
                 found = true;
                 _useSlip = _inEscChar;
-                if(_pl.verbose) {
-                  Log.Debug("I {0}: SLIP={1}", _port.PortName, _inEscChar);
-                }
+                Log.Debug("I {0}: SLIP={1}", _port.PortName, _inEscChar);
                 _pl.ProcessInPacket(this, this._gateAddr, _inBuffer, 0, _inCnt);
                 break;
               }
