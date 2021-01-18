@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading;
 using WebSocketSharp;
@@ -71,13 +72,13 @@ namespace X13.WebUI {
           }
         } else if(/*!_disAnonym.value || */(_ses!=null /*&& !string.IsNullOrEmpty(_ses.userName)*/)) {
           if(sa[0]=="P" && sa.Length==3) {
-            if(sa[1]!=null && sa[1].StartsWith("/export/")) {
+            if(sa[1]!=null && (sa[1].StartsWith("/export/") || CheckAccess(sa[1]))) {
               WebUI_Pl.ProcessPublish(sa[1], sa[2], _ses);
             } else {
-              X13.Log.Warning("{0}.publish({1}) - bad path",   _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
+              X13.Log.Warning("{0}.publish({1}) - access forbinden", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, sa[1]);
             }
           } else if(sa[0]=="S" && sa.Length==2) {
-            if(sa[1]!=null && sa[1].StartsWith("/export/")) {
+            if(sa[1]!=null && (sa[1].StartsWith("/export/") || CheckAccess(sa[1]))) {
               string p = sa[1];
               SubRec.SubMask mask =  Repository.SubRec.SubMask.Value;
               Topic t;
@@ -88,20 +89,66 @@ namespace X13.WebUI {
                 mask |= p[idx] == '#'?SubRec.SubMask.All:SubRec.SubMask.Chldren;
                 p = p.Substring(0, p.Length-2);
               } else {
-                X13.Log.Warning("{0}.subscribe({1}) - bad path", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
+                X13.Log.Warning("{0}.subscribe({1}) - access forbinden", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, sa[1]);
                 return;
               }
               if(Topic.root.Exist(p, out t)) {
                 _subscriptions.Add(t.Subscribe(mask, SubChanged));
               } else {
-                X13.Log.Warning("{0}.subscribe({1}) - path not exist", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
+                X13.Log.Warning("{0}.subscribe({1}) - path not exist", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, sa[1]);
               }
             } else {
-              X13.Log.Warning("{0}.subscribe({1}) - bad path", _ses.owner==null?"UNK":_ses.owner.name, sa[1]);
+              X13.Log.Warning("{0}.subscribe({1}) - bad path", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, sa[1]);
             }
           }
         }
       }
+    }
+
+    private bool CheckAccess(string sa) {
+      if(sa[0]!=Topic.Bill.delmiter){
+        return false;
+      }
+      var idx = sa.IndexOf(Topic.Bill.delmiter, 1);
+      if(idx<1){
+        return false;
+      }
+      var n1 = sa.Substring(1, idx-1);
+      var t1 = Topic.root.children.FirstOrDefault(z => z.name == n1);
+      if(t1==null) {
+        return false;
+      }
+      var f = t1.GetField("WebUI.Filter");
+      string fs;
+      IPAddress ip;
+      int mask;
+      if(f.ValueType!=NiL.JS.Core.JSValueType.String 
+        || string.IsNullOrWhiteSpace(fs = f.Value as string)
+        || (idx = fs.IndexOf('/'))<9
+        || !IPAddress.TryParse(fs.Substring(0, idx), out ip)
+        || !int.TryParse(fs.Substring(idx+1), out mask)) {
+        t1.SetField("WebUI.Filter", "127.0.0.0/32", _ses.owner);
+        return false;
+      }
+      var a1 = _ses.ip.GetAddressBytes();
+      var a2 = ip.GetAddressBytes();
+      if(a1.Length!=a2.Length) {
+        return false;
+      }
+      for(int i = 0; i<a1.Length; i++) {
+        if(mask >= 0) {
+          if(mask < 8) {
+            var bm = (byte)(0xFF<<(8-mask));
+            a1[i] &= bm;
+            a2[i] &= bm;
+          }
+          if(a1[i]!=a2[i]) {
+            return false;
+          }
+        }
+        mask-=8;
+      }
+      return true;
     }
 
     private void SubChanged(Perform p, SubRec sr) {
@@ -115,7 +162,7 @@ namespace X13.WebUI {
       if(_ses!=null) {
         _ses.Close();
         if(WebUI_Pl.verbose) {
-          X13.Log.Info("{0} Disconnect: [{1}]{2}", _ses.owner==null?"UNK":_ses.owner.name, e.Code, e.Reason);
+          X13.Log.Info("{0} Disconnect: [{1}]{2}", (_ses==null || _ses.owner==null)?"UNK":_ses.owner.name, e.Code, e.Reason);
         }
         _ses=null;
       }
