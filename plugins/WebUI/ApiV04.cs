@@ -124,7 +124,7 @@ namespace X13.WebUI {
       int mask;
       if(f.ValueType!=NiL.JS.Core.JSValueType.String 
         || string.IsNullOrWhiteSpace(fs = f.Value as string)
-        || (idx = fs.IndexOf('/'))<9
+        || (idx = fs.IndexOf('/'))<7
         || !IPAddress.TryParse(fs.Substring(0, idx), out ip)
         || !int.TryParse(fs.Substring(idx+1), out mask)) {
         t1.SetField("WebUI.Filter", "127.0.0.0/32", _ses.owner);
