@@ -1349,6 +1349,7 @@ namespace X13.Periphery {
       new Tuple<string, DType>("Cn", DType.Integer | DType.Input | DType.Output),   //uint16 Counter falling
       new Tuple<string, DType>("Pp", DType.Integer | DType.Output),   //uint16 PWM positive
       new Tuple<string, DType>("Pn", DType.Integer | DType.Output),   //uint16 PWM negative
+      new Tuple<string, DType>("Pg", DType.Integer | DType.Output),   //uint32 Square wave generator
       new Tuple<string, DType>("Mb", DType.Integer),   //int8
       new Tuple<string, DType>("MB", DType.Integer),   //uint8
       new Tuple<string, DType>("Mw", DType.Integer),   //int16
