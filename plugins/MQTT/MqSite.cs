@@ -13,6 +13,7 @@ namespace X13.MQTT {
     private Uri _uri;
     private MQTTPl _pl;
     private SubRec _sr;
+    private bool _subEn, _pubEn, _retainedEn;
 
     public readonly Topic Owner;
     public readonly MqClient Client;
@@ -25,6 +26,11 @@ namespace X13.MQTT {
       this.Owner = owner;
       this._pl = pl;
       this._uri = uUri;
+
+      _subEn = ReadFlag("MQTT.subscribe", true);
+      _pubEn = ReadFlag("MQTT.publish", true);
+      _retainedEn = ReadFlag("MQTT.retained", false);
+
       remotePath = _uri.PathAndQuery + _uri.Fragment;
       var sl = remotePath.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
       remotePrefix = string.Empty;
@@ -67,7 +73,21 @@ namespace X13.MQTT {
         this.Owner.SetField("Action", act_n);
       }
     }
+    private bool ReadFlag(string path, bool def) {
+      bool rv;
+      var v1 = this.Owner.GetField(path);
+      if(v1.ValueType==JSC.JSValueType.Boolean) {
+         rv = (bool)v1;
+      } else {
+        rv = def;
+        this.Owner.SetField(path, def);
+      }
+      return rv;
+    }
     public void Publish(string path, string payload) {
+      if(!_subEn) {
+        return;
+      }
       string lp = (path.Length > remotePrefix.Length) ? path.Substring(remotePrefix.Length + 1) : string.Empty;
       try {
         var o = JsLib.ParseJson(payload);
@@ -83,7 +103,11 @@ namespace X13.MQTT {
       }
     }
     public void Connected() {
-      _sr = Owner.Subscribe(_mask, Changed);
+      if(_pubEn) {
+        _sr = Owner.Subscribe(_mask, Changed);
+      } else if(_subEn) {
+        Client.Subscribe(this);
+      }
     }
     public void Disconnected() {
       var sr = Interlocked.Exchange(ref _sr, null);
@@ -94,7 +118,9 @@ namespace X13.MQTT {
 
     public void Dispose() {
       Disconnected();
-      Client.Unsubscribe(this);
+      if(_subEn) {
+        Client.Unsubscribe(this);
+      }
     }
 
     private void Changed(Perform p, SubRec sr) {
@@ -107,9 +133,9 @@ namespace X13.MQTT {
         var rp = remotePrefix + p.src.path.Substring(Owner.path.Length);
         var payload = JsLib.Stringify(p.src.GetState() ?? JSC.JSValue.Null);
         if(!string.IsNullOrEmpty(rp) && payload != null) {
-          Client.Send(new MqPublish(rp, payload));
+          Client.Send(new MqPublish(rp, payload) { Retained = _retainedEn });
         }
-      } else if(p.art == Perform.Art.subAck) {
+      } else if(p.art == Perform.Art.subAck && _subEn) {
         Client.Subscribe(this);
       }
     }
