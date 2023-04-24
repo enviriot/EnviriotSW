@@ -16,14 +16,14 @@ namespace X13.Periphery {
     private Action<byte[]> _pub;
     private SubRec _deviceChangedsSR;
     private List<TwiDevice> _devs;
-    private Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>>> _reqs;
+    private Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>, DateTime>> _reqs;
     private int _flag;
 
     public TWI(Topic owner, Action<byte[]> pub) {
       this._owner = owner;
       this._pub = pub;
       this._devs = new List<TwiDevice>();
-      this._reqs = new Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>>>();
+      this._reqs = new Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>, DateTime>>();
       this._verbose = Topic.root.Get("/$YS/TWI/verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -100,7 +100,15 @@ namespace X13.Periphery {
       }
     }
     public void Tick() {
-      // nothing
+      if (_reqs.Any()) {
+        if (_reqs.Peek().Item3 < DateTime.Now) {
+          var req = _reqs.Dequeue();
+          req.Item2.SetException(new JSC.JSException(new JSL.Number(6)));  // Timeout server-side
+          if (verbose) {
+            Log.Warning("{0}.Tick({1}) - Timeout server-side", _owner.path);
+          }
+        }
+      }
     }
     #endregion IMsExt Members
     private void SendReq() {
@@ -142,7 +150,7 @@ namespace X13.Periphery {
       arr[2] = arr.Length - 4;
       var ba = arr.Select(z => (byte)z).ToArray();
       var tsc = new TaskCompletionSource<JSC.JSValue>();
-      _reqs.Enqueue(new Tuple<byte[], TaskCompletionSource<JSC.JSValue>>(ba, tsc));
+      _reqs.Enqueue(new Tuple<byte[], TaskCompletionSource<JSC.JSValue>, DateTime>(ba, tsc, DateTime.Now.AddSeconds(1)));  // TODO: timeout
       SendReq();
       return tsc.Task;
     }
