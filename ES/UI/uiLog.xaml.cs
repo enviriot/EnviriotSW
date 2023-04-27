@@ -30,6 +30,7 @@ namespace X13.UI {
       InitializeComponent();
 
       var v = CollectionViewSource.GetDefaultView(LogCollection);
+      v.GroupDescriptions.Add(new PropertyGroupDescription("Date"));
       v.Filter = FilterFunc;
       lbLog.ItemsSource = v;
     }
@@ -74,6 +75,7 @@ namespace X13.UI {
       public LogLevel ll { get; private set; }
       public string msg { get; private set; }
       public bool local { get; private set; }
+      public DateTime Date { get {  return dt.Date; } }
     }
 
     private void BaseWindow_MouseLeave(object sender, MouseEventArgs e) {

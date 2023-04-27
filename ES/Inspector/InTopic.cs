@@ -157,7 +157,7 @@ namespace X13.UI {
       if(pc_items) {
         PropertyChangedReise("items");
         PropertyChangedReise("HasChildren");
-        if(_items != null && _items.Any()) {
+        if(_parent!=null && _items != null && _items.Any()) {
           _parent.IsExpanded = true;
         }
       }

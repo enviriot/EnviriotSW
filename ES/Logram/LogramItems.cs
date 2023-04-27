@@ -220,7 +220,7 @@ namespace X13.UI {
             dc.DrawEllipse(_selected ? brItemSelected : this.brush, null, new Point(0, 0), 3, 3);
           }
           if(ic) {
-            var ft = new FormattedText(val_s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black);
+            var ft = new FormattedText(val_s, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black, VisualTreeHelper.GetDpi(this).PixelsPerDip);
             Point p;
             if(_mode == 0) {
               p = new Point(2, 2 - CELL_SIZE);
@@ -645,7 +645,7 @@ namespace X13.UI {
         this.Offset = OriginalLocation;
 
         using(DrawingContext dc = this.RenderOpen()) {
-          FormattedText ft = new FormattedText(model.name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LFont, CELL_SIZE * 0.7, Brushes.White);
+          FormattedText ft = new FormattedText(model.name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LFont, CELL_SIZE * 0.7, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
           width = Math.Ceiling((ft.WidthIncludingTrailingWhitespace+11) / CELL_SIZE) * CELL_SIZE;
           dc.DrawRoundedRectangle(_selected ? brItemSelected : brElementBody, null, new Rect(0, 1, width - 1, CELL_SIZE - 3), CELL_SIZE / 4, CELL_SIZE / 4); //-V3041
           ft.MaxTextHeight = CELL_SIZE - 3;
@@ -803,7 +803,7 @@ namespace X13.UI {
         this.Offset = OriginalLocation;
 
 
-        FormattedText head = new FormattedText(model.name, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black);
+        FormattedText head = new FormattedText(model.name, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.Black, VisualTreeHelper.GetDpi(this).PixelsPerDip);
         FormattedText[] textIp = new FormattedText[MAX_PINS];
         loPin[] pinIp = new loPin[MAX_PINS];
         int cntIp = 0;
@@ -825,7 +825,7 @@ namespace X13.UI {
           if(pd.ValueType != JSC.JSValueType.Object || pd.Value == null || (ddr = JsLib.OfInt(pd, "ddr", 0))==0) {
             continue;
           }
-          var ft = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White);
+          var ft = new FormattedText(p.GetModel().name, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, LogramView.LFont, CELL_SIZE * 0.7, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
           double cw = 7 + ft.WidthIncludingTrailingWhitespace;
           if(ddr<0) {  // Input
             pos = -ddr-1;
