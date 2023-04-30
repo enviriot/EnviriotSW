@@ -469,6 +469,13 @@ namespace X13.Periphery {
     public readonly QoS qualityOfService;
     public readonly TopicIdType topicIdType;
     public readonly ushort TopicId;
+    public Action<byte[]> SendAck { get {  
+        if(_ti==null || _ti.extension==null) {
+          return null;
+        }
+        return _ti.extension.SendAck;
+      } 
+    }
     public byte[] Data { get { if(_payload==null) _payload=MsDevice.Serialize(_ti); return _payload; } set { _payload=value; } }
 
     public override string ToString() {

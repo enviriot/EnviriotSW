@@ -11,9 +11,9 @@ namespace X13.Periphery {
   internal class DevicePLC : IMsExt {
     private static int _cntCom = 0;
     private readonly int _idx;
-    private Topic _owner;
-    private Action<byte[]> _pub;
-    private Topic _verbose;
+    private readonly Topic _owner;
+    private readonly Action<byte[]> _pub;
+    private readonly Topic _verbose;
     private bool _plcStoped;
     private bool PlcStoped {
       get {
@@ -50,23 +50,21 @@ namespace X13.Periphery {
       _owner.SetState(0);
     }
 
-    public bool verbose {
+    public bool Verbose {
       get {
         return _verbose != null && (bool)_verbose.GetState();
       }
     }
-    public string path { get { return _owner.path; } }
+    public string Path { get { return _owner.path; } }
 
     #region RPC Members
     public X13.DevicePLC.EP_Compiler Build() {
-      string src;
-
       var st = _owner.Get("src", false, _owner);
-      if(st == null || st.GetState().ValueType != JSC.JSValueType.String || (src = st.GetState().Value as string) == null) {
+      if(st == null || st.GetState().ValueType != JSC.JSValueType.String || !(st.GetState().Value is string src)) {
         src = string.Empty;
       }
       var c = new X13.DevicePLC.EP_Compiler();
-      c.CMsg += c_CMsg;
+      c.CMsg += C_CMsg;
       return c.Parse(src)?c:null;
     }
     public void StartPlc() {
@@ -142,8 +140,9 @@ namespace X13.Periphery {
       _stackBottom = (c.StackBottom + 3) / 4;
       _prg = new SortedSet<Chunk>();
       foreach(var kv in c.Hex) {
-        var ch = new Chunk((int)kv.Key);
-        ch.Data = kv.Value;
+        var ch = new Chunk((int)kv.Key) {
+          Data = kv.Value
+        };
         ch.crcCur = Crc16.UpdateCrc(0xFFFF, ch.Data);
         _prg.Add(ch);
         if(System.Threading.Interlocked.CompareExchange(ref _st, 1, 0) == 0) {
@@ -153,7 +152,7 @@ namespace X13.Periphery {
     }
     #endregion RPC Members
 
-    private void c_CMsg(NiL.JS.MessageLevel level, NiL.JS.Core.CodeCoordinates coords, string message) {
+    private void C_CMsg(NiL.JS.MessageLevel level, NiL.JS.Core.CodeCoordinates coords, string message) {
       switch(level) {
       case NiL.JS.MessageLevel.Error:
       case NiL.JS.MessageLevel.CriticalWarning:
@@ -186,7 +185,7 @@ namespace X13.Periphery {
             _st = 1;
           } else {
             _st = _plcStoped ? 5 : 3;
-            if(verbose) {
+            if(Verbose) {
               Log.Info("{0}.crc differ 0x{1:X4}:{2:X4}  cur={3:X4}, dev={4:X4}", _owner.path, _curChunk.offset, _curChunk.Data.Length, _curChunk.crcCur, _curChunk.crcDev);
             }
           }
@@ -229,11 +228,13 @@ namespace X13.Periphery {
         processed = true;
       }
       if(!processed) {
-        if(verbose) {
+        if(Verbose) {
           Log.Warning("{0}.Recv({1}) {2}-{3}", _owner, BitConverter.ToString(msgData), ((Cmd)msgData[0]), msgData.Length > 1 ? ((ErrorCode)msgData[1]).ToString() : "empty");
         }
         _st = 0;
       }
+    }
+    public void SendAck(byte[] buf) {
     }
     public void Tick() {
       byte[] buf;
@@ -282,7 +283,7 @@ namespace X13.Periphery {
           buf[len + 4] = (byte)(crc >> 8);
           _st = 6;
           _pub(buf);
-          if(verbose) {
+          if(Verbose) {
             Log.Info("{0}.write 0x{1:X4} {2}", _owner.path, addr, BitConverter.ToString(buf, 3, len));
           }
         } else if(_st == 8) {
@@ -302,7 +303,6 @@ namespace X13.Periphery {
     public override string ToString() {
       return (_owner!=null?_owner.path:"unk") + "["+_idx.ToString()+"]";
     }
-
     private enum Cmd : byte {
       Idle = 0,
       PlcStartReq = 1,      // 1

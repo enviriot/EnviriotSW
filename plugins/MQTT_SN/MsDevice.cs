@@ -1128,15 +1128,21 @@ namespace X13.Periphery {
 
     private void ProccessAcknoledge(MsMessage rMsg) {
       MsMessage msg = null;
+      MsMessage reqMsg;
       lock(_sendQueue) {
-        MsMessage reqMsg;
         if(_sendQueue.Count > 0 && (reqMsg = _sendQueue.Peek()).MsgTyp == rMsg.ReqTyp && reqMsg.MessageId == rMsg.MessageId) {
           _sendQueue.Dequeue();
           _waitAck = false;
           if(_sendQueue.Count > 0 && !(msg = _sendQueue.Peek()).IsRequest) {
             _sendQueue.Dequeue();
           }
+        } else {
+          reqMsg = null;
         }
+      }
+      Action<byte[]> sa;
+      if(reqMsg!=null && reqMsg.MsgTyp==MsMessageType.PUBLISH && (sa = (reqMsg as MsPublish).SendAck)!=null) {
+        sa((reqMsg as MsPublish).Data);
       }
       if(msg == null && !_waitAck && state == State.AWake) {
         Tick();

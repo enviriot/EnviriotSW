@@ -11,19 +11,19 @@ using System.Threading;
 
 namespace X13.Periphery {
   internal class TWI : IMsExt {
-    private Topic _owner;
-    private Topic _verbose;
-    private Action<byte[]> _pub;
-    private SubRec _deviceChangedsSR;
-    private List<TwiDevice> _devs;
-    private Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>, DateTime>> _reqs;
+    private readonly Topic _owner;
+    private readonly Topic _verbose;
+    private readonly Action<byte[]> _pub;
+    private readonly SubRec _deviceChangedsSR;
+    private readonly List<TwiDevice> _devs;
+    private readonly Queue<TwiPack> _reqs;
     private int _flag;
 
     public TWI(Topic owner, Action<byte[]> pub) {
       this._owner = owner;
       this._pub = pub;
       this._devs = new List<TwiDevice>();
-      this._reqs = new Queue<Tuple<byte[], TaskCompletionSource<JSC.JSValue>, DateTime>>();
+      this._reqs = new Queue<TwiPack>();
       this._verbose = Topic.root.Get("/$YS/TWI/verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -36,12 +36,12 @@ namespace X13.Periphery {
 
       _flag = 1;
       _deviceChangedsSR = this._owner.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Field, "type", DeviceChanged);
-      if(verbose) {
+      if(Verbose) {
         Log.Debug("{0}.Created", _owner.path);
       }
     }
 
-    public bool verbose {
+    public bool Verbose {
       get {
         return _verbose != null && (bool)_verbose.GetState();
       }
@@ -50,63 +50,66 @@ namespace X13.Periphery {
     #region IMsExt Members
     public void Recv(byte[] buf) {
       if(buf == null || buf.Length < 4) {
-        if(verbose) {
+        if(Verbose) {
           Log.Warning("{0}.recv({1})", _owner.path, buf == null ? "null" : BitConverter.ToString(buf));
         }
         return;
       }
       if(_reqs.Any()) {
-        if(_reqs.Peek().Item1[0] == buf[0]) {
+        if(_reqs.Peek().data[0] == buf[0]) {
           var req = _reqs.Dequeue();
           if((buf[1] & 0xF0) == 0x10) {
-            if(buf[3] == req.Item1[3]) {
-              req.Item2.SetResult(new JSL.Array(buf));
-              if(verbose) {
+            if(buf[3] == req.data[3]) {
+              req.cb.SetResult(new JSL.Array(buf));
+              if(Verbose) {
                 Log.Debug("{0}.recv({1})", _owner.path, BitConverter.ToString(buf));
               }
             } else {
-              req.Item2.SetException(new JSC.JSException(new JSL.Number(5)));  // wrong response length
-              if(verbose) {
+              req.cb.SetException(new JSC.JSException(new JSL.Number(5)));  // wrong response length
+              if(Verbose) {
                 Log.Warning("{0}.recv({1}) - wrong response length", _owner.path, BitConverter.ToString(buf));
               }
             }
           } else if((buf[1] & 0x20) != 0) {
-            req.Item2.SetException(new JSC.JSException(new JSL.Number(2)));  // Timeout
-            if(verbose) {
+            req.cb.SetException(new JSC.JSException(new JSL.Number(2)));  // Timeout
+            if(Verbose) {
               Log.Warning("{0}.recv({1}) - Timeout", _owner.path, BitConverter.ToString(buf));
             }
           } else if((buf[1] & 0x40) != 0) {
-            req.Item2.SetException(new JSC.JSException(new JSL.Number(3)));  // Slave Addr NACK received - Device not present
-            if(verbose) {
+            req.cb.SetException(new JSC.JSException(new JSL.Number(3)));  // Slave Addr NACK received - Device not present
+            if(Verbose) {
               Log.Warning("{0}.recv({1}) - Slave Addr NACK", _owner.path, BitConverter.ToString(buf));
             }
           } else {
-            req.Item2.SetException(new JSC.JSException(new JSL.Number(4)));  // Internal Error
-            if(verbose) {
+            req.cb.SetException(new JSC.JSException(new JSL.Number(4)));  // Internal Error
+            if(Verbose) {
               Log.Warning("{0}.recv({1}) - Internal Error", _owner.path, BitConverter.ToString(buf));
             }
           }
           _flag = 1;
           SendReq();
         } else {
-          if(verbose) {
+          if(Verbose) {
             Log.Warning("{0}.recv({1}) - unknown response", _owner.path, BitConverter.ToString(buf));
           }
         }
       } else {
-        if(verbose) {
+        if(Verbose) {
           Log.Warning("{0}.recv({1}) - unknown response", _owner.path, BitConverter.ToString(buf));
         }
       }
     }
+    public void SendAck(byte[] buf) {
+      TwiPack req;
+      if(_reqs.Any() && (req = _reqs.Peek()).data.Length == buf.Length && buf.SequenceEqual(req.data)) {
+        req.to = DateTime.Now.AddSeconds(15);
+      }
+    }
     public void Tick() {
-      if (_reqs.Any()) {
-        if (_reqs.Peek().Item3 < DateTime.Now) {
-          var req = _reqs.Dequeue();
-          req.Item2.SetException(new JSC.JSException(new JSL.Number(6)));  // Timeout server-side
-          if (verbose) {
-            Log.Warning("{0}.Tick({1}) - Timeout server-side", _owner.path);
-          }
+      if(_reqs.Any()) {
+        TwiPack req = _reqs.Peek();
+        if(req.to < DateTime.Now) {
+          Recv(new byte[] { req.data[0], 0x20, req.data[2], 0, 0xFF });  // Timeout server-side
         }
       }
     }
@@ -115,19 +118,18 @@ namespace X13.Periphery {
       if(Interlocked.CompareExchange(ref _flag, 2, 1) == 1) {
         if(_reqs.Any()) {
           var req = _reqs.Peek();
-          _pub(req.Item1);
-          if(verbose) {
-            Log.Debug("{0}.send({1})", _owner.path, BitConverter.ToString(req.Item1));
+          _pub(req.data);
+          if(Verbose) {
+            Log.Debug("{0}.send({1})", _owner.path, BitConverter.ToString(req.data));
           }
-          if(req.Item1[3] == 0) {  // to recive 0 bytes => no answer
-            Recv(new byte[] { req.Item1[0], 0x10, req.Item1[2], 0 });
+          if(req.data[3] == 0) {  // to recive 0 bytes => no answer
+            Recv(new byte[] { req.data[0], 0x10, req.data[2], 0, 0xFF});
           }
         } else {
           _flag = 1;
         }
       }
     }
-
     private void DeviceChanged(Perform p, SubRec sr) {
       var d = _devs.FirstOrDefault(z => z.owner == p.src);
       if(d != null) {
@@ -150,7 +152,7 @@ namespace X13.Periphery {
       arr[2] = arr.Length - 4;
       var ba = arr.Select(z => (byte)z).ToArray();
       var tsc = new TaskCompletionSource<JSC.JSValue>();
-      _reqs.Enqueue(new Tuple<byte[], TaskCompletionSource<JSC.JSValue>, DateTime>(ba, tsc, DateTime.Now.AddSeconds(1)));  // TODO: timeout
+      _reqs.Enqueue(new TwiPack(ba, tsc));
       SendReq();
       return tsc.Task;
     }
@@ -163,7 +165,7 @@ namespace X13.Periphery {
         d.Dispose();
       }
       _devs.Clear();
-      if(verbose) {
+      if(Verbose) {
         Log.Debug("{0}.Disposed", _owner.path);
       }
     }
@@ -171,17 +173,16 @@ namespace X13.Periphery {
 
     private class TwiDevice : IDisposable {
       public readonly Topic owner;
-      private TWI _twi;
-      private JSC.Context _ctx;
-      private JSC.JSValue _self;
+      private readonly TWI _twi;
+      private readonly JSC.Context _ctx;
+      private readonly JSC.JSValue _self;
 
       public TwiDevice(Topic owner, TWI twi) {
         this.owner = owner;
         this._twi = twi;
         JSC.JSValue jSrc;
         var jType = owner.GetField("type");
-        Topic tt;
-        if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out tt)
+        if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out var tt)
           && (jSrc = JsLib.GetField(tt.GetState(), "src")).ValueType == JSC.JSValueType.String) {
         } else {
           jSrc = null;
@@ -193,8 +194,7 @@ namespace X13.Periphery {
             _ctx.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
             _ctx.DefineVariable("setAlarm").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
 
-            var f = _ctx.Eval(jSrc.Value as string) as JSL.Function;
-            if(f != null) {
+            if(_ctx.Eval(jSrc.Value as string) is JSL.Function f) {
               if(f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
                 this._self = JSC.JSObject.create(new JSC.Arguments { f.prototype });
               } else {
@@ -228,8 +228,7 @@ namespace X13.Periphery {
         return JsExtLib.SetTimer(func, interval, interval, _ctx);
       }
       private JSC.JSValue SetAlarm(JSC.JSValue func, JSC.JSValue time) {
-        var jd = time.Value as JSL.Date;
-        if(jd != null) {
+        if(time.Value is JSL.Date jd) {
           return JsExtLib.SetTimer(func, jd.ToDateTime(), _ctx);
         } else {
           throw new ArgumentException("SetAlarm(, Date)");
@@ -237,15 +236,13 @@ namespace X13.Periphery {
       }
 
       private JSC.JSValue GetState(string path) {
-        Topic t;
-        if(owner.Exist(path, out t)) {
+        if(owner.Exist(path, out var t)) {
           return t.GetState();
         }
         return JSC.JSValue.NotExists;
       }
       private void SetState(string path, JSC.JSValue value) {
-        Topic t;
-        if(!owner.Exist(path, out t)) {
+        if(!owner.Exist(path, out var t)) {
           t = owner.Get(path, true, owner);
           t.SetField("MQTT-SN.tag", "---", owner);
           t.SetAttribute(Topic.Attribute.Required);
@@ -253,8 +250,7 @@ namespace X13.Periphery {
         t.SetState(value, owner);
       }
       private JSC.JSValue GetField(string path, string field) {
-        Topic t;
-        if(owner.Exist(path, out t)) {
+        if(owner.Exist(path, out var t)) {
           return t.GetField(field);
         }
         return JSC.JSValue.NotExists;
@@ -270,7 +266,16 @@ namespace X13.Periphery {
       }
       #endregion IDisposable Member
     }
+    private class TwiPack {
+      public byte[] data;
+      public TaskCompletionSource<JSC.JSValue> cb;
+      public DateTime to;
+      public TwiPack(byte[] data, TaskCompletionSource<JSC.JSValue> cb) {
+        this.data = data;
+        this.cb = cb;
+        this.to = DateTime.MaxValue;
+      }
 
-
+    }
   }
 }

@@ -3,6 +3,7 @@ using System;
 namespace X13.Periphery {
   internal interface IMsExt : IDisposable {
     void Recv(byte[] buf);
+    void SendAck(byte[] buf);
     void Tick();
   }
 }
