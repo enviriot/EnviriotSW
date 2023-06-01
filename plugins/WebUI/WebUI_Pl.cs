@@ -182,14 +182,17 @@ namespace X13.WebUI {
       case ".png":
         return "image/png";
       case ".css":
-        return "text/css";
+        return "text/css; charset=utf-8";
       case ".csv":
-        return "text/csv";
+        return "text/csv; charset=utf-8";
       case ".htm":
       case ".html":
-        return "text/html";
+        return "text/html; charset=utf-8";
       case ".js":
-        return "application/javascript";
+      case ".mjs":
+          return "application/javascript; charset=utf-8";
+      case ".ico":
+        return "image/x-icon";
       }
       return "application/octet-stream";
     }

@@ -1,48 +1,39 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="description" content="http://x13home.github.io/" />
-  <title>Enviriot simple WebUI</title>
-</head>
-<body>
-  <p id="p_1">
-    Hello
-  </p>
-  <button onmousedown="Lank.publish('/private/tst', true)" onmouseup="Lank.publish('/private/tst', false)">Test button</button>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Enviriot WebUI</title>
+  <!--link rel="stylesheet" href="./index.css"-->
   <script type="text/javascript">
     "use strict";
-    window.Lank = { 'f': {}, 'cb' : null };
+    window.Lank = { 'f': {}, 'cb': null, 'base':"/export/Start/" };
     Lank.publish = function (path, val) {
-      Lank.ws.send('P\t' + path + '\t' + JSON.stringify(val));
+      Lank.ws.send('P\t' + Lank.base + path + '\t' + JSON.stringify(val));
     }
-    Lank.subscribe = function (path) {
-      Lank.ws.send('S\t' + path);
-    }
-    Lank.cb = function (p, v) {
-      switch (p) {
-        case "connected":
-          Lank.subscribe("/export/out/+");
-          break;
-        case "/export/out/01":
-          document.getElementById("p_1").innerHTML = v;
-          break;
+    Lank.cb = function (p, v, m) {
+      let idx = p.indexOf("/");
+      let eid = idx<1?p:p.substring(0, idx);
+      let el = document.getElementById(eid);
+      if (!el) {
+        return;
       }
+      let el_f = (idx > 0 && p.length > idx) ? p.substring(idx+1) : "value";
+      el.$[el_f] = v;
     };
 
     Lank.f.onMessage = function (evt) {
+      console.log(evt.data);
       var sa = evt.data.split('\t');
-      if (sa[0] == "P" && sa.length == 3) {
+      if (sa[0] == "P" && sa.length > 2 && sa[1].startsWith(Lank.base)) {
         if (Lank.cb != null && typeof (Lank.cb) === "function") {
-          Lank.cb(sa[1], JSON.parse(sa[2]));
+          Lank.cb(sa[1].substring(Lank.base.length), !sa[2] ? null : JSON.parse(sa[2]), (sa.length<3 || !sa[3]) ? null : JSON.parse(sa[3]));
         }
       } else if (sa[0] == 'I' && sa.length == 3) {
         document.cookie = 'sessionId=' + sa[1];
         if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
-          document.title = 'online';
-          if (Lank.cb != null && typeof (Lank.cb) === "function") {
-            Lank.cb("connected", true);
-          }
+          document.title = Lank.base;
+          Lank.ws.send('S\t' + Lank.base + "#");  // subscribe
         }
       }
     };
@@ -81,7 +72,9 @@
       Lank.ws = null;
     };
   </script>
-
+  <script src="./components/button.mjs" type="module"></script>
+</head>
+<body>
+  <x13-button id="button"></x13-button>
 </body>
 </html>
-
