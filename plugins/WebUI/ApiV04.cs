@@ -155,7 +155,11 @@ namespace X13.WebUI {
     }
 
     private void SubChanged(Perform p, SubRec sr) {
+      if(p.art==Perform.Art.subAck || p.prim==_ses.owner) {
+        return;
+      }
       var vj = JsLib.Stringify(p.src.GetState());
+      /*
       string meta = string.Empty;
       if (p.art == Perform.Art.subscribe) {
         var mo = NiL.JS.Core.JSObject.CreateObject();
@@ -172,10 +176,10 @@ namespace X13.WebUI {
         if (mo.Any()) {
           meta = "\t" + JsLib.Stringify(mo);
         }
-      }
-      Send(string.Concat("P\t", p.src.path, "\t", vj, meta));
+      }*/
+      Send(string.Concat("P\t", p.src.path, "\t", vj/*, meta*/));
       if (WebUI_Pl.verbose) {
-        X13.Log.Debug("ws.snd({0}, {1}, {2})", p.src.path, vj, meta);
+        X13.Log.Debug("ws.snd({0}, {1})", p.src.path, vj);
       }
     }
     protected override void OnClose(CloseEventArgs e) {

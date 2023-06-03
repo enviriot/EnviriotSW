@@ -5,76 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Enviriot WebUI</title>
   <!--link rel="stylesheet" href="./index.css"-->
-  <script type="text/javascript">
-    "use strict";
-    window.Lank = { 'f': {}, 'cb': null, 'base':"/export/Start/" };
-    Lank.publish = function (path, val) {
-      Lank.ws.send('P\t' + Lank.base + path + '\t' + JSON.stringify(val));
-    }
-    Lank.cb = function (p, v, m) {
-      let idx = p.indexOf("/");
-      let eid = idx<1?p:p.substring(0, idx);
-      let el = document.getElementById(eid);
-      if (!el) {
-        return;
-      }
-      let el_f = (idx > 0 && p.length > idx) ? p.substring(idx+1) : "value";
-      el.$[el_f] = v;
-    };
-
-    Lank.f.onMessage = function (evt) {
-      console.log(evt.data);
-      var sa = evt.data.split('\t');
-      if (sa[0] == "P" && sa.length > 2 && sa[1].startsWith(Lank.base)) {
-        if (Lank.cb != null && typeof (Lank.cb) === "function") {
-          Lank.cb(sa[1].substring(Lank.base.length), !sa[2] ? null : JSON.parse(sa[2]), (sa.length<3 || !sa[3]) ? null : JSON.parse(sa[3]));
-        }
-      } else if (sa[0] == 'I' && sa.length == 3) {
-        document.cookie = 'sessionId=' + sa[1];
-        if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
-          document.title = Lank.base;
-          Lank.ws.send('S\t' + Lank.base + "#");  // subscribe
-        }
-      }
-    };
-    Lank.f.createWS = function () {
-      if (Lank.ws == null || Lank.ws.readyState == Lank.ws.CLOSED) {
-        if (Lank.ws != null) {
-          Lank.ws.close();
-
-          document.title = 'offline';
-        }
-        Lank.ws = new WebSocket((window.location.protocol == "https:" ? "wss://" : "ws://") + window.location.host + "/api/v04");
-        Lank.ws.onopen = function (evt) {
-          Lank.ws.onmessage = Lank.f.onMessage;
-          Lank.ws.onclose = function (evt) {
-            document.title = 'offline';
-            setTimeout(Lank.f.createWS, 1500);
-          };
-          Lank.ws.onerror = function (evt) {
-            document.title = 'offline';
-            setTimeout(Lank.f.createWS, 1500);
-          };
-        };
-        setTimeout(Lank.f.createWS, 15000);
-      }
-    };
-
-    document.onreadystatechange = function () {
-      if (document.readyState === "complete") {
-        Lank.f.createWS();
-      }
-    };
-    window.unload = function (e) {
-      if (Lank.ws != null && Lank.ws.readyState == Lank.ws.OPEN) {
-        Lank.ws.close(1000);
-      }
-      Lank.ws = null;
-    };
-  </script>
-  <script src="./components/button.mjs" type="module"></script>
+  <script src="./lib/wsBond.js" type="module"></script>
+  <script src="./components/button.js" type="module"></script>
 </head>
 <body>
-  <x13-button id="button"></x13-button>
+  <x13-button data-text='/export/b2_text'></x13-button>
+  <x13-button data-value='/export/t1'></x13-button>
 </body>
 </html>
