@@ -6,10 +6,13 @@
   <title>Enviriot WebUI</title>
   <!--link rel="stylesheet" href="./index.css"-->
   <script src="./lib/wsBond.js" type="module"></script>
+  <script src="./components/text.js" type="module"></script>
   <script src="./components/button.js" type="module"></script>
 </head>
 <body>
-  <x13-button data-text='/export/b2_text'></x13-button>
-  <x13-button data-value='/export/t1'></x13-button>
+  <x13-text text="text1"></x13-text>
+  <x13-text data-text="/export/b2_text"></x13-text>
+  <x13-button data-value='/export/t1'>Button1</x13-button>
+  <x13-button data-value='/export/t2'><x13-text text="button2"></x13-text></x13-button>
 </body>
 </html>
