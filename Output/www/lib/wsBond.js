@@ -1,4 +1,5 @@
 ﻿import { BaseComponent } from '/lib/symbiote.js';
+import '/lib/stringformat.min.js';
 
 window.wsBond = {
   publish: function (path, val) {
@@ -25,10 +26,15 @@ window.wsBond = {
         let val = JSON.parse(sa[2]);
         if (wsBond.f.subscribes.hasOwnProperty(t)) {
           wsBond.f.subscribes[t].forEach((s) => {
-            s.o.$[s.p] = val;
+            let v = val;
+            if (s.format) {
+              if (typeof v === 'number' && isFinite(v)) {
+                v = v.format(s.format);
+              }
+            }
+            s.o.$[s.p] = v;  // publish
           });
         }
-        //wsBond.f.data.pub(sa[1], JSON.parse(sa[2]))
       } else if (sa[0] == 'I' && sa.length == 3) {
         document.cookie = 'sessionId=' + sa[1];
         if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
@@ -60,13 +66,21 @@ document.onreadystatechange = function () {
   if (document.readyState === "complete") {
     let els = document.querySelectorAll('*');
     for (let el in els) {
-      if (els[el] instanceof BaseComponent) {
-        for (let at in els[el].dataset) {
-          //console.log(els[el].localName + ".[" + at + "]=" + els[el].dataset[at]);
-          if (!wsBond.f.subscribes[els[el].dataset[at]]) {
-            wsBond.f.subscribes[els[el].dataset[at]] = new Set();
+      let o = els[el];
+      if (o instanceof BaseComponent) {
+        for (let at in o.dataset) {
+          //console.log(els[el].localName + "[" + at + "]=" + els[el].dataset[at]);
+          if (at.endsWith(".format") || at.endsWith(".convert")) {
+            continue;
           }
-          wsBond.f.subscribes[els[el].dataset[at]].add({ o: els[el], p: at});
+          if (!wsBond.f.subscribes[o.dataset[at]]) {
+            wsBond.f.subscribes[o.dataset[at]] = new Set();
+          }
+          let sub = { o: o, p: at };
+          if (o.dataset[at + ".format"]) { 
+            sub.format = o.dataset[at + ".format"];
+          }
+          wsBond.f.subscribes[o.dataset[at]].add(sub);
         }
       }
     }
