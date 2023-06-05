@@ -7,6 +7,6 @@ class X13_button extends BaseComponent {
     onDown: () => { this.$.value = true; wsBond.publish(this.dataset.value, this.$.value); }
   }
 }
-X13_button.template = /*html*/ '<button set="onmousedown:onDown;onmouseup:onUp"><slot></slot></button>';
+X13_button.template = /*html*/ '<button type="button" set="onmousedown:onDown;onmouseup:onUp"><slot></slot></button>';
 
 X13_button.reg("x13-button");
