@@ -35,16 +35,14 @@ window.wsBond = {
           for (let i = 0; i < len; i++) {
             let loc = arr[i].indexOf(':');
             if (loc > 0 && loc < arr[i].length) {
-              let ca = arr[i].substring(loc + 1).match(/\w\w/g).map(x => parseInt(x, 16));
-              if (ca.length == 3) ca.unshift(255);
-              this.p.push({ v: JSON.parse(arr[i].substring(0, loc)), c: ca});
+              this.p.push({ v: JSON.parse(arr[i].substring(0, loc)), c: this.hex2hsla(arr[i].substring(loc + 1)) });
             }
           }
         }
         convert(val) { 
           if (typeof (val) === 'number' && isFinite(val)) { 
             let c;
-            if (val < this.p[0].v) {
+            if (val <= this.p[0].v) {
               c = this.p[0].c;
             } else if (val >= this.p[this.p.length - 1].v) {
               c = this.p[this.p.length - 1].c;
@@ -60,8 +58,16 @@ window.wsBond = {
                 }
               }
             }
-            return String.format("rgba({1:##0},{2:##0},{3:##0},{0:0.0#})", c[0]/255, c[1], c[2], c[3]);
+            return String.format("hsla({0:##0},{1:##0}%,{2:##0}%,{3:0.0#})", c[0], c[1]*100, c[2]*100, c[3]);
           }
+        }
+        hex2hsla(hex) {
+          let ca = hex.match(/\w\w/g).map(x => parseInt(x, 16)/255);
+          if (ca.length == 3) ca.unshift(1);
+          let r = ca[1], g = ca[2], b = ca[3];
+          let v = Math.max(r, g, b), c = v - Math.min(r, g, b), f = (1 - Math.abs(v + v - c - 1));
+          let h = c && ((v == r) ? (g - b) / c : ((v == g) ? 2 + (b - r) / c : 4 + (r - g) / c));
+          return [60 * (h < 0 ? h + 6 : h), f ? c / f : 0, (v + v - c) / 2, ca[0]];
         }
       }
     },
