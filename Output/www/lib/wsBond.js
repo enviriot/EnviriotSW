@@ -5,6 +5,7 @@ window.wsBond = {
   publish: function (path, val) {
     if (path) {
       wsBond.ws.send('P\t' + path + '\t' + JSON.stringify(val));
+      wsBond.f.processInpPublish(path, val);
     }
   },
   subscribe: function (path, cb) {
@@ -35,30 +36,35 @@ window.wsBond = {
           for (let i = 0; i < len; i++) {
             let loc = arr[i].indexOf(':');
             if (loc > 0 && loc < arr[i].length) {
-              this.p.push({ v: JSON.parse(arr[i].substring(0, loc)), c: this.hex2hsla(arr[i].substring(loc + 1)) });
+              this.p.push({v: JSON.parse(arr[i].substring(0, loc)), c: this.hex2hsla(arr[i].substring(loc + 1)) });
             }
           }
         }
-        convert(val) { 
-          if (typeof (val) === 'number' && isFinite(val)) { 
+        convert(val) {
+          if (typeof (val) === 'number' && isFinite(val)) {
             let c;
             if (val <= this.p[0].v) {
               c = this.p[0].c;
             } else if (val >= this.p[this.p.length - 1].v) {
               c = this.p[this.p.length - 1].c;
             } else {
-              for (let i = 0; i < this.p.length-1; i++) { 
-                if (val >= this.p[i].v && val < this.p[i + 1].v) { 
-                  let k = (val - this.p[i].v) / (this.p[i+1].v - this.p[i].v);
-                  c = [this.p[i].c[0] * (1-k) + this.p[i + 1].c[0] * k,
-                       this.p[i].c[1] * (1-k) + this.p[i + 1].c[1] * k,
-                       this.p[i].c[2] * (1-k) + this.p[i + 1].c[2] * k,
-                       this.p[i].c[3] * (1-k) + this.p[i + 1].c[3] * k];
+              for (let i = 0; i < this.p.length - 1; i++) {
+                if (val >= this.p[i].v && val < this.p[i + 1].v) {
+                  let k = (val - this.p[i].v) / (this.p[i + 1].v - this.p[i].v);
+                  c = [this.p[i].c[0] * (1 - k) + this.p[i + 1].c[0] * k,
+                  this.p[i].c[1] * (1 - k) + this.p[i + 1].c[1] * k,
+                  this.p[i].c[2] * (1 - k) + this.p[i + 1].c[2] * k,
+                  this.p[i].c[3] * (1 - k) + this.p[i + 1].c[3] * k];
                   break;
                 }
               }
             }
-            return String.format("hsla({0:##0},{1:##0}%,{2:##0}%,{3:0.0#})", c[0], c[1]*100, c[2]*100, c[3]);
+            return String.format("hsla({0:##0},{1:##0}%,{2:##0}%,{3:0.0#})", c[0], c[1] * 100, c[2] * 100, c[3]);
+          } else {
+            let kv = this.p.find(z => z.v === val);
+            if (kv) {
+              return String.format("hsla({0:##0},{1:##0}%,{2:##0}%,{3:0.0#})", kv.c[0], kv.c[1] * 100, kv.c[2] * 100, kv.c[3]);
+            }
           }
         }
         hex2hsla(hex) {
@@ -71,15 +77,18 @@ window.wsBond = {
         }
       }
     },
+    processInpPublish(path, value) {
+      if (wsBond.f.subscribes.hasOwnProperty(path)) {
+        wsBond.f.subscribes[path].forEach(s => s.o.$[s.p] = s.c ? s.c.convert(value) : value);
+      }
+    },
     onMessage: function (evt) {
       console.log(evt.data);
       let sa = evt.data.split('\t');
       if (sa[0] == "P" && sa.length > 2 && sa[2]) {
         let t = sa[1];
         let val = JSON.parse(sa[2]);
-        if (wsBond.f.subscribes.hasOwnProperty(t)) {
-          wsBond.f.subscribes[t].forEach(s => s.o.$[s.p] = s.c ? s.c.convert(val) : val);
-        }
+        wsBond.f.processInpPublish(t, val);
       } else if (sa[0] == 'I' && sa.length == 3) {
         document.cookie = 'sessionId=' + sa[1];
         if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
@@ -110,25 +119,50 @@ window.wsBond = {
 document.onreadystatechange = function () {
   if (document.readyState === "complete") {
     let els = document.querySelectorAll('*');
+    let fcr = function (oc, pn) {
+      if (!oc[pn]) {
+        oc[pn] = {};
+      }
+    }
     for (let el in els) {
       let o = els[el];
       if (o instanceof BaseComponent) {
-        for (let at in o.dataset) {
+        let oc = { o:o };
+        let defaultTopic;
+        for (let pni in o.dataset) {
           //console.log(els[el].localName + "[" + at + "]=" + els[el].dataset[at]);
-          if (at.includes('.')) {
-            continue;
-          }
-          if (!wsBond.f.subscribes[o.dataset[at]]) {
-            wsBond.f.subscribes[o.dataset[at]] = new Set();
-          }
-          let sub = { o: o, p: at };
-          for (let fmt in wsBond.f.converters) { 
-            if (o.dataset[at + "." + fmt]) {
-              sub.c = new wsBond.f.converters[fmt](o.dataset[at + "." + fmt]);
-              break;
+          let di = pni.indexOf('.');
+          if (di >= 0) {
+            let pn = pni.substring(0, di);
+            let cn = pni.substring(di + 1);
+            if (wsBond.f.converters[cn]) {
+              fcr(oc, pn);
+              oc[pn].converter = new wsBond.f.converters[cn](o.dataset[pni]);
+            }
+          } else {
+            fcr(oc, pni);
+            oc[pni].topic = o.dataset[pni];
+            if (!defaultTopic || pni == "value") {
+              defaultTopic = o.dataset[pni];
             }
           }
-          wsBond.f.subscribes[o.dataset[at]].add(sub);
+        }
+        for (let pn in oc) {
+          if (pn == "o") {
+            continue;
+          }
+          let pv = oc[pn];
+          if (!pv.topic) {
+            pv.topic = defaultTopic;
+          }
+          if (!wsBond.f.subscribes[pv.topic]) {
+            wsBond.f.subscribes[pv.topic] = new Set();
+          }
+          let sub = { o: oc.o, p: pn };  // object, property
+          if (pv.converter) {
+            sub.c = pv.converter;
+          }
+          wsBond.f.subscribes[pv.topic].add(sub);
         }
       }
     }

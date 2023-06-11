@@ -2,7 +2,7 @@
 
 class X13_text extends BaseComponent {
   init$ = {
-    text: "",
+    value: "",
     fg_color:null,
     bg_color:null,
   };
@@ -11,6 +11,6 @@ class X13_text extends BaseComponent {
     this.sub('bg_color', color => this.ref.div.style.backgroundColor = color);
   }
 }
-X13_text.template = /*html*/ `<div ref="div" style="display:inline">{{text}}</div>`;
-X13_text.bindAttributes({ "text": "text", "fg_color": "fg_color", "bg_color": "bg_color" });
+X13_text.template = /*html*/ `<div ref="div" style="display:inline">{{value}}</div>`;
+X13_text.bindAttributes({ "value": "value", "fg_color": "fg_color", "bg_color": "bg_color" });
 X13_text.reg("x13-text");
