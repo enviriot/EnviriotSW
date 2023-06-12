@@ -1,5 +1,5 @@
-﻿import { BaseComponent } from '/lib/symbiote.js';
-import '/lib/stringformat.min.js';
+﻿import { BaseComponent } from './symbiote.js';
+import './stringformat.min.js';
 
 window.wsBond = {
   publish: function (path, val) {
@@ -79,16 +79,20 @@ window.wsBond = {
     },
     processInpPublish(path, value) {
       if (wsBond.f.subscribes.hasOwnProperty(path)) {
-        wsBond.f.subscribes[path].forEach(s => s.o.$[s.p] = s.c ? s.c.convert(value) : value);
+        for (var it = wsBond.f.subscribes[path].values(), s = null; s = it.next().value;) { 
+          try {
+            s.o.$[s.p] = s.c ? s.c.convert(value) : value;
+          } catch (error) {
+            console.error("processInpPublish(" + path + ")[" + idx + "] - " + error);
+          }
+        }
       }
     },
     onMessage: function (evt) {
-      console.log(evt.data);
+      //console.log(evt.data);
       let sa = evt.data.split('\t');
       if (sa[0] == "P" && sa.length > 2 && sa[2]) {
-        let t = sa[1];
-        let val = JSON.parse(sa[2]);
-        wsBond.f.processInpPublish(t, val);
+        wsBond.f.processInpPublish(sa[1], JSON.parse(sa[2]));
       } else if (sa[0] == 'I' && sa.length == 3) {
         document.cookie = 'sessionId=' + sa[1];
         if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
@@ -115,7 +119,6 @@ window.wsBond = {
     }
   }
 };
-
 document.onreadystatechange = function () {
   if (document.readyState === "complete") {
     let els = document.querySelectorAll('*');

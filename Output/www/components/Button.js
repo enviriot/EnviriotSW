@@ -1,4 +1,4 @@
-﻿import { BaseComponent } from '/lib/symbiote.js';
+﻿import { BaseComponent } from '../lib/symbiote.js';
 
 class X13_button extends BaseComponent {
   init$ = {

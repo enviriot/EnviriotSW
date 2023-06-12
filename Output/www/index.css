@@ -1,0 +1,30 @@
+/* css */
+* {
+  box-sizing:border-box;
+}
+
+x13-text {
+  display: block;
+  border: 1px groove lightgray;
+  padding: 5px 1.5em;
+  text-align: center;
+}
+
+.card {
+  float:left;
+  display:inline;
+  background-color: papayawhip;
+  padding: 0px 1em 15px 1em;
+  margin: 2em;
+  border-radius:15px;
+}
+  .card > p {
+    float:none;
+    font-size: 20px;
+    text-align: center;
+  }
+  .card > div {
+    float:none;
+    display:block;
+    background-color: white;
+  }
