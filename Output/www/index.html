@@ -8,13 +8,18 @@
   <script src="./lib/wsBond.js" type="module"></script>
   <script src="./components/text.js" type="module"></script>
   <script src="./components/button.js" type="module"></script>
+  <script src="./components/graph.js" type="module"></script>
 </head>
 <body>
+  <!--
   <x13-text value="text1" data-bg_color="/export/t1_color" data-fg_color="/export/b2_text" data-fg_color.color="-50:#0000FF;-25:#FF8000;50:#FF0000"></x13-text>
   <x13-button data-value='/export/t1'>Button1</x13-button>
   <x13-text data-value="/export/b2_text" data-value.format="0.0 km&sol;h" fg_color="#40FF40"></x13-text>
   <x13-button data-value='/export/t2'><x13-text value="✔" data-fg_color='/export/t2' data-fg_color.color="false:#0000FF;true:#FF0000"></x13-text></x13-button>
 
   <x13-text data-bg_color="/export/t1_color" data-value="/export/b2_text" data-value.format="0.00 km&sol;h" data-fg_color.color="-50:#0000FF;0:#00FF00;50:#FF0000"></x13-text>
+      -->
+  <x13-graph data-apple="/export/gr/v1" data-orange="/export/gr/v2" style="height:400px;"></x13-graph>
+  <x13-graph data-ibm="/export/gr/v2" data-intel="/export/gr/v1" style="height:400px;"></x13-graph>
 </body>
 </html>

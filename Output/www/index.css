@@ -9,7 +9,9 @@ x13-text {
   padding: 5px 1.5em;
   text-align: center;
 }
-
+x13-graph{
+  display:block;
+}
 .card {
   float:left;
   display:inline;

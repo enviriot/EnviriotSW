@@ -17,8 +17,20 @@ window.wsBond = {
     }
     return wsBond.f.data.sub(path, cb);
   },
+  query: function (topics, start, stop, cb) {
+    if (!Array.isArray(topics) || typeof (start.getMonth) !== 'function' || typeof (stop.getMonth) !== 'function' || typeof (cb) !== 'function') {
+      return;
+    }
+    let id = 0;
+    while (wsBond.f.querys[id]) {
+      id++;
+    }
+    wsBond.f.querys[id] = cb;
+    let req = 'A\t' + id + '\t' + JSON.stringify(topics) + '\t' + JSON.stringify(start) + '\t' + JSON.stringify(stop);
+  },
   f: {
-    subscribes: { },
+    subscribes: {},
+    querys: [],
     converters: {
       "format": class {
         constructor(fmt) { 
@@ -83,8 +95,20 @@ window.wsBond = {
           try {
             s.o.$[s.p] = s.c ? s.c.convert(value) : value;
           } catch (error) {
-            console.error("processInpPublish(" + path + ")[" + idx + "] - " + error);
+            console.error("processInpPublish(" + path + ")[" + s.p + "] - " + error);
           }
+        }
+      }
+    },
+    processResponse(id, data) {
+      if (typeof (val) !== 'number' || !isFinite(val) || !Array.isArray(data)) {
+        return;
+      }
+      if (wsBond.f.querys[id]) {
+        try {
+          wsBond.f.querys[id](data);
+        } catch (error) {
+          console.error("processResponse(" + id + ") - " + error);
         }
       }
     },
@@ -93,6 +117,8 @@ window.wsBond = {
       let sa = evt.data.split('\t');
       if (sa[0] == "P" && sa.length > 2 && sa[2]) {
         wsBond.f.processInpPublish(sa[1], JSON.parse(sa[2]));
+      } else if (sa[1] == 'A' && sa.length == 3) {
+        wsBond.f.processResponse(JSON.parse(sa[1]), JSON.parse(sa[2]));
       } else if (sa[0] == 'I' && sa.length == 3) {
         document.cookie = 'sessionId=' + sa[1];
         if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
