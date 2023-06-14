@@ -419,7 +419,6 @@ namespace X13.PersistentStorage {
     private JSL.Array AQuery(JSL.Array topics, JSC.JSValue start, JSC.JSValue end) {
       //var tba = Js2Bs(topics[0]);
       var tba = topics.Select(z=> Js2Bs(z.Value)).ToArray();
-      var width = topics.length.As<int>();
       var req = Query.And(
         Query.All("t", Query.Ascending),
         Query.In("p", tba),
@@ -427,14 +426,25 @@ namespace X13.PersistentStorage {
         Query.GTE("t", Js2Bs(start)));
       var resp = _archive.Find(req);
       var rez = new JSL.Array();
+      JSL.Array lo=null;
       foreach(var li in resp ) {
-        var lo = new JSL.Array(width + 1) {
-          [0] = Bs2Js(li["t"])
-        };
-        for (var i = 0; i < width; i++) {
-          lo[i+1] = (li["p"] == tba[i]) ? Bs2Js(li["v"]) : JSC.JSValue.Null;
+        var p = li["p"];
+        int i;
+        for(i=0; p != tba[i]; i++)
+          ;
+        i++;
+
+        if(lo!=null && lo[i].ValueType==JSC.JSValueType.Object && (li["t"].AsDateTime-((JSL.Date)lo[0].Value).ToDateTime()).TotalSeconds<30) {
+          lo[i]=Bs2Js(li["v"]);
+        } else {
+          lo = new JSL.Array(tba.Length + 1) {
+            [0] = Bs2Js(li["t"])
+          };
+          for(var j = 1; j <= tba.Length; j++) {
+            lo[j] = (i==j) ? Bs2Js(li["v"]) : JSC.JSValue.Null;
+          }
+          rez.Add(lo);
         }
-        rez.Add(lo);
       }
       return rez;
     }

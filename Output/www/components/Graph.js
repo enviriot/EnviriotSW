@@ -3,10 +3,16 @@ import '../lib/dygraph.min.js';
 
 var blockRedraw = false;
 class X13_graph extends BaseComponent {
+  constructor() {
+    super();
+    this.paths = [];
+    this.data = [];
+    this.reqTimer = null;
+    this.reqBusy = false;
+  }
   init$ = {
   };
   initCallback() {
-    this.paths = [];
     for (let l in this.dataset) { 
       this.add(l, NaN, true);
       this.paths.push(this.dataset[l]);
@@ -15,8 +21,6 @@ class X13_graph extends BaseComponent {
       });
     }
     let now = new Date().getTime();
-    this.data = [];
-    this.reqTimer = null;
     this.reqQuery();
     this.options = {
       connectSeparatedPoints: true,
@@ -52,6 +56,7 @@ class X13_graph extends BaseComponent {
     this.g.updateOptions({ 'file': this.data });
   }
   responseData(arr) {
+    this.reqBusy = false;
     if (arr.length == 0) {
       return;
     }
@@ -84,15 +89,24 @@ class X13_graph extends BaseComponent {
     blockRedraw = false;
   }
   reqQuery() {
+    if (this.reqBusy) { 
+      return;
+    }
     if (this.reqTimer) {
       clearTimeout(this.reqTimer);
     }
-    this.reqTimer = setTimeout(this.doQuery.bind(this), 400);
+    this.reqTimer = setTimeout(this.doQuery.bind(this), 100);
   }
   doQuery() {
     this.reqTimer = null;
-    let begin = Math.min((new Date()).getTime() - 60 * 60 * 1000, this.g.xAxisRange()[0]);
-    let end = this.g.xAxisExtremes()[0];
+    let end , begin;
+    if (this.data.length > 0) {
+      begin = this.g.xAxisRange()[0];
+      end = this.g.xAxisExtremes()[0];
+    } else {
+      end = (new Date()).getTime();
+      begin = end - 10 * 60 * 1000;
+    }
     wsBond.query(this.paths, new Date(begin), new Date(end), this.responseData.bind(this));
   }
 }
@@ -119,84 +133,28 @@ function upV3(event, g, context) {
     Dygraph.endZoom(event, g, context);
   }
 }
-// Take the offset of a mouse event on the dygraph canvas and
-// convert it to a pair of percentages from the bottom left.
-// (Not top left, bottom is where the lower value is.)
-function offsetToPercentage(g, offsetX, offsetY) {
-  // This is calculating the pixel offset of the leftmost date.
-  var xOffset = g.toDomCoords(g.xAxisRange()[0], null)[0];
-  var yar0 = g.yAxisRange(0);
-
-  // This is calculating the pixel of the higest value. (Top pixel)
-  var yOffset = g.toDomCoords(null, yar0[1])[1];
-
-  // x y w and h are relative to the corner of the drawing area,
-  // so that the upper corner of the drawing area is (0, 0).
-  var x = offsetX - xOffset;
-  var y = offsetY - yOffset;
-
-  // This is computing the rightmost pixel, effectively defining the
-  // width.
-  var w = g.toDomCoords(g.xAxisRange()[1], null)[0] - xOffset;
-
-  // This is computing the lowest pixel, effectively defining the height.
-  var h = g.toDomCoords(null, yar0[0])[1] - yOffset;
-
-  // Percentage from the left.
-  var xPct = w === 0 ? 0 : (x / w);
-  // Percentage from the top.
-  var yPct = h === 0 ? 0 : (y / h);
-
-  // The (1-) part below changes it from "% distance down from the top"
-  // to "% distance up from the bottom".
-  return [xPct, (1 - yPct)];
-}
 function scrollV3(event, g, context) {
-  var normal = event.detail ? event.detail * -1 : event.wheelDelta / 40;
-  // For me the normalized value shows 0.075 for one click. If I took
-  // that verbatim, it would be a 7.5%.
-  var percentage = normal / 50;
+  let percentage = event.detail ? event.detail * -0.1 : event.wheelDelta / 400;
 
-  if (!(event.offsetX && event.offsetY)) {
+  if (!event.offsetX) {
     event.offsetX = event.layerX - event.target.offsetLeft;
-    event.offsetY = event.layerY - event.target.offsetTop;
   }
+  let axis = g.xAxisRange();
+  let xOffset = g.toDomCoords(axis[0], null)[0];
+  let w = g.toDomCoords(g.xAxisRange()[1], null)[0] - xOffset;
+  let bias = (w === 0 ? 0 : ((event.offsetX - xOffset) / w)) || 0.5;
+  let increment = (axis[1] - axis[0]) * percentage;
+  let foo = [increment * bias, increment * (1 - bias)];
+  let wnd = [axis[0] + foo[0], axis[1] - foo[1]];
 
-  var percentages = offsetToPercentage(g, event.offsetX, event.offsetY);
-  var xPct = percentages[0];
-  var yPct = percentages[1];
+  g.updateOptions({ dateWindow: wnd });
 
-  zoom(g, percentage, xPct, yPct);
   event.preventDefault();
-}
-// Adjusts [x, y] toward each other by zoomInPercentage%
-// Split it so the left/bottom axis gets xBias/yBias of that change and
-// tight/top gets (1-xBias)/(1-yBias) of that change.
-//
-// If a bias is missing it splits it down the middle.
-function zoom(g, zoomInPercentage, xBias, yBias) {
-  xBias = xBias || 0.5;
-  yBias = yBias || 0.5;
-  function adjustAxis(axis, zoomInPercentage, bias) {
-    var delta = axis[1] - axis[0];
-    var increment = delta * zoomInPercentage;
-    var foo = [increment * bias, increment * (1 - bias)];
-    return [axis[0] + foo[0], axis[1] - foo[1]];
-  }
-  var yAxes = g.yAxisRanges();
-  var newYAxes = [];
-  for (var i = 0; i < yAxes.length; i++) {
-    newYAxes[i] = adjustAxis(yAxes[i], zoomInPercentage, yBias);
-  }
-
-  g.updateOptions({
-    dateWindow: adjustAxis(g.xAxisRange(), zoomInPercentage, xBias),
-    //valueRange: newYAxes[0]
-  });
 }
 function dblClickV3(event, g, context) {
   g.resetZoom();
 }
+
 X13_graph.template = /*html*/ `<div ref="gr_hl"></div>`;
 //X13_text.bindAttributes({ "value": "value", "fg_color": "fg_color", "bg_color": "bg_color" });
 X13_graph.reg("x13-graph");
