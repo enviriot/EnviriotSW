@@ -6,30 +6,23 @@ class X13_graph extends BaseComponent {
   init$ = {
   };
   initCallback() {
-    let paths = [];
+    this.paths = [];
     for (let l in this.dataset) { 
       this.add(l, NaN, true);
-      paths.push(this.dataset[l]);
+      this.paths.push(this.dataset[l]);
       this.sub(l, (val) => {
         this.updateData(l, val);
       });
     }
     let now = new Date().getTime();
-    wsBond.query(paths, new Date(now - 2 * 24 * 60 * 60 * 1000), new Date(), this.responseData);
     this.data = [];
-    for (let i = -15; i < 0; i++) {
-      let row = []
-      row.push(new Date(now + i * 60000));
-      for (let l in this.dataset) {
-        row.push(Math.random() * 255);
-      }
-      this.data.push(row);
-    }
+    this.reqTimer = null;
+    this.reqQuery();
     this.options = {
       connectSeparatedPoints: true,
       width: this.offsetWidth-10,
       height: this.offsetHeight - 10,
-      drawCallback: drawCallback,
+      drawCallback: this.drawCallback.bind(this),
       interactionModel: {
         mousedown: downV3,
         mousemove: moveV3,
@@ -58,8 +51,49 @@ class X13_graph extends BaseComponent {
     this.data.push(row);
     this.g.updateOptions({ 'file': this.data });
   }
-  responseData(data) {
-    
+  responseData(arr) {
+    if (arr.length == 0) {
+      return;
+    }
+    for (let i in arr) {
+      arr[i][0] = new Date(Date.parse(arr[i][0]));
+      this.data.push(arr[i]);
+    }
+    this.data.sort((a, b) => a[0] - b[0]);
+    this.g.updateOptions({ 'file': this.data });
+  }
+  drawCallback(me, initial) {
+    if (blockRedraw || initial) return;
+    blockRedraw = true;
+    let range = me.xAxisRange();
+    let corr = false;
+    let now = (new Date).getTime();
+    if (range[1] > now) {
+      range[1] = now;
+      corr = true;
+    }
+    let dRange = me.xAxisExtremes();
+    if (range[0] < dRange[0]) {
+      this.reqQuery();
+    }
+    let grl = document.querySelectorAll('x13-graph');
+    for (let idx in grl) {
+      if (!grl[idx].g || (!corr && grl[idx].g == me)) continue;
+      grl[idx].g.updateOptions({ dateWindow: range });
+    }
+    blockRedraw = false;
+  }
+  reqQuery() {
+    if (this.reqTimer) {
+      clearTimeout(this.reqTimer);
+    }
+    this.reqTimer = setTimeout(this.doQuery.bind(this), 400);
+  }
+  doQuery() {
+    this.reqTimer = null;
+    let begin = Math.min((new Date()).getTime() - 60 * 60 * 1000, this.g.xAxisRange()[0]);
+    let end = this.g.xAxisExtremes()[0];
+    wsBond.query(this.paths, new Date(begin), new Date(end), this.responseData.bind(this));
   }
 }
 
@@ -162,17 +196,6 @@ function zoom(g, zoomInPercentage, xBias, yBias) {
 }
 function dblClickV3(event, g, context) {
   g.resetZoom();
-}
-function drawCallback(me, initial) {
-  if (blockRedraw || initial) return;
-  blockRedraw = true;
-  let range = me.xAxisRange();
-  let grl = document.querySelectorAll('x13-graph');
-  for (let idx in grl) {
-    if (!grl[idx].g || grl[idx].g == me) continue;
-    grl[idx].g.updateOptions({ dateWindow: range });
-  }
-  blockRedraw = false;
 }
 X13_graph.template = /*html*/ `<div ref="gr_hl"></div>`;
 //X13_text.bindAttributes({ "value": "value", "fg_color": "fg_color", "bg_color": "bg_color" });

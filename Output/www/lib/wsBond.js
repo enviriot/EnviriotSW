@@ -8,25 +8,15 @@ window.wsBond = {
       wsBond.f.processInpPublish(path, val);
     }
   },
-  subscribe: function (path, cb) {
-    if (!wsBond.f.data.has(path)) {
-      wsBond.f.data.add(path);
-      if (wsBond.ws != null && wsBond.ws.readyState == wsBond.ws.OPEN) {
-        wsBond.ws.send('S\t' + path);
-      }
-    }
-    return wsBond.f.data.sub(path, cb);
-  },
   query: function (topics, start, stop, cb) {
-    if (!Array.isArray(topics) || typeof (start.getMonth) !== 'function' || typeof (stop.getMonth) !== 'function' || typeof (cb) !== 'function') {
-      return;
-    }
     let id = 0;
     while (wsBond.f.querys[id]) {
       id++;
     }
-    wsBond.f.querys[id] = cb;
-    let req = 'A\t' + id + '\t' + JSON.stringify(topics) + '\t' + JSON.stringify(start) + '\t' + JSON.stringify(stop);
+    wsBond.f.querys[id] = { t: topics, start: start, stop: stop, cb: cb };
+    if (wsBond.ws && wsBond.ws.readyState == wsBond.ws.OPEN) {
+      wsBond.ws.send('A\t' + id + '\t' + JSON.stringify(topics) + '\t' + JSON.stringify(start) + '\t' + JSON.stringify(stop));
+    }
   },
   f: {
     subscribes: {},
@@ -101,23 +91,25 @@ window.wsBond = {
       }
     },
     processResponse(id, data) {
-      if (typeof (val) !== 'number' || !isFinite(val) || !Array.isArray(data)) {
+      if (typeof (id) !== 'number' || !isFinite(id) || !Array.isArray(data)) {
         return;
       }
-      if (wsBond.f.querys[id]) {
+      let cb = wsBond.f.querys[id].cb;
+      if (cb) {
+        wsBond.f.querys[id] = null;
         try {
-          wsBond.f.querys[id](data);
+          cb(data);
         } catch (error) {
           console.error("processResponse(" + id + ") - " + error);
         }
       }
     },
     onMessage: function (evt) {
-      //console.log(evt.data);
+      console.log(evt.data);
       let sa = evt.data.split('\t');
       if (sa[0] == "P" && sa.length > 2 && sa[2]) {
         wsBond.f.processInpPublish(sa[1], JSON.parse(sa[2]));
-      } else if (sa[1] == 'A' && sa.length == 3) {
+      } else if (sa[0] == 'A' && sa.length == 3) {
         wsBond.f.processResponse(JSON.parse(sa[1]), JSON.parse(sa[2]));
       } else if (sa[0] == 'I' && sa.length == 3) {
         document.cookie = 'sessionId=' + sa[1];
@@ -125,6 +117,10 @@ window.wsBond = {
           //connected
           for (let path in wsBond.f.subscribes) {
             wsBond.ws.send('S\t' + path);
+          }
+          for (let id in wsBond.f.querys) {
+            let aq = wsBond.f.querys[id];
+            wsBond.ws.send('A\t' + id + '\t' + JSON.stringify(aq.t) + '\t' + JSON.stringify(aq.start) + '\t' + JSON.stringify(aq.stop));
           }
         }
       }

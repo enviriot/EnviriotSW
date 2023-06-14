@@ -22,11 +22,12 @@ namespace X13.EsBroker {
     private Topic _verbose;
 
     private void Connect(IAsyncResult ar) {
+      if (_tcp == null) return;
       try {
         TcpClient c = _tcp.EndAcceptTcpClient(ar);
         _connections.Add(new EsConnection(this, c));
       }
-      catch(ObjectDisposedException) {
+      catch (ObjectDisposedException) {
         return;   // Socket allready closed
       }
       catch(NullReferenceException) {

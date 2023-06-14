@@ -13,10 +13,8 @@ namespace X13 {
 
     public static readonly char[] SPLITTER_OBJ = new char[] { '.' };
     private static JSF.ExternalFunction _SJ_Replacer;
-    //private static JSF.ExternalFunction _JS_Replacer;
     static JsLib() {
       _SJ_Replacer = new JSF.ExternalFunction(SJ_CustomTypesRepl);
-      //_JS_Replacer = new JSF.ExternalFunction(JS_CustomTypesRepl);
     }
     private static JSC.JSValue SJ_CustomTypesRepl(JSC.JSValue thisBind, JSC.Arguments args) {
       if(args.Length == 2 && args[1].ValueType == JSC.JSValueType.String) {
@@ -44,13 +42,6 @@ namespace X13 {
       }
       return args[1];
     }
-    //private static JSC.JSValue JS_CustomTypesRepl(JSC.JSValue thisBind, JSC.Arguments args) {
-    //  if(args[1]!=null && args[1].ValueType== JSC.JSValueType.Date) {
-    //    var jd = args[1].Value as JSL.Date;
-    //    return jd.ToDateTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-    //  }
-    //  return args[1];
-    //}
     public static JSC.JSValue ParseJson(string json) {
       return JSL.JSON.parse(json, _SJ_Replacer);
     }
