@@ -1,32 +1,63 @@
 /* css */
-* {
-  box-sizing:border-box;
+.header {
+  display: flex;
+  gap: 1em;
+  width: 96%;
+  margin: 0 3% 15px 1%;
+  outline: thin inset gray;
+  padding: 7px;
 }
+
+.card {
+  display: inline-block;
+  background-color: papayawhip;
+  padding: 5px 1em 15px 1em;
+  border-radius: 15px;
+  min-width: 180px;
+}
+
+  .card > p {
+    font-size: 20px;
+    margin: 0px 0px 5px 0px;
+    text-align: center;
+  }
+
+  .card > div {
+    display: grid;
+    background-color: white;
+  }
+
+x13-graph {
+  display: flex;
+  width: 96%;
+  margin: 1em 3% 1em 1%;
+  outline: thin inset gray;
+}
+
+x13-signal {
+  display: block;
+  height: 24px;
+  padding: 3px 0.5em 3px 1em;
+  outline: thin groove lightgray;
+}
+
+  x13-signal > label {
+    display: block;
+    float: left;
+    margin: 3px 15px 3px 0px;
+  }
+
+  x13-signal > span {
+    display: block;
+    float: right;
+    border-radius: 12px;
+    width: 24px;
+    height: 24px;
+  }
 
 x13-text {
   display: block;
-  border: 1px groove lightgray;
-  padding: 5px 1.5em;
+  outline: thin groove lightgray;
+  padding: 6px 1.5em;
   text-align: center;
 }
-x13-graph{
-  display:block;
-}
-.card {
-  float:left;
-  display:inline;
-  background-color: papayawhip;
-  padding: 0px 1em 15px 1em;
-  margin: 2em;
-  border-radius:15px;
-}
-  .card > p {
-    float:none;
-    font-size: 20px;
-    text-align: center;
-  }
-  .card > div {
-    float:none;
-    display:block;
-    background-color: white;
-  }

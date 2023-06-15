@@ -11,16 +11,19 @@ class X13_graph extends BaseComponent {
     this.reqBusy = false;
   }
   init$ = {
+    period:2,
   };
   initCallback() {
+    let row = [];
+    row.push(new Date());
     for (let l in this.dataset) { 
       this.add(l, NaN, true);
       this.paths.push(this.dataset[l]);
       this.sub(l, (val) => {
         this.updateData(l, val);
       });
+      row.push(null);
     }
-    let now = new Date().getTime();
     this.reqQuery();
     this.options = {
       connectSeparatedPoints: true,
@@ -32,11 +35,11 @@ class X13_graph extends BaseComponent {
         mousemove: moveV3,
         mouseup: upV3,
         mousewheel: scrollV3,
-        dblclick: dblClickV3,
+        dblclick: this.dblClickV3.bind(this),
       },
       labels: ['x'].concat(Object.keys(this.dataset))
     };
-    this.g = new Dygraph(this.ref.gr_hl, this.data, this.options);
+    this.g = new Dygraph(this.ref.gr_hl, [row], this.options);
   }
   updateData(idx, value) { 
     if (typeof (value) !== 'number' || !isFinite(value)) {
@@ -53,7 +56,12 @@ class X13_graph extends BaseComponent {
       }
     }
     this.data.push(row);
-    this.g.updateOptions({ 'file': this.data });
+    let opt = { 'file': this.data };
+    let range = this.g.xAxisRange();
+    if ((row[0].getTime() - range[1]) < ((range[1] - range[0]) / 50)) {
+      opt["dateWindow"] = [range[0] - range[1] + row[0].getTime(), row[0].getTime()];
+    }
+    this.g.updateOptions(opt);
   }
   responseData(arr) {
     this.reqBusy = false;
@@ -84,7 +92,10 @@ class X13_graph extends BaseComponent {
     let grl = document.querySelectorAll('x13-graph');
     for (let idx in grl) {
       if (!grl[idx].g || (!corr && grl[idx].g == me)) continue;
-      grl[idx].g.updateOptions({ dateWindow: range });
+      let gro = grl[idx].g.xAxisRange();
+      if (corr || Math.abs(gro[0] - range[0]) > 15000 || Math.abs(gro[1] - range[1]) > 15000) {
+        grl[idx].g.updateOptions({ dateWindow: range });
+      }
     }
     blockRedraw = false;
   }
@@ -105,9 +116,15 @@ class X13_graph extends BaseComponent {
       end = this.g.xAxisExtremes()[0];
     } else {
       end = (new Date()).getTime();
-      begin = end - 10 * 60 * 1000;
+      begin = end - this.$.period * 24 * 60 * 60 * 1000;
+      //this.g.updateOptions({ dateWindow: [begin, end] });
     }
     wsBond.query(this.paths, new Date(begin), new Date(end), this.responseData.bind(this));
+  }
+  dblClickV3(event, g, context) {
+    let end = (new Date()).getTime();
+    let begin = end - this.$.period * 24 * 60 * 60 * 1000;
+    g.updateOptions({ dateWindow: [begin, end] });
   }
 }
 
@@ -151,10 +168,7 @@ function scrollV3(event, g, context) {
 
   event.preventDefault();
 }
-function dblClickV3(event, g, context) {
-  g.resetZoom();
-}
 
 X13_graph.template = /*html*/ `<div ref="gr_hl"></div>`;
-//X13_text.bindAttributes({ "value": "value", "fg_color": "fg_color", "bg_color": "bg_color" });
+X13_graph.bindAttributes({ "period": "period" });
 X13_graph.reg("x13-graph");
