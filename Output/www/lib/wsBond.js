@@ -8,19 +8,8 @@ window.wsBond = {
       wsBond.f.processInpPublish(path, val);
     }
   },
-  query: function (topics, start, stop, cb) {
-    let id = 0;
-    while (wsBond.f.querys[id]) {
-      id++;
-    }
-    wsBond.f.querys[id] = { t: topics, start: start, stop: stop, cb: cb };
-    if (wsBond.ws && wsBond.ws.readyState == wsBond.ws.OPEN) {
-      wsBond.ws.send('A\t' + id + '\t' + JSON.stringify(topics) + '\t' + JSON.stringify(start) + '\t' + JSON.stringify(stop));
-    }
-  },
   f: {
     subscribes: {},
-    querys: [],
     converters: {
       "format": class {
         constructor(fmt) { 
@@ -90,27 +79,11 @@ window.wsBond = {
         }
       }
     },
-    processResponse(id, data) {
-      if (typeof (id) !== 'number' || !isFinite(id) || !Array.isArray(data)) {
-        return;
-      }
-      let cb = wsBond.f.querys[id].cb;
-      if (cb) {
-        wsBond.f.querys[id] = null;
-        try {
-          cb(data);
-        } catch (error) {
-          console.error("processResponse(" + id + ") - " + error);
-        }
-      }
-    },
     onMessage: function (evt) {
       console.log(evt.data);
       let sa = evt.data.split('\t');
       if (sa[0] == "P" && sa.length > 2 && sa[2]) {
         wsBond.f.processInpPublish(sa[1], JSON.parse(sa[2]));
-      } else if (sa[0] == 'A' && sa.length == 3) {
-        wsBond.f.processResponse(JSON.parse(sa[1]), JSON.parse(sa[2]));
       } else if (sa[0] == 'I' && sa.length == 3) {
         document.cookie = 'sessionId=' + sa[1];
         if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
@@ -120,7 +93,7 @@ window.wsBond = {
           }
           for (let id in wsBond.f.querys) {
             let aq = wsBond.f.querys[id];
-            wsBond.ws.send('A\t' + id + '\t' + JSON.stringify(aq.t) + '\t' + JSON.stringify(aq.start) + '\t' + JSON.stringify(aq.stop));
+            wsBond.ws.send('A\t' + id + '\t' + JSON.stringify(aq.t) + '\t' + JSON.stringify(aq.start) + '\t' + JSON.stringify(aq.count));
           }
         }
       }

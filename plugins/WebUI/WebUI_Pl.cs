@@ -13,6 +13,7 @@ using WebSocketSharp;
 using WebSocketSharp.Net;
 using WebSocketSharp.Server;
 using System.IO;
+using NiL.JS.Extensions;
 
 namespace X13.WebUI {
   [Export(typeof(IPlugModul))]
@@ -53,6 +54,7 @@ namespace X13.WebUI {
       int port_i;
       if(!port.GetState().IsNumber || (port_i = (int)port.GetState().Value)<=0 || port_i>65535) {
         port_i = 8080;
+        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         port.SetState(port_i);
       }
       _sv = new HttpServer(port_i);
@@ -86,7 +88,7 @@ namespace X13.WebUI {
       get {
         var en = Topic.root.Get("/$YS/WebUI", true);
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
-          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
           en.SetState(true);
           return true;
         }
@@ -124,46 +126,55 @@ namespace X13.WebUI {
           remoteEndPoint=new System.Net.IPEndPoint(remIP, remoteEndPoint.Port);
         }
       }
-      string path=req.RawUrl=="/"?"/index.html":req.RawUrl;
-      string client = null;
-      Session ses;
-      if(req.Cookies["sessionId"]!=null) {
-        ses=Session.Get(req.Cookies["sessionId"].Value, remoteEndPoint, false);
-      } else {
-        ses=null;
-      }
-
-      if(ses!=null && ses.owner!=null) {
-        client=ses.owner.name;
-      } else {
-        client=remoteEndPoint.Address.ToString();
-      }
+      Session ses = (req.Cookies["sessionId"]!=null)?Session.Get(req.Cookies["sessionId"].Value, remoteEndPoint, false):null;
+      string client = (ses!=null && ses.owner!=null)?ses.owner.name:remoteEndPoint.Address.ToString();
 
       try {
         HttpStatusCode statusCode;
-        FileInfo f = new FileInfo(Path.Combine(_sv.RootPath, path.Substring(1)));
-        if(f.Exists) {
-          string eTag=f.LastWriteTimeUtc.Ticks.ToString("X8")+"-"+f.Length.ToString("X4");
-          if(req.Headers.Contains("If-None-Match") && req.Headers["If-None-Match"]==eTag) {
-            res.Headers.Add("ETag", eTag);
-            statusCode=HttpStatusCode.NotModified;
-            res.StatusCode=(int)statusCode;
-            res.WriteContent(Encoding.UTF8.GetBytes("Not Modified"));
-          } else {
-            res.Headers.Add("ETag", eTag);
-            res.ContentType=Ext2ContentType(f.Extension);
-            using(var fs=f.OpenRead()) {
-              fs.CopyTo(res.OutputStream);
-              res.ContentLength64 = fs.Length;
-            }
-            statusCode=HttpStatusCode.OK;
+        if(req.Url.LocalPath=="/api/arch04") {
+          var args = req.QueryString;
+          
+          var obj = JsLib.ParseJson(args["p"]);
+          var lst = new List<string>();
+          foreach(var kv in obj) {
+            lst.Add(kv.Value.As<string>());
           }
-        } else {
-          statusCode=HttpStatusCode.NotFound;
-          res.StatusCode = (int)statusCode;
-          res.WriteContent(Encoding.UTF8.GetBytes("404 Not found"));
-        }
+          var point = (JsLib.ParseJson(args["s"]).Value as JSL.Date).ToDateTime();
+          var count = JsLib.ParseJson(args["c"]).As<int>();
+          var resp = JsExtLib.AQuery(lst.ToArray(), point, count);
 
+          res.Headers.Add("Cache-Control", "no-store");
+          res.ContentType="application/json; charset=utf-8";
+          statusCode=HttpStatusCode.OK;
+          res.StatusCode = (int)statusCode;
+          var json = JsLib.Stringify(resp);
+          res.WriteContent(Encoding.UTF8.GetBytes(json));
+        } else {
+          string path=req.RawUrl=="/"?"/index.html":req.RawUrl;
+          FileInfo f = new FileInfo(Path.Combine(_sv.RootPath, path.Substring(1)));
+          if(f.Exists) {
+            string eTag=f.LastWriteTimeUtc.Ticks.ToString("X8")+"-"+f.Length.ToString("X4");
+            res.Headers.Add("ETag", eTag);
+            res.Headers.Add("Cache-Control", "no-cache");
+            if(req.Headers.Contains("If-None-Match") && req.Headers["If-None-Match"]==eTag) {
+              statusCode=HttpStatusCode.NotModified;
+              res.StatusCode=(int)statusCode;
+              res.WriteContent(Encoding.UTF8.GetBytes("Not Modified"));
+            } else {
+              res.ContentType=Ext2ContentType(f.Extension);
+              using(var fs = f.OpenRead()) {
+                fs.CopyTo(res.OutputStream);
+                res.ContentLength64 = fs.Length;
+              }
+              statusCode=HttpStatusCode.OK;
+              res.StatusCode = (int)statusCode;
+            }
+          } else {
+            statusCode=HttpStatusCode.NotFound;
+            res.StatusCode = (int)statusCode;
+            res.WriteContent(Encoding.UTF8.GetBytes("404 Not found"));
+          }
+        }
         if(verbose) {
           Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.RawUrl, statusCode.ToString());
         }

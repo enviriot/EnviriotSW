@@ -1,5 +1,5 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
-using NiL.JS.BaseLibrary;
+using JSL = NiL.JS.BaseLibrary;
 using NiL.JS.Extensions;
 using System;
 using System.Collections.Generic;
@@ -75,15 +75,13 @@ namespace X13.WebUI {
           }
         } else if (/*!_disAnonym.value || */(_ses != null /*&& !string.IsNullOrEmpty(_ses.userName)*/)) {
           if (sa[0] == "P" && sa.Length == 3) {
-            if (sa[1] != null && (sa[1].StartsWith("/export/") || CheckAccess(sa[1]))) {
+            if (sa[1] != null && (sa[1].StartsWith("/export/") || sa[1].StartsWith("/Public/") || CheckAccess(sa[1]))) {
               WebUI_Pl.ProcessPublish(sa[1], sa[2], _ses);
             } else {
               X13.Log.Warning("{0}.publish({1}) - access forbinden", (_ses == null || _ses.owner == null) ? "UNK" : _ses.owner.name, sa[1]);
             }
-          } else if (sa[0] == "A" && sa.Length == 5) {
-            AQuery(sa);
           } else if (sa[0] == "S" && sa.Length == 2) {
-            if (sa[1] != null && (sa[1].StartsWith("/export/") || CheckAccess(sa[1]))) {
+            if (sa[1] != null && (sa[1].StartsWith("/export/") || sa[1].StartsWith("/Public/") || CheckAccess(sa[1]))) {
               string p = sa[1];
               SubRec.SubMask mask = Repository.SubRec.SubMask.Value;
               Topic t;
@@ -195,20 +193,6 @@ namespace X13.WebUI {
       foreach (var s in _subscriptions) {
         s.Dispose();
       }
-    }
-
-    private void AQuery(string[] sa) {
-      var id = sa[1];
-      var obj = JsLib.ParseJson(sa[2]);
-      var lst = new List<string>();
-      foreach(var kv in obj) {
-        lst.Add(kv.Value.As<string>());
-      }
-      var topics = new NiL.JS.BaseLibrary.Array(lst);
-      var start = JsLib.ParseJson(sa[3]);
-      var stop = JsLib.ParseJson(sa[4]);
-      var resp = JsExtLib.AQuery(topics, start, stop);
-      Send("A\t" + id + "\t"+ JsLib.Stringify(resp));
     }
   }
   internal class Session : IDisposable {

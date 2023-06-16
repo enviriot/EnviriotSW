@@ -416,15 +416,13 @@ namespace X13.PersistentStorage {
       JsExtLib.AQuery = this.AQuery;
     }
     #region Archivist
-    private JSL.Array AQuery(JSL.Array topics, JSC.JSValue start, JSC.JSValue end) {
-      //var tba = Js2Bs(topics[0]);
-      var tba = topics.Select(z=> Js2Bs(z.Value)).ToArray();
+    private JSL.Array AQuery(string[] topics, DateTime point, int count) {
+      var tba = topics.Select(z=>new BsonValue(z)).ToArray();
       var req = Query.And(
-        Query.All("t", Query.Ascending),
+        Query.All("t", Query.Descending),
         Query.In("p", tba),
-        Query.LT("t", Js2Bs(end)),
-        Query.GTE("t", Js2Bs(start)));
-      var resp = _archive.Find(req);
+        count>0?Query.LT("t", new BsonValue(point.ToUniversalTime())):Query.GT("t", new BsonValue(point.ToUniversalTime())));
+      var resp = _archive.Find(req, 0, count);
       var rez = new JSL.Array();
       JSL.Array lo=null;
       foreach(var li in resp ) {

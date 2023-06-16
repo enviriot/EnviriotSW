@@ -24,12 +24,16 @@ class X13_graph extends BaseComponent {
       });
       row.push(null);
     }
+    let end = (new Date()).getTime();
+    let begin = end - this.$.period * 24 * 60 * 60 * 1000;
+
     this.reqQuery();
     this.options = {
       connectSeparatedPoints: true,
       width: this.offsetWidth-10,
       height: this.offsetHeight - 10,
       drawCallback: this.drawCallback.bind(this),
+      dateWindow: [begin, end],
       interactionModel: {
         mousedown: downV3,
         mousemove: moveV3,
@@ -58,7 +62,7 @@ class X13_graph extends BaseComponent {
     this.data.push(row);
     let opt = { 'file': this.data };
     let range = this.g.xAxisRange();
-    if ((row[0].getTime() - range[1]) < ((range[1] - range[0]) / 50)) {
+    if (range[1] - range[0] > 15000 && (row[0].getTime() - range[1]) < ((range[1] - range[0]) / 50)) {
       opt["dateWindow"] = [range[0] - range[1] + row[0].getTime(), row[0].getTime()];
     }
     this.g.updateOptions(opt);
@@ -73,7 +77,12 @@ class X13_graph extends BaseComponent {
       this.data.push(arr[i]);
     }
     this.data.sort((a, b) => a[0] - b[0]);
-    this.g.updateOptions({ 'file': this.data });
+    let opt = { 'file': this.data };
+    let range = this.g.xAxisRange();
+    if (this.data[0][0].getTime() > range[0]) {
+      opt["dateWindow"] = range;
+    }
+    this.g.updateOptions(opt);
   }
   drawCallback(me, initial) {
     if (blockRedraw || initial) return;
@@ -106,20 +115,19 @@ class X13_graph extends BaseComponent {
     if (this.reqTimer) {
       clearTimeout(this.reqTimer);
     }
-    this.reqTimer = setTimeout(this.doQuery.bind(this), 100);
+    this.reqTimer = setTimeout(this.doQuery.bind(this), 50);
   }
   doQuery() {
     this.reqTimer = null;
     let end , begin;
-    if (this.data.length > 0) {
-      begin = this.g.xAxisRange()[0];
+    let range = this.g.xAxisRange();
+    if (range[1] - range[0] > 15000) {
       end = this.g.xAxisExtremes()[0];
     } else {
       end = (new Date()).getTime();
-      begin = end - this.$.period * 24 * 60 * 60 * 1000;
-      //this.g.updateOptions({ dateWindow: [begin, end] });
     }
-    wsBond.query(this.paths, new Date(begin), new Date(end), this.responseData.bind(this));
+    let req = "/api/arch04?p=" + encodeURIComponent(JSON.stringify(this.paths)) + "&s=" + encodeURIComponent(JSON.stringify(new Date(end))) + "&c=500";
+    fetch(req).then(t => t.json()).then(j => this.responseData(j)).catch(e => console.error(e));
   }
   dblClickV3(event, g, context) {
     let end = (new Date()).getTime();

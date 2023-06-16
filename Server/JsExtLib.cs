@@ -14,7 +14,7 @@ using System.IO;
 namespace X13 {
   public static class JsExtLib {
     public static readonly JSC.GlobalContext Context;
-    public static Func<JSL.Array, JSC.JSValue, JSC.JSValue, JSL.Array> AQuery { get; set; }
+    public static Func<string[], DateTime, int, JSL.Array> AQuery { get; set; }
 
     static JsExtLib() {
       _timerCnt = 1;
