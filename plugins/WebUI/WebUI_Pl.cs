@@ -22,11 +22,11 @@ namespace X13.WebUI {
 
   public class WebUI_Pl : IPlugModul {
     internal static int ProcessPublish(string path, string json, Session ses) {
-      Topic cur=Topic.root.Get(path, true, ses==null?null:ses.owner);
+      Topic cur=Topic.root.Get(path, true, ses?.owner);
       if(string.IsNullOrEmpty(json) || json=="null") {                      // Remove
         cur.Remove();
       } else {
-        cur.SetState(JsLib.ParseJson(json), ses==null?null:ses.owner);
+        cur.SetState(JsLib.ParseJson(json), ses?.owner);
       }
       return 200;
     }
@@ -134,15 +134,11 @@ namespace X13.WebUI {
         if(req.Url.LocalPath=="/api/arch04") {
           var args = req.QueryString;
           
-          var obj = JsLib.ParseJson(args["p"]);
-          var lst = new List<string>();
-          foreach(var kv in obj) {
-            lst.Add(kv.Value.As<string>());
-          }
-          var point = (JsLib.ParseJson(args["s"]).Value as JSL.Date).ToDateTime();
+          var topics = JsLib.ParseJson(args["p"]).Select(kv => kv.Value.As<string>()).ToArray();
+          var begin = (JsLib.ParseJson(args["b"]).Value as JSL.Date).ToDateTime();
           var count = JsLib.ParseJson(args["c"]).As<int>();
-          var resp = JsExtLib.AQuery(lst.ToArray(), point, count);
-
+          var end = args.Contains("e")?(JsLib.ParseJson(args["e"]).Value as JSL.Date).ToDateTime():DateTime.MinValue;
+          var resp = JsExtLib.AQuery(topics, begin, count, end);
           res.Headers.Add("Cache-Control", "no-store");
           res.ContentType="application/json; charset=utf-8";
           statusCode=HttpStatusCode.OK;
@@ -176,12 +172,14 @@ namespace X13.WebUI {
           }
         }
         if(verbose) {
-          Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.RawUrl, statusCode.ToString());
+          Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.QueryString, statusCode.ToString());
         }
       }
       catch(Exception ex) {
+        res.StatusCode = (int)HttpStatusCode.BadRequest;
+        res.WriteContent(Encoding.UTF8.GetBytes("400 Bad Request"));
         if(verbose) {
-          Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.RawUrl, ex.Message);
+          Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.QueryString, ex.Message);
         }
       }
     }

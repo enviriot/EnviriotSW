@@ -10,11 +10,11 @@ using System.Text;
 using System.Threading;
 using System.Net;
 using System.IO;
+using NiL.JS.Extensions;
 
 namespace X13 {
   public static class JsExtLib {
     public static readonly JSC.GlobalContext Context;
-    public static Func<string[], DateTime, int, JSL.Array> AQuery { get; set; }
 
     static JsExtLib() {
       _timerCnt = 1;
@@ -30,13 +30,16 @@ namespace X13 {
       var fs = JSC.JSObject.CreateObject();
       fs["AppendText"] = JSC.JSValue.Marshal(new Action<string, string>(AppendFile));
       Context.DefineVariable("File").Assign(fs);
+      var arch= JSC.JSObject.CreateObject();
+      arch["Query"] = JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, int, JSC.JSObject, JSL.Array>(AQueryJS));
+      Context.DefineVariable("Arch").Assign(arch);
     }
 
     #region XMLHttpRequest
     [JSI.RequireNewKeyword]
     private class XMLHttpRequest : IDisposable {
       private HttpWebRequest _req;
-      private IAsyncResult _resp_w;
+      //private IAsyncResult _resp_w;
       private HttpWebResponse _resp;
       private string _contentType;
       private int _readyState;
@@ -62,20 +65,10 @@ namespace X13 {
         }
       }
       public void abort() {
-        if(_req!=null) {
-          _req.Abort();
-        }
+        _req?.Abort();
       }
       public void send(JSC.JSValue value) {
-        byte[] data;
-        if(value==null) {
-          data = null;
-        } else if(value.ValueType == JSC.JSValueType.String) {
-          string s = value.Value as string;
-          data = s!=null?Encoding.UTF8.GetBytes(s):null;
-        } else {
-          data = null;
-        }
+        byte[] data = (value!=null && value.ValueType == JSC.JSValueType.String && value.Value is string s)? Encoding.UTF8.GetBytes(s) : null;
         if(_req.Method == "POST" && data!=null) {
           _req.ContentType = _contentType??"application/x-www-form-urlencoded";
           _req.ContentLength = data.Length;
@@ -83,7 +76,7 @@ namespace X13 {
             stream.Write(data, 0, data.Length);
           }
         }
-        _resp_w = _req.BeginGetResponse(RespCallback, null);
+        /*_resp_w = */_req.BeginGetResponse(RespCallback, null);
       }
       public JSL.Function onreadystatechange { get; set; }
       public int readyState {
@@ -127,10 +120,7 @@ namespace X13 {
       }
       #region IDisposable Member
       public void Dispose() {
-        var resp = Interlocked.Exchange(ref _resp, null);
-        if(resp!=null) {
-          resp.Close();
-        }
+        Interlocked.Exchange(ref _resp, null)?.Close();
       }
       #endregion IDisposable Member
     }
@@ -167,8 +157,7 @@ namespace X13 {
       return SetTimer(func, interval, interval, null);
     }
     private static JSC.JSValue SetAlarm(JSC.JSValue func, JSC.JSValue time) {
-      var jd = time.Value as JSL.Date;
-      if(jd != null) {
+      if(time.Value is JSL.Date jd) {
         return JsExtLib.SetTimer(func, jd.ToDateTime(), null);
       } else {
         throw new ArgumentException("SetAlarm(, Date)");
@@ -290,7 +279,7 @@ namespace X13 {
 
     #region Log
     private class Console : JSL.JSConsole, IDisposable {
-      private LogWriter _debug, _info, _warning, _error;
+      private readonly LogWriter _debug, _info, _warning, _error;
 
       public Console() {
         _debug = new LogWriter(X13.LogLevel.Debug);
@@ -320,7 +309,7 @@ namespace X13 {
     }
 
     private class LogWriter : TextWriter {
-      private LogLevel _ll;
+      private readonly LogLevel _ll;
       public LogWriter(LogLevel ll) {
         _ll = ll;
       }
@@ -330,5 +319,21 @@ namespace X13 {
       }
     }
     #endregion Log
+
+    #region AQuery
+    public static Func<string[], DateTime, int, DateTime, JSL.Array> AQuery { get; set; }
+    private static JSL.Array AQueryJS(JSC.JSValue topicsJS, JSC.JSValue beginJS, int count, JSC.JSValue endJS) {
+      string[] topics;
+      if(topicsJS.ValueType == JSC.JSValueType.String) {
+        topics = new string[1];
+        topics[0] =  topicsJS.As<string>();
+      } else {
+        topics = topicsJS.Select(kv => kv.Value.As<string>()).ToArray();
+      }
+      DateTime begin = (beginJS.Value as JSL.Date).ToDateTime();
+      DateTime end = (endJS!=null && endJS.ValueType==JSC.JSValueType.Date)?(endJS.Value as JSL.Date).ToDateTime():DateTime.MinValue;
+      return AQuery(topics, begin, count, end);
+    }
+    #endregion AQuery
   }
 }

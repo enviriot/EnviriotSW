@@ -24,8 +24,8 @@ class X13_graph extends BaseComponent {
       });
       row.push(null);
     }
-    let end = (new Date()).getTime();
-    let begin = end - this.$.period * 24 * 60 * 60 * 1000;
+    let now = (new Date()).getTime();
+    this.range = [now - this.$.period * 24 * 60 * 60 * 1000, now];
 
     this.reqQuery();
     this.options = {
@@ -33,7 +33,7 @@ class X13_graph extends BaseComponent {
       width: this.offsetWidth-10,
       height: this.offsetHeight - 10,
       drawCallback: this.drawCallback.bind(this),
-      dateWindow: [begin, end],
+      dateWindow: this.range,
       interactionModel: {
         mousedown: downV3,
         mousemove: moveV3,
@@ -63,7 +63,8 @@ class X13_graph extends BaseComponent {
     let opt = { 'file': this.data };
     let range = this.g.xAxisRange();
     if (range[1] - range[0] > 15000 && (row[0].getTime() - range[1]) < ((range[1] - range[0]) / 50)) {
-      opt["dateWindow"] = [range[0] - range[1] + row[0].getTime(), row[0].getTime()];
+      this.range = [range[0] - range[1] + row[0].getTime(), row[0].getTime()];
+      opt["dateWindow"] = this.range;
     }
     this.g.updateOptions(opt);
   }
@@ -74,15 +75,9 @@ class X13_graph extends BaseComponent {
     }
     for (let i in arr) {
       arr[i][0] = new Date(Date.parse(arr[i][0]));
-      this.data.push(arr[i]);
     }
-    this.data.sort((a, b) => a[0] - b[0]);
-    let opt = { 'file': this.data };
-    let range = this.g.xAxisRange();
-    if (this.data[0][0].getTime() > range[0]) {
-      opt["dateWindow"] = range;
-    }
-    this.g.updateOptions(opt);
+    this.data = arr;
+    this.g.updateOptions({ 'file': this.data });
   }
   drawCallback(me, initial) {
     if (blockRedraw || initial) return;
@@ -94,15 +89,15 @@ class X13_graph extends BaseComponent {
       range[1] = now;
       corr = true;
     }
-    let dRange = me.xAxisExtremes();
-    if (range[0] < dRange[0]) {
+    if (Math.abs(this.range[0] - range[0]) > 60000 || Math.abs(this.range[1] - range[1]) > 60000) {
+      this.range = range;
       this.reqQuery();
     }
     let grl = document.querySelectorAll('x13-graph');
     for (let idx in grl) {
       if (!grl[idx].g || (!corr && grl[idx].g == me)) continue;
       let gro = grl[idx].g.xAxisRange();
-      if (corr || Math.abs(gro[0] - range[0]) > 15000 || Math.abs(gro[1] - range[1]) > 15000) {
+      if (corr || Math.abs(gro[0] - range[0]) > 60000 || Math.abs(gro[1] - range[1]) > 60000) {
         grl[idx].g.updateOptions({ dateWindow: range });
       }
     }
@@ -122,11 +117,13 @@ class X13_graph extends BaseComponent {
     let end , begin;
     let range = this.g.xAxisRange();
     if (range[1] - range[0] > 15000) {
-      end = this.g.xAxisExtremes()[0];
-    } else {
-      end = (new Date()).getTime();
+      begin = range[0];
+      end = range[1];
+//    } else {
+//      end = (new Date()).getTime();
+//      begin = end - this.$.period * 24 * 60 * 60 * 1000;
     }
-    let req = "/api/arch04?p=" + encodeURIComponent(JSON.stringify(this.paths)) + "&s=" + encodeURIComponent(JSON.stringify(new Date(end))) + "&c=500";
+    let req = "/api/arch04?p=" + encodeURIComponent(JSON.stringify(this.paths)) + "&b=" + encodeURIComponent(JSON.stringify(new Date(begin))) + "&e=" + encodeURIComponent(JSON.stringify(new Date(end))) + "&c=500";
     fetch(req).then(t => t.json()).then(j => this.responseData(j)).catch(e => console.error(e));
   }
   dblClickV3(event, g, context) {
