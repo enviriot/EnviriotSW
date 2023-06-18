@@ -19,7 +19,14 @@
 
   <x13-text data-bg_color="/export/t1_color" data-value="/export/b2_text" data-value.format="0.00 km&sol;h" data-fg_color.color="-50:#0000FF;0:#00FF00;50:#FF0000"></x13-text>
       -->
-  <x13-graph data-pv="/Public/UPS/VPv" data-net="/Public/UPS/VNet" data-batt="/Public/UPS/VBatt" style="height:400px;"></x13-graph>
-  <x13-graph data-pv="/Public/UPS/WPv" data-net="/Public/UPS/WNet" data-batt="/Public/UPS/WBatt" data-load="/Public/UPS/WLoad" style="height:400px;"></x13-graph>
+  <x13-graph style="height:300px;" title="Напряжение" ylabel="V" y2label="V"
+             data-pv.y2="/Public/UPS/VPv" 
+             data-net.y2="/Public/UPS/VNet" 
+             data-batt="/Public/UPS/VBatt" ></x13-graph>
+  <x13-graph style="height:300px;" title="Мощность" ylabel="W" y2label="Lux"
+             data-pv="/Public/UPS/WPv" 
+             data-net="/Public/UPS/WNet" 
+             data-intesity.y2="/Public/Outdoor/osSens_I" 
+             data-load="/Public/UPS/WLoad" ></x13-graph>
 </body>
   </html>

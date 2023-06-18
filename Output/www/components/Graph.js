@@ -9,31 +9,52 @@ class X13_graph extends BaseComponent {
     this.data = [];
     this.reqTimer = null;
     this.reqBusy = false;
+    this.labels = [];
+    this.labels.push("x");
   }
   init$ = {
-    period:2,
+    period: 2,
+    ylabel: "",
+    y2label: "",
+    title:"",
   };
   initCallback() {
     let row = [];
+    let series = {};
     row.push(new Date());
-    for (let l in this.dataset) { 
-      this.add(l, NaN, true);
+    for (let l in this.dataset) {
+      let di = l.indexOf('.');
+      let pn;
+      if (di >= 0) {
+        pn = l.substring(0, di);
+        let cn = l.substring(di + 1);
+        if (cn == "y2") {
+          series[pn] = { axis: cn };
+        }
+      } else {
+        pn = l;
+      }
+      this.labels.push(pn);
+      this.add(pn, NaN, true);
       this.paths.push(this.dataset[l]);
-      this.sub(l, (val) => {
-        this.updateData(l, val);
+      this.sub(pn, (val) => {
+        this.updateData(pn, val);
       });
       row.push(null);
     }
     let now = (new Date()).getTime();
     this.range = [now - this.$.period * 24 * 60 * 60 * 1000, now];
-
-    this.reqQuery();
-    this.options = {
-      connectSeparatedPoints: true,
-      width: this.offsetWidth-10,
+    let options = {
+      width: this.offsetWidth - 10,
       height: this.offsetHeight - 10,
-      drawCallback: this.drawCallback.bind(this),
+      title: this.$.title,
       dateWindow: this.range,
+      connectSeparatedPoints: true,
+      legend: 'follow',
+      series: series,
+      labels: this.labels,
+      ylabel: this.$.ylabel,
+      y2label: this.$.y2label,
       interactionModel: {
         mousedown: downV3,
         mousemove: moveV3,
@@ -41,19 +62,20 @@ class X13_graph extends BaseComponent {
         mousewheel: scrollV3,
         dblclick: this.dblClickV3.bind(this),
       },
-      labels: ['x'].concat(Object.keys(this.dataset))
+      drawCallback: this.drawCallback.bind(this),
     };
-    this.g = new Dygraph(this.ref.gr_hl, [row], this.options);
+    this.reqQuery();
+    this.g = new Dygraph(this.ref.gr_hl, [row], options);
   }
   updateData(idx, value) { 
     if (typeof (value) !== 'number' || !isFinite(value)) {
       return;
     }
     let row = [];
-    for (let j = 0; j < this.options.labels.length;j++) {
+    for (let j = 0; j < this.labels.length;j++) {
       if (j == 0) {
         row.push(new Date());
-      } else if (this.options.labels[j] == idx) {
+      } else if (this.labels[j] == idx) {
         row.push(value);
       } else {
         row.push(null);
@@ -116,13 +138,13 @@ class X13_graph extends BaseComponent {
     this.reqTimer = null;
     let end , begin;
     let range = this.g.xAxisRange();
-    if (range[1] - range[0] > 15000) {
+//    if (range[1] - range[0] > 15000) {
       begin = range[0];
       end = range[1];
 //    } else {
 //      end = (new Date()).getTime();
 //      begin = end - this.$.period * 24 * 60 * 60 * 1000;
-    }
+//    }
     let req = "/api/arch04?p=" + encodeURIComponent(JSON.stringify(this.paths)) + "&b=" + encodeURIComponent(JSON.stringify(new Date(begin))) + "&e=" + encodeURIComponent(JSON.stringify(new Date(end))) + "&c=500";
     fetch(req).then(t => t.json()).then(j => this.responseData(j)).catch(e => console.error(e));
   }
@@ -175,5 +197,5 @@ function scrollV3(event, g, context) {
 }
 
 X13_graph.template = /*html*/ `<div ref="gr_hl"></div>`;
-X13_graph.bindAttributes({ "period": "period" });
+X13_graph.bindAttributes({ "period": "period", ylabel: "ylabel", y2label: "y2label", title:"title" });
 X13_graph.reg("x13-graph");

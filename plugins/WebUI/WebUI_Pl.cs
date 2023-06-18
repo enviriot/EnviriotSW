@@ -130,7 +130,6 @@ namespace X13.WebUI {
       string client = (ses!=null && ses.owner!=null)?ses.owner.name:remoteEndPoint.Address.ToString();
 
       try {
-        HttpStatusCode statusCode;
         if(req.Url.LocalPath=="/api/arch04") {
           var args = req.QueryString;
           
@@ -141,45 +140,42 @@ namespace X13.WebUI {
           var resp = JsExtLib.AQuery(topics, begin, count, end);
           res.Headers.Add("Cache-Control", "no-store");
           res.ContentType="application/json; charset=utf-8";
-          statusCode=HttpStatusCode.OK;
-          res.StatusCode = (int)statusCode;
+          res.StatusCode = (int)HttpStatusCode.OK;
           var json = JsLib.Stringify(resp);
           res.WriteContent(Encoding.UTF8.GetBytes(json));
         } else {
           string path=req.RawUrl=="/"?"/index.html":req.RawUrl;
           FileInfo f = new FileInfo(Path.Combine(_sv.RootPath, path.Substring(1)));
           if(f.Exists) {
-            string eTag=f.LastWriteTimeUtc.Ticks.ToString("X8")+"-"+f.Length.ToString("X4");
-            res.Headers.Add("ETag", eTag);
-            res.Headers.Add("Cache-Control", "no-cache");
-            if(req.Headers.Contains("If-None-Match") && req.Headers["If-None-Match"]==eTag) {
-              statusCode=HttpStatusCode.NotModified;
-              res.StatusCode=(int)statusCode;
-              res.WriteContent(Encoding.UTF8.GetBytes("Not Modified"));
-            } else {
-              res.ContentType=Ext2ContentType(f.Extension);
+            //string eTag=f.LastWriteTimeUtc.Ticks.ToString("X8")+"-"+f.Length.ToString("X4");
+            //if(req.Headers.Contains("If-None-Match") && req.Headers["If-None-Match"]==eTag) {
+            //  res.StatusCode=(int)HttpStatusCode.NotModified;
+            //  res.WriteContent(Encoding.UTF8.GetBytes("Not Modified"));
+            //} else {
+            //  res.Headers.Add("ETag", eTag);
+            //  res.Headers.Add("Cache-Control", "no-cache");
+            res.Headers.Add("Cache-Control", "no-store");
+            res.ContentType=Ext2ContentType(f.Extension);
               using(var fs = f.OpenRead()) {
                 fs.CopyTo(res.OutputStream);
                 res.ContentLength64 = fs.Length;
-              }
-              statusCode=HttpStatusCode.OK;
-              res.StatusCode = (int)statusCode;
+              //}
+              res.StatusCode = (int)HttpStatusCode.OK;
             }
           } else {
-            statusCode=HttpStatusCode.NotFound;
-            res.StatusCode = (int)statusCode;
+            res.StatusCode = (int)HttpStatusCode.NotFound;
             res.WriteContent(Encoding.UTF8.GetBytes("404 Not found"));
           }
         }
         if(verbose) {
-          Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.QueryString, statusCode.ToString());
+          Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.RawUrl, (HttpStatusCode)res.StatusCode);
         }
       }
       catch(Exception ex) {
         res.StatusCode = (int)HttpStatusCode.BadRequest;
         res.WriteContent(Encoding.UTF8.GetBytes("400 Bad Request"));
         if(verbose) {
-          Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.QueryString, ex.Message);
+          Log.Debug("{0} [{1}]{2} - {3}", client, req.HttpMethod, req.RawUrl, ex.Message);
         }
       }
     }
