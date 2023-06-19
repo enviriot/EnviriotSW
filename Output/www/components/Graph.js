@@ -13,7 +13,7 @@ class X13_graph extends BaseComponent {
     this.labels.push("x");
   }
   init$ = {
-    period: 2,
+    period: 2,  // in days
     ylabel: "",
     y2label: "",
     title:"",
@@ -45,8 +45,8 @@ class X13_graph extends BaseComponent {
     let now = (new Date()).getTime();
     this.range = [now - this.$.period * 24 * 60 * 60 * 1000, now];
     let options = {
-      width: this.offsetWidth - 10,
-      height: this.offsetHeight - 10,
+      width: this.clientWidth - 10,
+      height: this.clientHeight - 10,
       title: this.$.title,
       dateWindow: this.range,
       connectSeparatedPoints: true,
@@ -66,6 +66,15 @@ class X13_graph extends BaseComponent {
     };
     this.reqQuery();
     this.g = new Dygraph(this.ref.gr_hl, [row], options);
+    window.addEventListener('resize', this.resized.bind(this), true);
+  }
+  disconnectedCallback() {
+    this.g.destroy();
+  }
+  resized() {
+    if (this.g.width_ != this.clientWidth - 10) {
+      this.g.resize(this.clientWidth - 10, this.clientHeight - 10);
+    }
   }
   updateData(idx, value) { 
     if (typeof (value) !== 'number' || !isFinite(value)) {
@@ -136,22 +145,16 @@ class X13_graph extends BaseComponent {
   }
   doQuery() {
     this.reqTimer = null;
-    let end , begin;
     let range = this.g.xAxisRange();
-//    if (range[1] - range[0] > 15000) {
-      begin = range[0];
-      end = range[1];
-//    } else {
-//      end = (new Date()).getTime();
-//      begin = end - this.$.period * 24 * 60 * 60 * 1000;
-//    }
-    let req = "/api/arch04?p=" + encodeURIComponent(JSON.stringify(this.paths)) + "&b=" + encodeURIComponent(JSON.stringify(new Date(begin))) + "&e=" + encodeURIComponent(JSON.stringify(new Date(end))) + "&c=500";
+    let req = "/api/arch04?p=" + encodeURIComponent(JSON.stringify(this.paths))
+      + "&b=" + encodeURIComponent(JSON.stringify(new Date(range[0])))
+      + "&e=" + encodeURIComponent(JSON.stringify(new Date(range[1])))
+      + "&c=500";
     fetch(req).then(t => t.json()).then(j => this.responseData(j)).catch(e => console.error(e));
   }
   dblClickV3(event, g, context) {
-    let end = (new Date()).getTime();
-    let begin = end - this.$.period * 24 * 60 * 60 * 1000;
-    g.updateOptions({ dateWindow: [begin, end] });
+    let now = (new Date()).getTime();
+    g.updateOptions({ dateWindow: [now - this.$.period * 24 * 60 * 60 * 1000, now] });
   }
 }
 
@@ -197,5 +200,5 @@ function scrollV3(event, g, context) {
 }
 
 X13_graph.template = /*html*/ `<div ref="gr_hl"></div>`;
-X13_graph.bindAttributes({ "period": "period", ylabel: "ylabel", y2label: "y2label", title:"title" });
+X13_graph.bindAttributes({ "period": "period", title: "title", ylabel: "ylabel", y2label: "y2label" });
 X13_graph.reg("x13-graph");

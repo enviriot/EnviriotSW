@@ -4,13 +4,25 @@
   gap: 1em;
   width: 96%;
   margin: 0 3% 15px 1%;
-  outline: thin inset gray;
+  /*outline: thin inset gray;*/
   padding: 7px;
+  background-color: #EBF4FA;
 }
+a.aButton {
+  display: inline-block;
+  background-color: #98AFC7;
+  padding: 5px 1em 5px 1em;
+  border-radius: 15px;
+  min-width: 180px;
 
+  font-size: 20px;
+  margin: 0px 0px 0px 0px;
+  text-align: center;
+  text-decoration: none;
+}
 .card {
   display: inline-block;
-  background-color: papayawhip;
+  background-color: #98AFC7;
   padding: 5px 1em 15px 1em;
   border-radius: 15px;
   min-width: 180px;
@@ -20,6 +32,13 @@
     font-size: 20px;
     margin: 0px 0px 5px 0px;
     text-align: center;
+  }
+  .card > a {
+    display:block;
+    font-size: 20px;
+    margin: 0px 0px 5px 0px;
+    text-align: center;
+    text-decoration: none;
   }
 
   .card > div {
@@ -125,7 +144,7 @@ x13-signal {
   display: block;
   height: 24px;
   padding: 3px 0.5em 3px 1em;
-  outline: thin groove lightgray;
+  /*outline: thin groove lightgray;*/
 }
 
   x13-signal > label {
@@ -144,7 +163,7 @@ x13-signal {
 
 x13-text {
   display: block;
-  outline: thin groove lightgray;
+  /*outline: thin groove lightgray;*/
   padding: 6px 1.5em;
   text-align: center;
 }

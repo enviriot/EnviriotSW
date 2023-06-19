@@ -147,19 +147,19 @@ namespace X13.WebUI {
           string path=req.RawUrl=="/"?"/index.html":req.RawUrl;
           FileInfo f = new FileInfo(Path.Combine(_sv.RootPath, path.Substring(1)));
           if(f.Exists) {
-            //string eTag=f.LastWriteTimeUtc.Ticks.ToString("X8")+"-"+f.Length.ToString("X4");
-            //if(req.Headers.Contains("If-None-Match") && req.Headers["If-None-Match"]==eTag) {
-            //  res.StatusCode=(int)HttpStatusCode.NotModified;
-            //  res.WriteContent(Encoding.UTF8.GetBytes("Not Modified"));
-            //} else {
-            //  res.Headers.Add("ETag", eTag);
-            //  res.Headers.Add("Cache-Control", "no-cache");
-            res.Headers.Add("Cache-Control", "no-store");
+            string eTag = f.LastWriteTimeUtc.Ticks.ToString("X8") + "-" + f.Length.ToString("X4");
+            if (req.Headers.Contains("If-None-Match") && req.Headers["If-None-Match"] == eTag) {
+              res.StatusCode = (int)HttpStatusCode.NotModified;
+              res.WriteContent(Encoding.UTF8.GetBytes("Not Modified"));
+            } else {
+              res.Headers.Add("ETag", eTag);
+              res.Headers.Add("Cache-Control", "no-cache");
+              res.Headers.Add("Cache-Control", "no-store");
             res.ContentType=Ext2ContentType(f.Extension);
               using(var fs = f.OpenRead()) {
                 fs.CopyTo(res.OutputStream);
                 res.ContentLength64 = fs.Length;
-              //}
+              }
               res.StatusCode = (int)HttpStatusCode.OK;
             }
           } else {
