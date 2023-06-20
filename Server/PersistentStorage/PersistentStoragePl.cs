@@ -461,7 +461,7 @@ namespace X13.PersistentStorage {
         int i;
 
         var resp = _archive.Find(req);
-        for(i = 0; i<tba.Length; i++) { f_val[i] = 0; f_cnt[i]=0; l_val[i]=double.NaN; l_delta[i]=0; }
+        for(i = 0; i<tba.Length; i++) { f_val[i] = 0; f_cnt[i]=0; l_val[i]=double.NaN; l_delta[i]=-step; }
         foreach(var li in resp) {
           var t_cur = li["t"].AsDateTime;
           if(t_cur>=cursor) {
@@ -475,7 +475,7 @@ namespace X13.PersistentStorage {
             if(p == tba[i]) {
               var v = li["v"].AsDouble;
               if(!double.IsNaN(v)) {
-                var td = step + (t_cur - cursor).TotalSeconds;
+                var td = (t_cur - cursor).TotalSeconds;
                 if(!double.IsNaN(l_val[i])) {
                   f_val[i]+=l_val[i]*(td-l_delta[i])/step;
                   l_delta[i]=td;
@@ -493,15 +493,15 @@ namespace X13.PersistentStorage {
         void AddRecord() {
           if(t_cnt>0) {
             JSL.Array lo=new JSL.Array(tba.Length + 1) {
-              [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_sum/t_cnt).ToLocalTime()),
+              [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt==1?t_sum:(-step/2)).ToLocalTime()),
             };
             t_cnt = 0;
             t_sum = 0;
             for(i = 0; i < tba.Length; i++) {
-              lo[i+1] = f_cnt[i]>0 ? new JSL.Number(f_val[i] + l_val[i]*(step-l_delta[i])/step) : JSC.JSValue.Null;
+              lo[i+1] = f_cnt[i]>0 ? new JSL.Number(f_val[i] + l_val[i]*(-l_delta[i])/step) : JSC.JSValue.Null;
               f_val[i] = 0;
               f_cnt[i] = 0;
-              l_delta[i] = 0;
+              l_delta[i] = -step;
             }
             rez.Add(lo);
           }
