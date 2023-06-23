@@ -38,7 +38,7 @@ x13-graph {
   position: absolute;
   font-size: 14px;
   z-index: 10;
-  width: 250px; /* labelsDivWidth */
+  width: 400px; /* labelsDivWidth */
   /*
   dygraphs determines these based on the presence of chart labels.
   It might make more sense to create a wrapper div around the chart proper.
@@ -47,7 +47,7 @@ x13-graph {
   */
   background: white;
   line-height: normal;
-  text-align: center;
+  text-align: left;
   overflow: hidden;
 }
 
@@ -56,12 +56,11 @@ x13-graph {
   display: inline-block;
   position: relative;
   bottom: .5ex;
-  text-align:left;
+  text-align: left;
   padding-left: 1em;
   height: 1px;
   border-bottom-width: 2px;
   border-bottom-style: solid;
-
   /* border-bottom-color is set based on the series color */
 }
 
@@ -153,3 +152,13 @@ x13-wheather {
   height: 300px;
   display: block;
 }
+  x13-wheather td {
+    width: 33%;
+  }
+  x13-wheather td > p {
+    text-align: center;
+    font-size: 20px;
+  }
+  x13-wheather tr.content>td {
+    width: 100%;
+  }
