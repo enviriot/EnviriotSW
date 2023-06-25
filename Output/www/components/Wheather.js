@@ -17,9 +17,8 @@ class X13_wheather extends BaseComponent {
     let now = new Date();
     now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0).getTime();
     let opt = {
-      width: this.clientWidth - 10,
-      height: this.clientHeight - 10,
-      //title: this.$.temperature.format("0.0 °C"),
+      width: this.clientWidth*0.98,
+      height: this.clientHeight - 20,
       dateWindow: [now - 24 * 60 * 60 * 1000, now],
       connectSeparatedPoints: true,
       legend: 'always',
@@ -41,20 +40,22 @@ class X13_wheather extends BaseComponent {
     this.sub('forecast', this.forecastChanged.bind(this));
     window.addEventListener('resize', this.resized.bind(this), true);
     this.timer = setTimeout(this.reqArchive.bind(this), 30);
+    this.minuteTick = setInterval(this.drawDate.bind(this), 60000);
+    this.drawDate();
   }
   disconnectedCallback() {
+    clearInterval(this.minuteTick);
+    clearTimeout(this.timer);
     this.g.destroy();
   }
   resized() {
-    if (this.g.width_ != this.clientWidth - 10) {
-      this.g.resize(this.clientWidth - 10, this.clientHeight - 10);
-    }
+    this.g.resize(this.clientWidth*0.98, this.clientHeight - 20);
   }
   tempChanged(val) {
-    if (this.g) {
-      this.ref.wh_hd.innerText = this.$.temperature.format("0.0 °C");
-      //this.g.updateOptions({ 'title': this.$.temperature.format("0.0 °C") });
-    }
+    this.ref.wh_title.innerText = this.$.temperature.format("0.0 °C");
+  }
+  drawDate() {
+    this.ref.wh_dt.innerText = (new Date()).format("dddd dd.MMM.yy HH:mm");
   }
   forecastChanged(data) {
     if (data && Array.isArray(data) && data.length>0) {
@@ -172,7 +173,7 @@ function dblClickV3(event, g, context) {
   g.updateOptions({ dateWindow: [now - 24 * 60 * 60 * 1000, now] });
 }
 
-X13_wheather.template = /*html*/ '<table><tr><td></td><td><p ref="wh_hd"></p></td><td><div ref="wh_le"></div></td></tr><tr class="content"><td colspan="3"><div ref="wh_gr"></div></td></tr></table>';
+X13_wheather.template = /*html*/ '<div class="wh_top"><div ref="wh_le"></div><div ref="wh_title"></div><div ref="wh_dt"></div></div><div ref="wh_gr"></div>';
 X13_wheather.bindAttributes({ "forecast": "forecast", "temperature": "temperature" });
 
 X13_wheather.reg("x13-wheather");
