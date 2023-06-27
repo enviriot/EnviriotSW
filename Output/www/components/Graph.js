@@ -52,6 +52,7 @@ class X13_graph extends BaseComponent {
       connectSeparatedPoints: true,
       legend: 'follow',
       series: series,
+      labelsSeparateLines: false,
       labels: this.labels,
       ylabel: this.$.ylabel,
       y2label: this.$.y2label,
