@@ -2,19 +2,39 @@
 .header {
   display: flex;
   gap: 1em;
-  width: 96%;
-  margin: 0 3% 15px 1%;
-  outline: thin inset gray;
-  padding: 7px;
+  width: 98%;
+  margin: 0 1% 15px 1%;
+  /*outline: thin inset gray;
+  padding: 7px;*/
+}
+
+a.aButton {
+  display: inline-block;
+  background-color: papayawhip;
+  padding: 5px 1em 5px 1em;
+  border-radius: 15px;
+  min-width: 100px;
+  font-size: 20px;
+  margin: 0px 0px 0px 0px;
+  text-align: center;
+  text-decoration: none;
 }
 
 .card {
   display: inline-block;
   background-color: papayawhip;
-  padding: 5px 1em 15px 1em;
+  padding: 5px 15px 15px 15px;
   border-radius: 15px;
-  min-width: 180px;
+  min-width: 100px;
 }
+
+  .card > a {
+    display: block;
+    font-size: 20px;
+    margin: 0px 0px 5px 0px;
+    text-align: center;
+    text-decoration: none;
+  }
 
   .card > p {
     font-size: 20px;
@@ -29,9 +49,9 @@
 
 x13-graph {
   display: block;
-  width: 96%;
-  margin: 1em 3% 1em 1%;
-  outline: thin inset gray;
+  width: 98%;
+  margin: 1em 1% 1em 1%;
+  /*outline: thin inset gray;*/
 }
 
 .dygraph-legend {
@@ -123,8 +143,8 @@ x13-graph {
 x13-signal {
   display: block;
   height: 24px;
-  padding: 3px 0.5em 3px 1em;
-  outline: thin groove lightgray;
+  padding: 0px 0.5em 0px 1em;
+  /*outline: thin groove lightgray;*/
 }
 
   x13-signal > label {
@@ -143,8 +163,7 @@ x13-signal {
 
 x13-text {
   display: block;
-  outline: thin groove lightgray;
-  padding: 6px 1.5em;
+  padding: 3px 1.5em;
   text-align: center;
 }
 
@@ -152,21 +171,25 @@ x13-wheather {
   height: 40vh;
   display: block;
 }
+
   x13-wheather > div {
     width: 98%;
-    display:block;
+    display: block;
   }
+
     x13-wheather > div.wh_top {
-    gap: 0;
-    margin: 0 0 5px 0;
-    height: 20px;
-    display: flex;
-    width: 98%;
-  }
-  x13-wheather div.wh_top>div {
+      gap: 0;
+      margin: 0 0 5px 0;
+      height: 20px;
+      display: flex;
+      width: 98%;
+    }
+
+  x13-wheather div.wh_top > div {
     width: 10%;
-    text-align:center;
+    text-align: center;
   }
+
   x13-wheather div.wh_top > :first-child, x13-wheather div.wh_top > :last-child {
     width: 45%;
   }

@@ -4,30 +4,21 @@ import '../lib/stringformat.min.js';
 class X13_thermostat extends BaseComponent {
   init$ = {
     temperature: 0,
-    humidity: 0,
-    setting: 0,
+    humidity: null,
+    setting: null,
     valve: 0,
-    sensor: false,
-    actor: false,
+    status: false,
   };
   initCallback() {
-    this.sub('temperature', this.temperatureChanged.bind(this));
-    this.sub('humidity', this.humidityChanged.bind(this));
-    this.sub('setting', this.settingChanged.bind(this));
-    this.sub('valve', this.valveChanged.bind(this));
-    this.sub('sensor', this.sensorChanged.bind(this));
-    this.sub('actor', this.actorChanged.bind(this));
+    this.sub('temperature', v => this.ref.ts_tmp.innerText = v.format("#0.0 °C"));
+    this.sub('humidity', v => this.ref.ts_hum.innerText = (typeof (v) === 'number' && isFinite(v)) ? v.format("#0.0 '%'") : null);
+    this.sub('setting', v => this.ref.ts_set.innerText = (typeof (v) === 'number' && isFinite(v)) ? v.format("#0.0 °C") : null);
+    this.sub('valve', this.valveStatusChanged.bind(this));
+    this.sub('status', this.valveStatusChanged.bind(this));
   }
-  temperatureChanged(value) {
-    this.ref.ts_tmp.innerText = value.format("#0.0 °C");
-  }
-  humidityChanged(value) {
-    this.ref.ts_hum.innerText = value.format("#0.0 '%'");
-  }
-  settingChanged(value) {
-    this.ref.ts_set.innerText = value.format("#0.0 °C");
-  }
-  valveChanged(value) {
+  valveStatusChanged(val) {
+    let value = this.$.valve;
+    let status = this.$.status;
     if (typeof (value) !== 'number' || value<-100 || value>100) {
       return;
     }
@@ -37,17 +28,12 @@ class X13_thermostat extends BaseComponent {
       style = "from " + (180 - value * 1.8).toFixed(0) +"deg, #FFC080 0 " + v + ", #C0C0C0 " + v + " 0);";
     } else if (value < 0) {
       let v = (-value * 3.6).toFixed(0) + "deg";
-      style = "from " + (360 + value * 1.8).toFixed(0) + "deg, #8080FF 0 " + v + ", #C0C0C0 " + v + " 0);";
+      style = "from " + (360 + value * 1.8).toFixed(0) + "deg, #80C0FF 0 " + v + ", #C0C0C0 " + v + " 0);";
     } else {
       style = "#C0C0C0 0 100%";
     }
-    this.ref.ts_div.style = "background:radial-gradient(closest-side, white 32px, transparent 32px 40px), conic-gradient(" + style + ");";
-  }
-  sensorChanged(value) {
-    this.ref.ts_hum.className = value?"":"ts_offline";
-  }
-  actorChanged(value) {
-    this.ref.ts_set.className = value ? "" : "ts_offline";
+    let bg = (status === true || status === 1 || status==="true") ? "white 30px" : "#FFFFE0 30px, #FF4040, 32px";
+    this.ref.ts_div.style = "background:radial-gradient(closest-side, " + bg + ", transparent 38px), conic-gradient(" + style + ");";
   }
 }
 X13_thermostat.template = /*html*/ `
@@ -61,26 +47,22 @@ X13_thermostat.rootStyles = /*css*/ `
   x13-thermostat > div {
     display:grid;
     width:64px;
-    height:52px;
+    height:50px;
     border-radius: 50%;
-    padding: 14px 8px 14px 8px;
+    padding: 15px 8px 15px 8px;
   }
   x13-thermostat p {
     margin:0;
     text-align: center;
-    font-size:12px;
+    font-size:14px;
     height:16px;
     line-height: 16px;
   }
   x13-thermostat .ts_tmp{ 
-    font-size:16px;
+    font-size:18px;
+    height:18px;
+    line-height:18px;
     font-weight:bold;
-    height:20px;
-    line-height: 20px;
-    border: 0px;
-  }
-  x13-thermostat .ts_offline{ 
-    background: linear-gradient(to right, #00FF0000 12px, #FFE080 13px, #FFE080 51px, #00FF0000 52px);
   }`;
-X13_thermostat.bindAttributes({ temperature: 'temperature', humidity: 'humidity', setting: 'setting', valve: 'valve', sensor: 'sensor', actor: 'actor' });
+X13_thermostat.bindAttributes({ temperature: 'temperature', humidity: 'humidity', setting: 'setting', valve: 'valve', status: 'status' });
 X13_thermostat.reg("x13-thermostat");
