@@ -31,7 +31,7 @@ namespace X13 {
       fs["AppendText"] = JSC.JSValue.Marshal(new Action<string, string>(AppendFile));
       Context.DefineVariable("File").Assign(fs);
       var arch= JSC.JSObject.CreateObject();
-      arch["Query"] = JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, int, JSC.JSObject, JSL.Array>(AQueryJS));
+      arch["Query"] = JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, int, JSC.JSValue, JSL.Array>(AQueryJS));
       Context.DefineVariable("Arch").Assign(arch);
     }
 
@@ -52,6 +52,7 @@ namespace X13 {
           throw new NotImplementedException("XMLHttpRequest.open( synchron )");
         }
         _req = (HttpWebRequest)WebRequest.Create(url);
+        //_req.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;  // TrustFailure on Linux
         _req.Method = method;
         _contentType = null;
         readyState = 1;
@@ -114,7 +115,7 @@ namespace X13 {
           readyState = 4;
         }
         catch(WebException e) {
-          Log.Warning("XMLHttpRequest({0}) - [{1}] {2}", _req.RequestUri, e.Status, e.Message);
+          Log.Warning("XMLHttpRequest({0}) - [{1}] {2}", _req.RequestUri, e.Status, e.ToString());
           readyState = 4;
         }
       }

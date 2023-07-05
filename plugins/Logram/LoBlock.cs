@@ -62,8 +62,10 @@ namespace X13.Logram {
             _self["GetState"] = JSC.JSValue.Marshal(new Func<string, JSC.JSValue>(GetState));
             _self["SetState"] = JSC.JSValue.Marshal(new Action<string, JSC.JSValue>(SetState));
             _self["GetField"] = JSC.JSValue.Marshal(new Func<string, string, JSC.JSValue>(GetField));
+            _self["SetField"] = JSC.JSValue.Marshal(new Action<string, string, JSC.JSValue>(SetField));  // <topic>#<path>
+            _self["path"] = _owner.path;
 
-            if(f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
+            if (f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
               _self = f.Construct(_self, new JSC.Arguments());
             } else {
               f.Call(_self, new JSC.Arguments());  // Call constructor
@@ -218,7 +220,11 @@ namespace X13.Logram {
         return t.GetField(field);
       }
       return JSC.JSValue.NotExists;
-
+    }
+    private void SetField(string path, string field, JSC.JSValue value) {
+      if (!_owner.disposed && !string.IsNullOrEmpty(path) && _owner.Exist(path, out Topic t)) {
+        t.SetField(field, value, _owner);
+      }
     }
 
     #endregion JsFunctions
