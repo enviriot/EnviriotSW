@@ -217,6 +217,12 @@ namespace X13.PersistentStorage {
           catch(Exception ex) {
             Log.Warning("Backup failed - " + ex.ToString());
           }
+          try {
+            ShrinkArch();
+          }
+          catch(Exception ex) {
+            Log.Warning("ShrinkArch failed - " + ex.ToString());
+          }
         }
       } while(!_terminate);
     }
@@ -399,9 +405,29 @@ namespace X13.PersistentStorage {
       }
       catch(System.IO.IOException) {
       }
-
     }
-
+    private void ShrinkArch() {
+      var t_list = new LinkedList<Topic>();
+      var l_list = new LinkedList<string>();
+      foreach(var p in _archive.FindAll().Select(z => z["p"].AsString).Distinct()) {
+        if(Topic.root.Exist(p, out Topic t)) {
+          t_list.AddLast(t);
+        } else {
+          l_list.AddLast(p);
+        }
+      }
+      foreach(var p in l_list) {
+        _archive.Delete(Query.EQ("p", p));
+      }
+      foreach(var t in t_list) {
+        var keep = t.GetField("Arch.keep");
+        double k_d;
+        if((keep.ValueType==JSC.JSValueType.Double || keep.ValueType==JSC.JSValueType.Integer) && (k_d = keep.As<double>())>0) {
+          _archive.Delete(Query.And(Query.EQ("p", t.path), Query.LT("t", DateTime.Now.AddDays(-k_d))));
+        }
+      }
+      _dba.Shrink();
+    }
     private void SubFunc(Perform p) {
       if(p.art == Perform.Art.subscribe || p.art == Perform.Art.subAck || p.art == Perform.Art.setField || p.art == Perform.Art.setState || p.art == Perform.Art.unsubscribe || p.prim == _owner) {
         return;
@@ -415,16 +441,28 @@ namespace X13.PersistentStorage {
       _q = new System.Collections.Concurrent.ConcurrentQueue<Perform>();
       JsExtLib.AQuery = this.AQuery;
     }
+
     #region Archivist
     private JSL.Array AQuery(string[] topics, DateTime begin, int count, DateTime end) {
       var tba = topics.Select(z=>new BsonValue(z)).ToArray();
       var rez = new JSL.Array();
-      if(end < begin) {  // end == MinValue
-        var req = Query.And(
-        Query.All("t", count<0?Query.Descending:Query.Ascending),
-        Query.In("p", tba),
-        count<0?Query.LT("t", new BsonValue(begin.ToUniversalTime())):Query.GT("t", new BsonValue(begin.ToUniversalTime())));
-        var resp = _archive.Find(req, 0, Math.Abs(count));
+      Query req;
+      if(end <= begin || count==0) {  // end == MinValue
+        if(end > begin) {
+          req = Query.And(
+          Query.All("t", count<0 ? Query.Descending : Query.Ascending),
+          Query.In("p", tba),
+          Query.GTE("t", new BsonValue(begin)),
+          Query.LT("t", new BsonValue(end)));
+        } else if(count!=0) {
+          req = Query.And(
+          Query.All("t", count<0 ? Query.Descending : Query.Ascending),
+          Query.In("p", tba),
+          count<0 ? Query.LT("t", new BsonValue(begin.ToUniversalTime())) : Query.GT("t", new BsonValue(begin.ToUniversalTime())));
+        } else {
+          return rez;
+        }
+        var resp = _archive.Find(req, 0, count == 0?int.MaxValue:Math.Abs(count));
         JSL.Array lo=null;
         foreach(var li in resp) {
           var p = li["p"];
@@ -446,7 +484,7 @@ namespace X13.PersistentStorage {
         }
       } else {
         var step = (end - begin).TotalSeconds/Math.Abs(count);
-        var req = Query.And(
+        req = Query.And(
         Query.All("t", Query.Ascending),
         Query.In("p", tba),
         Query.GTE("t", new BsonValue(begin.AddSeconds(-step))),
