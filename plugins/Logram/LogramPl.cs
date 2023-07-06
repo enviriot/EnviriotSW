@@ -70,11 +70,13 @@ namespace X13.Logram {
       _curIdx = 0;
       while(_curIdx< _TaskPr.Count) {
         it = _TaskPr[_curIdx++];
-        try {
-          it.Tick2();
-        }
-        catch(Exception ex) {
-          Log.Warning("{0}.Tick2() - {1}", it.ToString(), ex.Message);
+        if (it != null) {
+          try {
+            it.Tick2();
+          }
+          catch (Exception ex) {
+            Log.Warning("{0}.Tick2() - {1}", it.ToString(), ex.Message);
+          }
         }
       }
       _TaskPr.Clear();
