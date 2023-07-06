@@ -294,7 +294,7 @@ namespace X13.PersistentStorage {
         oldId.Clear();
       }
       exist = File.Exists(DBA_PATH);
-      _dba = new LiteDatabase(new ConnectionString("Filename=" + DBA_PATH) { CacheSize = 100, Mode = LiteDB.FileMode.Exclusive });
+      _dba = new LiteDatabase(new ConnectionString("Filename=" + DBA_PATH) { CacheSize = 100000, Mode = LiteDB.FileMode.Exclusive });
       if(exist && !_dba.GetCollectionNames().Any(z => z == "archive")) {
         exist = false;
       }
@@ -372,7 +372,7 @@ namespace X13.PersistentStorage {
         if(saveS && a.bs != null) {
           _states.Upsert(a.bs);
         }
-        if(saveA && (a.js.ValueType==JSC.JSValueType.Double || a.js.ValueType == JSC.JSValueType.Integer)) {
+        if(saveA && ((a.js.ValueType==JSC.JSValueType.Double && !double.IsNaN(a.js.As<double>())) || a.js.ValueType == JSC.JSValueType.Integer)) {
           _archive.Insert(new BsonDocument { ["_id"] = ObjectId.NewObjectId(), ["t"] = new BsonValue(DateTime.UtcNow), ["p"] = t.path, ["v"] = a.bs["v"] });
         }
       }

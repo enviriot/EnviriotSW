@@ -11,6 +11,7 @@ using System.Threading;
 using System.Net;
 using System.IO;
 using NiL.JS.Extensions;
+using System.Threading.Tasks;
 
 namespace X13 {
   public static class JsExtLib {
@@ -31,7 +32,7 @@ namespace X13 {
       fs["AppendText"] = JSC.JSValue.Marshal(new Action<string, string>(AppendFile));
       Context.DefineVariable("File").Assign(fs);
       var arch= JSC.JSObject.CreateObject();
-      arch["Query"] = JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, int, JSC.JSValue, JSL.Array>(AQueryJS));
+      arch["Query"] = JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, int, JSC.JSValue, Task<JSL.Array>>(AQueryJS));
       Context.DefineVariable("Arch").Assign(arch);
     }
 
@@ -323,7 +324,7 @@ namespace X13 {
 
     #region AQuery
     public static Func<string[], DateTime, int, DateTime, JSL.Array> AQuery { get; set; }
-    private static JSL.Array AQueryJS(JSC.JSValue topicsJS, JSC.JSValue beginJS, int count, JSC.JSValue endJS) {
+    private static Task<JSL.Array> AQueryJS(JSC.JSValue topicsJS, JSC.JSValue beginJS, int count, JSC.JSValue endJS) {
       string[] topics;
       if(topicsJS.ValueType == JSC.JSValueType.String) {
         topics = new string[1];
@@ -333,7 +334,8 @@ namespace X13 {
       }
       DateTime begin = (beginJS.Value as JSL.Date).ToDateTime();
       DateTime end = (endJS!=null && endJS.ValueType==JSC.JSValueType.Date)?(endJS.Value as JSL.Date).ToDateTime():DateTime.MinValue;
-      return AQuery(topics, begin, count, end);
+      return Task.Run(() => AQuery(topics, begin, count, end));
+      //return Task.FromResult(new JSL.Array(0));
     }
     #endregion AQuery
   }
