@@ -135,7 +135,7 @@ namespace X13.WebUI {
           
           var topics = JsLib.ParseJson(args["p"]).Select(kv => kv.Value.As<string>()).ToArray();
           var begin = (JsLib.ParseJson(args["b"]).Value as JSL.Date).ToDateTime();
-          var count = JsLib.ParseJson(args["c"]).As<int>();
+          var count = args.Contains("c")?JsLib.ParseJson(args["c"]).As<int>():0;
           var end = args.Contains("e")?(JsLib.ParseJson(args["e"]).Value as JSL.Date).ToDateTime():DateTime.MinValue;
           var resp = JsExtLib.AQuery(topics, begin, count, end);
           res.Headers.Add("Cache-Control", "no-store");

@@ -360,6 +360,7 @@ namespace X13.PersistentStorage {
             a.js = jTmp;
           } else {
             saveS = false;
+            saveA = false;
           }
         }
 
@@ -444,16 +445,15 @@ namespace X13.PersistentStorage {
 
     #region Archivist
     private JSL.Array AQuery(string[] topics, DateTime begin, int count, DateTime end) {
+      //var sw = System.Diagnostics.Stopwatch.StartNew();
       var tba = topics.Select(z=>new BsonValue(z)).ToArray();
 
       var rez = new JSL.Array();
-      ILiteQueryable<BsonDocument> resp1;
-      IEnumerable<BsonDocument> resp2;
 
       if(end <= begin || count==0) {  // end == MinValue
         var p1 = new BsonValue(begin);
         var p3 = new BsonValue(end);
-        resp1 = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1);
+        var resp1 = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1);
         if(end > begin) {
           resp1 = resp1.Where(z=>z["t"] < p3);
         }
@@ -462,11 +462,7 @@ namespace X13.PersistentStorage {
         } else if(count>=0) {
           resp1 = resp1.OrderBy(z => z["t"]);
         }
-        if (count != 0) {
-          resp2 = resp1.Limit(Math.Abs(count)).ToEnumerable();
-        } else {
-          resp2 = resp1.ToEnumerable();
-        }
+        var resp2 = count != 0 ? resp1.Limit(Math.Abs(count)).ToEnumerable() : resp1.ToEnumerable();
         JSL.Array lo=null;
         foreach(var li in resp2) {
           var p = li["p"];
@@ -488,9 +484,8 @@ namespace X13.PersistentStorage {
         }
       } else {
         var step = (end - begin).TotalSeconds/Math.Abs(count);
-        var p1 = new BsonValue(begin.AddSeconds(-step));
-        var p3 = new BsonValue(end.AddSeconds(step));
-        var resp = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1 && z["t"] < p3).OrderBy(z => z["t"]).ToEnumerable();
+        var p1 = new BsonValue(begin);
+        var p3 = new BsonValue(end);
 
         DateTime cursor = begin;
         var f_cnt = new int[tba.Length];
@@ -501,7 +496,15 @@ namespace X13.PersistentStorage {
         double t_sum = 0;
         int i;
 
-        for(i = 0; i<tba.Length; i++) { f_val[i] = 0; f_cnt[i]=0; l_val[i]=double.NaN; l_delta[i]=-step; }
+        for(i = 0; i<tba.Length; i++) {
+          f_val[i] = 0;
+          f_cnt[i]=0;
+          l_delta[i]=-step;
+          var p_i = tba[i];
+          var r = _archive.Query().Where(z => z["p"] == p_i && z["t"] < p1).OrderByDescending(z => z["t"]).Limit(1).ToArray();
+          l_val[i]=r.Length==1 ? r[0]["v"].AsDouble:double.NaN;
+        }
+        var resp = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1 && z["t"] < p3).OrderBy(z => z["t"]).ToEnumerable();
         foreach(var li in resp) {
           var t_cur = li["t"].AsDateTime;
           if(t_cur>=cursor) {
@@ -547,6 +550,8 @@ namespace X13.PersistentStorage {
           }
         }
       }
+      //sw.Stop();
+      //Log.Debug("AQuery([{0}], {1:yyMMdd'T'HHmmss}, {2}, {3:yyMMdd'T'HHmmss}) {4:0.0} mS", string.Join(", ", topics), begin, count, end, sw.Elapsed.TotalMilliseconds);
       return rez;
 
     }
