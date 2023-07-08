@@ -334,8 +334,8 @@ namespace X13 {
       }
       DateTime begin = (beginJS.Value as JSL.Date).ToDateTime();
       DateTime end = (endJS!=null && endJS.ValueType==JSC.JSValueType.Date)?(endJS.Value as JSL.Date).ToDateTime():DateTime.MinValue;
+      //Log.Debug("AQuery([{0}], {1:HHmmss}, {2}, {3:HHmmss})", string.Join(", ", topics), begin, count, end);
       return Task.Run(() => AQuery(topics, begin, count, end));
-      //return Task.FromResult(new JSL.Array(0));
     }
     #endregion AQuery
   }

@@ -295,7 +295,7 @@ namespace X13.PersistentStorage {
         oldId.Clear();
       }
       exist = File.Exists(DBA_PATH);
-      _dba = new LiteDatabase( new ConnectionString { Upgrade=true, Filename=DBA_PATH });
+      _dba = new LiteDatabase(new ConnectionString { Upgrade=true, Filename=DBA_PATH });
       if(exist && !_dba.GetCollectionNames().Any(z => z == "archive")) {
         exist = false;
       }
@@ -389,7 +389,7 @@ namespace X13.PersistentStorage {
       string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
       File.Copy(DB_PATH, fb);
       Log.Info("backup {0} created", fb);
-      _db = new LiteDatabase(new ConnectionString{ Upgrade = true, Filename = DB_PATH });
+      _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH });
       _db.Rebuild();
       _objects = _db.GetCollection<BsonDocument>("objects");
       _states = _db.GetCollection<BsonDocument>("states");
@@ -455,7 +455,7 @@ namespace X13.PersistentStorage {
         var p3 = new BsonValue(end);
         var resp1 = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1);
         if(end > begin) {
-          resp1 = resp1.Where(z=>z["t"] < p3);
+          resp1 = resp1.Where(z => z["t"] < p3);
         }
         if(count<0) {
           resp1 = resp1.OrderByDescending(z => z["t"]);
@@ -502,7 +502,7 @@ namespace X13.PersistentStorage {
           l_delta[i]=-step;
           var p_i = tba[i];
           var r = _archive.Query().Where(z => z["p"] == p_i && z["t"] < p1).OrderByDescending(z => z["t"]).Limit(1).ToArray();
-          l_val[i]=r.Length==1 ? r[0]["v"].AsDouble:double.NaN;
+          l_val[i]=r.Length==1 ? r[0]["v"].AsDouble : double.NaN;
         }
         var resp = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1 && z["t"] < p3).OrderBy(z => z["t"]).ToEnumerable();
         foreach(var li in resp) {
@@ -534,20 +534,18 @@ namespace X13.PersistentStorage {
         }
         AddRecord();
         void AddRecord() {
-          if(t_cnt>0) {
-            JSL.Array lo=new JSL.Array(tba.Length + 1) {
-              [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt==1?t_sum:(-step/2)).ToLocalTime()),
-            };
-            t_cnt = 0;
-            t_sum = 0;
-            for(i = 0; i < tba.Length; i++) {
-              lo[i+1] = f_cnt[i]>0 ? new JSL.Number(f_val[i] + l_val[i]*(-l_delta[i])/step) : JSC.JSValue.Null;
-              f_val[i] = 0;
-              f_cnt[i] = 0;
-              l_delta[i] = -step;
-            }
-            rez.Add(lo);
+          JSL.Array lo=new JSL.Array(tba.Length + 1) {
+            [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt==1?t_sum:(-step/2)).ToLocalTime()),
+          };
+          t_cnt = 0;
+          t_sum = 0;
+          for(i = 0; i < tba.Length; i++) {
+            lo[i+1] = f_cnt[i]>0 ? new JSL.Number(f_val[i] + l_val[i]*(-l_delta[i])/step) : (double.IsNaN(l_val[i]) ? JSC.JSValue.Null : l_val[i]);
+            f_val[i] = 0;
+            f_cnt[i] = 0;
+            l_delta[i] = -step;
           }
+          rez.Add(lo);
         }
       }
       //sw.Stop();
@@ -589,7 +587,7 @@ namespace X13.PersistentStorage {
     public void Start() {
       _terminate = false;
       bool exist = File.Exists(DBH_PATH);
-      _dbHist = new LiteDatabase(new ConnectionString{ Upgrade = true, Filename = DBH_PATH });
+      _dbHist = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DBH_PATH });
       _history = _dbHist.GetCollection<BsonDocument>("history");
       if(!exist) {
         _history.EnsureIndex("t");
