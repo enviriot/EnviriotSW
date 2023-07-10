@@ -6,27 +6,9 @@
   <title>Enviriot WebUI</title>
   <link rel="stylesheet" href="./index.css">
   <script src="./lib/wsBond.js" type="module"></script>
-  <script src="./components/text.js" type="module"></script>
-  <script src="./components/button.js" type="module"></script>
-  <script src="./components/graph.js" type="module"></script>
+  <script src="./components/calender.js" type="module"></script>
 </head>
 <body>
-  <!--
-  <x13-text value="text1" data-bg_color="/export/t1_color" data-fg_color="/export/b2_text" data-fg_color.color="-50:#0000FF;-25:#FF8000;50:#FF0000"></x13-text>
-  <x13-button data-value='/export/t1'>Button1</x13-button>
-  <x13-text data-value="/export/b2_text" data-value.format="0.0 km&sol;h" fg_color="#40FF40"></x13-text>
-  <x13-button data-value='/export/t2'><x13-text value="✔" data-fg_color='/export/t2' data-fg_color.color="false:#0000FF;true:#FF0000"></x13-text></x13-button>
-
-  <x13-text data-bg_color="/export/t1_color" data-value="/export/b2_text" data-value.format="0.00 km&sol;h" data-fg_color.color="-50:#0000FF;0:#00FF00;50:#FF0000"></x13-text>
-      -->
-  <x13-graph style="height:300px;" title="Напряжение" ylabel="V" y2label="V"
-             data-pv.y2="/Public/UPS/VPv" 
-             data-net.y2="/Public/UPS/VNet" 
-             data-batt="/Public/UPS/VBatt" ></x13-graph>
-  <x13-graph style="height:300px;" title="Мощность" ylabel="W" y2label="Lux"
-             data-pv="/Public/UPS/WPv" 
-             data-net="/Public/UPS/WNet" 
-             data-intesity.y2="/Public/Outdoor/osSens_I" 
-             data-load="/Public/UPS/WLoad" ></x13-graph>
+  <x13-calender data-value="/export/Calender/#"></x13-calender>
 </body>
-  </html>
+</html>

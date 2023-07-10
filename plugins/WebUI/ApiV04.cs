@@ -159,25 +159,7 @@ namespace X13.WebUI {
         return;
       }
       var vj = JsLib.Stringify(p.src.GetState());
-      /*
-      string meta = string.Empty;
-      if (p.art == Perform.Art.subscribe) {
-        var mo = NiL.JS.Core.JSObject.CreateObject();
-        var to = p.src.GetField("type");
-        string ts;
-        if (to.ValueType == NiL.JS.Core.JSValueType.String && !string.IsNullOrEmpty(ts = to.As<string>()) && ts.StartsWith("WebUI")) {
-          mo["type"] = ts.Substring("WebUI/".Length);
-        }
-        if ((to = p.src.GetField("WebUI")).ValueType == NiL.JS.Core.JSValueType.Object){
-          foreach(var kv in to) {
-            mo[kv.Key] = kv.Value;
-          }
-        }
-        if (mo.Any()) {
-          meta = "\t" + JsLib.Stringify(mo);
-        }
-      }*/
-      Send(string.Concat("P\t", p.src.path, "\t", vj/*, meta*/));
+      Send(string.Concat("P\t", p.src.path, "\t", vj));
       if (WebUI_Pl.verbose) {
         X13.Log.Debug("ws.snd({0}, {1})", p.src.path, vj);
       }

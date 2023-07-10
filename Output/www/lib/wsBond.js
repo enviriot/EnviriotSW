@@ -69,13 +69,39 @@ window.wsBond = {
       }
     },
     processInpPublish(path, value) {
-      if (wsBond.f.subscribes.hasOwnProperty(path)) {
-        for (var it = wsBond.f.subscribes[path].values(), s = null; s = it.next().value;) { 
-          try {
-            s.o.$[s.p] = s.c ? s.c.convert(value) : value;
-          } catch (error) {
-            console.error("processInpPublish(" + path + ")[" + s.p + "] - " + error);
+      let tp = path.split("/");
+      let cur = wsBond.f.subscribes, next;
+      for (let i = 0; i < tp.length; i++) {
+        if (tp[i] === "") continue;
+        if (cur["#"]) {
+          wsBond.f.pubIntern(cur["#"], path.substring(cur["/path"].length + 1), value);
+        }
+        if (cur["+"] && i + 2 == tp.length) {
+          wsBond.f.pubIntern(cur["+"], path.substring(cur["/path"].length + 1), value);
+        }
+        if (!(next = cur[tp[i]])) {
+          //console.warn("processInpPublish(" + path + ", ) unknown " + tp[i] + " in " + cur["/path"]);
+          break;
+        }
+        cur = next;
+        if (i + 1 == tp.length) {
+          wsBond.f.pubIntern(cur, "", value);
+        }
+      }
+    },
+    pubIntern(o, path, value) {
+      let subs = o["/subs"];
+      for (let i = 0; i < subs.length; i++) {
+        let s = subs[i];
+        try {
+          let v = s.c ? s.c.convert(value) : value;
+          if (typeof (s.o.$[s.p]) === "function") {
+            s.o.$[s.p].call(s.o, path, value);
+          } else {
+            s.o.$[s.p] = v;
           }
+        } catch (error) {
+          console.error("processInpPublish(" + o["/path"] + "/" + path + ")[" + s.p + "] - " + error);
         }
       }
     },
@@ -88,13 +114,21 @@ window.wsBond = {
         document.cookie = 'sessionId=' + sa[1];
         if (sa[2] == 'true' || (sa[2] == 'null' && localStorage.getItem("userName") == null)) {
           //connected
-          for (let path in wsBond.f.subscribes) {
-            wsBond.ws.send('S\t' + path);
-          }
+          wsBond.f.subscribeAll(wsBond.f.subscribes);
           for (let id in wsBond.f.querys) {
             let aq = wsBond.f.querys[id];
             wsBond.ws.send('A\t' + id + '\t' + JSON.stringify(aq.t) + '\t' + JSON.stringify(aq.start) + '\t' + JSON.stringify(aq.count));
           }
+        }
+      }
+    },
+    subscribeAll: function (o) {
+      if (Array.isArray(o["/subs"]) && o["/subs"].length > 0) {
+        wsBond.ws.send('S\t' + o["/path"]);
+      }
+      for (let i in o) {
+        if (i != "/subs" && i != "/path") {
+          wsBond.f.subscribeAll(o[i]);
         }
       }
     },
@@ -153,14 +187,25 @@ document.onreadystatechange = function () {
           if (!pv.topic) {
             pv.topic = defaultTopic;
           }
-          if (!wsBond.f.subscribes[pv.topic]) {
-            wsBond.f.subscribes[pv.topic] = new Set();
-          }
           let sub = { o: oc.o, p: pn };  // object, property
           if (pv.converter) {
             sub.c = pv.converter;
           }
-          wsBond.f.subscribes[pv.topic].add(sub);
+          let tp = pv.topic.split("/");
+          let path = "";
+          let cur = wsBond.f.subscribes, next;
+          for (let i = 0; i < tp.length; i++) {
+            if (tp[i] === "") continue;
+            path += "/" + tp[i];
+            if (!(next = cur[tp[i]])) {
+              next = {};
+              next["/path"] = path;
+              next["/subs"] = [];
+              cur[tp[i]] = next;
+            }
+            cur = next;
+          }
+          cur["/subs"].push(sub);
         }
       }
     }
