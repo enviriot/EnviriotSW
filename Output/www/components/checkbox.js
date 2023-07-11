@@ -19,16 +19,5 @@ class X13_checkbox extends BaseComponent {
   }
 }
 X13_checkbox.template = /*html*/ '<slot></slot>';
-X13_checkbox.rootStyles = /*css*/ `
-x13-checkbox{
-  display: block;
-  min-width:16mm;
-  min-height:12mm;
-  border-radius:20%;
-  text-align: center;
-  font-size:10mm;
-  /*border-width:1px;
-  border-style:solid;*/
-}`;
 X13_checkbox.bindAttributes({ value: "value", bg_color: "bg_color" });
 X13_checkbox.reg("x13-checkbox");

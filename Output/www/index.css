@@ -47,12 +47,133 @@ a.aButton {
     background-color: white;
   }
 
-x13-graph {
+.bLink {
   display: block;
-  width: 98%;
-  margin: 1em 1% 1em 1%;
-  /*outline: thin inset gray;*/
+  min-width: 16mm;
+  min-height: 12mm;
+  border-radius: 20%;
+  text-align: center;
+  font-size: 10mm;
+  text-decoration: none;
 }
+
+x13-button, x13-checkbox {
+  display: block;
+  min-width: 16mm;
+  min-height: 12mm;
+  border-radius: 20%;
+  text-align: center;
+  font-size: 10mm;
+}
+
+x13-calender {
+  margin-top:1vh;
+  display: flex;
+}
+
+  x13-calender div.calender {
+    display: inline-grid;
+    grid-template-columns: 3.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw;
+    grid-template-rows: auto auto auto auto auto auto auto auto;
+    width: 41vw;
+  }
+
+x13-cal-day {
+  background-color: #E8F0FF;
+  display: grid;
+  grid-template-columns: 0.7vw 1.1vw 0.7vw;
+}
+
+  x13-cal-day > div:first-child {
+    width: 0.5vw;
+    height: 0.5vw;
+    background-color: transparent;
+    border-radius: 50%;
+    margin: auto 0 auto 0.2vw;
+  }
+  x13-cal-day > span {
+    text-align:center;
+    font-size: 1vw;
+  }
+  x13-cal-day > div:last-child {
+    width: 0.25vw;
+    background-color: transparent;
+    margin-right:0.45vw;
+  }
+  x13-cal-day.odd {
+    background-color: #F0FFF0;
+  }
+
+  x13-cal-day.month {
+    font-weight: bold;
+    padding: 0 0 5px 0;
+  }
+
+  x13-cal-day.week {
+    font-weight: bold;
+    background-color: #FFFFFF;
+  }
+
+  x13-cal-day.today {
+    font-weight:900;
+    background-color:#4CBB17;
+  }
+
+  x13-cal-day.holidays {
+    color: red;
+  }
+
+  x13-cal-day.scool > div:last-child {
+    background-color: #07737A;
+  }
+
+  x13-cal-day.info > div:first-child{
+    background-color: #90FB90;
+  }
+
+x13-calender div.events {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-template-columns: 29vw 29vw;
+  grid-template-rows: auto auto auto auto auto auto auto auto;
+  width: 59vw;
+}
+
+
+x13-cal-evnt {
+  font-size: 1vw;
+  margin: 0 0 0 1vw;
+  background-color: aliceblue;
+  display: grid;
+  gap: 0 0.25vw;
+  grid-template-columns: 1vw 5vw 16vw 5vw;
+}
+  x13-cal-evnt>div{
+    border-radius:50%;
+    width:0.5vw;
+    height:0.5vw;
+    margin:auto 0;
+    background-color:lightgray;
+  }
+  x13-cal-evnt.today {
+    font-weight: 900;
+  }
+  x13-cal-evnt.holidays > div {
+    background-color: red;
+  }
+  x13-cal-evnt.scool > div {
+    background-color: #07737A;
+  }
+  x13-cal-evnt.info > div {
+    background-color: #90FB90;
+  }
+
+  x13-graph {
+    display: block;
+    width: 98%;
+    margin: 1em 1% 1em 1%;
+    /*outline: thin inset gray;*/
+  }
 
 .dygraph-legend {
   position: absolute;

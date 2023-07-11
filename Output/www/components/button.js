@@ -19,14 +19,5 @@ class X13_button extends BaseComponent {
   }
 }
 X13_button.template = /*html*/ '<slot></slot>';
-X13_button.rootStyles = /*css*/ `
-x13-button{
-  display: block;
-  min-width:16mm;
-  min-height:12mm;
-  border-radius:20%;
-  text-align: center;
-  font-size:10mm;
-}`;
 X13_button.bindAttributes({ value: "value", fg_color: "fg_color", bg_color: "bg_color" });
 X13_button.reg("x13-button");

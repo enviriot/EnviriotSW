@@ -15,7 +15,7 @@ class X13_wheather extends BaseComponent {
   }
   initCallback() {
     let now = new Date();
-    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0).getTime();
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0).getTime();
     let opt = {
       width: this.clientWidth*0.98,
       height: this.clientHeight - 20,
@@ -64,10 +64,21 @@ class X13_wheather extends BaseComponent {
         data[i].dt = new Date(dt1.getTime() - 24 * 60 * 60 * 1000);
         this.addData(data[i].dt, 3, data[i].t);
         if (!this.icons[data[i].i]) {
-          this.icons[data[i].i] = new Image();
-          this.icons[data[i].i].src = '/img/' + data[i].i + '.png';
+          let img = new Image();
+          img.addEventListener('load', this.imgLoaded.bind(this));
+          this.icons[data[i].i] = img;
+          img.src = '/img/' + data[i].i + '.png';
         }
       }
+      this.g.updateOptions({ 'file': this.data });
+    }
+  }
+  imgLoaded() {
+    let complete = true;
+    for (let i in this.icons) {
+      complete = complete && this.icons[i].complete;
+    }
+    if (complete) {
       this.g.updateOptions({ 'file': this.data });
     }
   }
@@ -88,7 +99,7 @@ class X13_wheather extends BaseComponent {
     let opt = {};
     let i;
     let now = new Date();
-    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0).getTime();
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0).getTime();
 
     if (this.data.length > 1) {
       for (i = this.data.length - 1; i >= 0; i--) {
@@ -159,8 +170,8 @@ class X13_wheather extends BaseComponent {
           canvas.fill();
 
         }
-        canvas.fillStyle = 'hsl(' + Math.min(359, 180 + item.w * 3).toFixed(0) + ',100%, 50%)';
-        let h = area.h * Math.min(0.4, item.w / 240);
+        canvas.fillStyle = 'hsl(' + (Math.max(300, 560 - item.w * 2.5) % 360).toFixed(0) + ',100%, 50%)';
+        let h = area.h * Math.min(0.4, item.w / 300);
         canvas.fillRect(cx -  2, area.y + area.h - h, 4, h);
       }
     }
@@ -169,7 +180,7 @@ class X13_wheather extends BaseComponent {
 
 function dblClickV3(event, g, context) {
   let now = new Date();
-  now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0).getTime();
+  now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0).getTime();
   g.updateOptions({ dateWindow: [now - 24 * 60 * 60 * 1000, now] });
 }
 
