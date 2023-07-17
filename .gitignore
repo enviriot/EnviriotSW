@@ -1,0 +1,16 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/
+/Output/binUI
+/Output/bin_r
+/Output/bin_d
+/packages
+/ES/obj
+/plugins/AntSw/obj
+/plugins/Logram/obj
+/plugins/MQTT/obj
+/plugins/MQTT_SN/obj
+/plugins/WebUI/obj
+/Server/obj
