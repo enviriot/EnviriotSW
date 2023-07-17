@@ -67,14 +67,14 @@ x13-button, x13-checkbox {
 }
 
 x13-calender {
-  margin-top:1vh;
+  margin-top: 1vh;
   display: flex;
 }
 
   x13-calender div.calender {
     display: inline-grid;
-    grid-template-columns: 3.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw 2.5vw;
-    grid-template-rows: auto auto auto auto auto auto auto auto;
+    grid-template-columns: 3.5vw repeat(15, 2.5vw);
+    grid-template-rows: repeat(8, auto);
     width: 41vw;
   }
 
@@ -91,15 +91,18 @@ x13-cal-day {
     border-radius: 50%;
     margin: auto 0 auto 0.2vw;
   }
+
   x13-cal-day > span {
-    text-align:center;
+    text-align: center;
     font-size: 1vw;
   }
+
   x13-cal-day > div:last-child {
     width: 0.25vw;
     background-color: transparent;
-    margin-right:0.45vw;
+    margin-right: 0.45vw;
   }
+
   x13-cal-day.odd {
     background-color: #F0FFF0;
   }
@@ -115,8 +118,8 @@ x13-cal-day {
   }
 
   x13-cal-day.today {
-    font-weight:900;
-    background-color:#4CBB17;
+    font-weight: 900;
+    background-color: #4CBB17;
   }
 
   x13-cal-day.holidays {
@@ -127,7 +130,7 @@ x13-cal-day {
     background-color: #07737A;
   }
 
-  x13-cal-day.info > div:first-child{
+  x13-cal-day.info > div:first-child {
     background-color: #90FB90;
   }
 
@@ -135,7 +138,7 @@ x13-calender div.events {
   display: inline-grid;
   grid-auto-flow: column;
   grid-template-columns: 29vw 29vw;
-  grid-template-rows: auto auto auto auto auto auto auto auto;
+  grid-template-rows: repeat(8, auto);
   width: 59vw;
 }
 
@@ -148,32 +151,37 @@ x13-cal-evnt {
   gap: 0 0.25vw;
   grid-template-columns: 1vw 5vw 16vw 5vw;
 }
-  x13-cal-evnt>div{
-    border-radius:50%;
-    width:0.5vw;
-    height:0.5vw;
-    margin:auto 0;
-    background-color:lightgray;
+
+  x13-cal-evnt > div {
+    border-radius: 50%;
+    width: 0.5vw;
+    height: 0.5vw;
+    margin: auto 0;
+    background-color: lightgray;
   }
+
   x13-cal-evnt.today {
     font-weight: 900;
   }
+
   x13-cal-evnt.holidays > div {
     background-color: red;
   }
+
   x13-cal-evnt.scool > div {
     background-color: #07737A;
   }
+
   x13-cal-evnt.info > div {
     background-color: #90FB90;
   }
 
-  x13-graph {
-    display: block;
-    width: 98%;
-    margin: 1em 1% 1em 1%;
-    /*outline: thin inset gray;*/
-  }
+x13-graph {
+  display: block;
+  width: 98%;
+  margin: 1em 1% 1em 1%;
+  /*outline: thin inset gray;*/
+}
 
 .dygraph-legend {
   position: absolute;
@@ -259,6 +267,31 @@ x13-cal-evnt {
   -moz-transform: rotate(-90deg);
   -o-transform: rotate(-90deg);
   -ms-transform: rotate(-90deg);
+}
+
+x13-range input[type=range] {
+  width: 100%;
+}
+
+x13-range progress {
+  width: 100%;
+  accent-color: #C0C0FF;
+}
+
+x13-range > div {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 15mm auto 15mm;
+}
+
+x13-range input[type=button] {
+  height: 15mm;
+  width: 15mm;
+}
+
+x13-range span {
+  text-align: center;
+  font-size: 10mm;
 }
 
 x13-signal {
