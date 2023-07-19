@@ -269,29 +269,15 @@ x13-graph {
   -ms-transform: rotate(-90deg);
 }
 
+x13-range {
+  display: block;
+}
+
 x13-range input[type=range] {
-  width: 100%;
 }
 
 x13-range progress {
-  width: 100%;
   accent-color: #C0C0FF;
-}
-
-x13-range > div {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 15mm auto 15mm;
-}
-
-x13-range input[type=button] {
-  height: 15mm;
-  width: 15mm;
-}
-
-x13-range span {
-  text-align: center;
-  font-size: 10mm;
 }
 
 x13-signal {
