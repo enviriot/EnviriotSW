@@ -487,7 +487,7 @@ namespace X13.PersistentStorage {
         var p1 = new BsonValue(begin);
         var p3 = new BsonValue(end);
 
-        DateTime cursor = begin;
+        DateTime cursor = begin.AddSeconds(step);
         var f_cnt = new int[tba.Length];
         var f_val = new double[tba.Length];
         var l_val = new double[tba.Length];
