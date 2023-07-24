@@ -569,7 +569,7 @@ namespace X13.PersistentStorage {
     }
     private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
       var t = new BsonValue(dt);
-      return _history.Query().Where(z => z["t"] < t).OrderByDescending(z => z["t"]).ToEnumerable()
+      return _history.Query().Where(z => z["t"] < t).OrderByDescending(z => z["t"]).Limit(cnt).ToEnumerable()
         //Find(Query.And(Query.All("t", Query.Descending), Query.LT("t", t)), 0, cnt)
         .Select(z => new Log.LogRecord {
           dt = z["t"].AsDateTime,
