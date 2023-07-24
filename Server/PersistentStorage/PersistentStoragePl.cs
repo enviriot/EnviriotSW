@@ -224,6 +224,12 @@ namespace X13.PersistentStorage {
           catch(Exception ex) {
             Log.Warning("ShrinkArch failed - " + ex.ToString());
           }
+          try {
+            ShrinkHistory();
+          }
+          catch (Exception ex) {
+            Log.Warning("ShrinkHistory failed - " + ex.ToString());
+          }
         }
       } while(!_terminate);
     }
@@ -428,6 +434,11 @@ namespace X13.PersistentStorage {
           _archive.DeleteMany(Query.And(Query.EQ("p", t.path), Query.LT("t", DateTime.Now.AddDays(-k_d))));
         }
       }
+      _dba.Rebuild();
+    }
+    private void ShrinkHistory() {
+      _history.DeleteMany(Query.LT("t", DateTime.Now.AddDays(-36)));
+      _dbHist.Rebuild();
     }
     private void SubFunc(Perform p) {
       if(p.art == Perform.Art.subscribe || p.art == Perform.Art.subAck || p.art == Perform.Art.setField || p.art == Perform.Art.setState || p.art == Perform.Art.unsubscribe || p.prim == _owner) {
