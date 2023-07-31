@@ -1,6 +1,7 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
+using NiL.JS.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,16 +17,15 @@ namespace X13.EsBroker {
   internal class EsBrokerPl : IPlugModul {
     #region internal Members
     private TcpListener _tcp;
-    private System.Collections.Concurrent.ConcurrentBag<EsConnection> _connections;
-    private System.Collections.Concurrent.ConcurrentBag<EsMessage> _msgs;
+    private readonly System.Collections.Concurrent.ConcurrentBag<EsConnection> _connections;
+    private readonly System.Collections.Concurrent.ConcurrentBag<EsMessage> _msgs;
     private Topic _owner;
     private Topic _verbose;
 
-    private void Connect(IAsyncResult ar) {
+    private void ConnectTCP(IAsyncResult ar) {
       if (_tcp == null) return;
       try {
-        TcpClient c = _tcp.EndAcceptTcpClient(ar);
-        _connections.Add(new EsConnection(this, c));
+        _connections.Add(new EsConnection(this, new EsSocketTCP(_tcp.EndAcceptTcpClient(ar), this.Verbose)));
       }
       catch (ObjectDisposedException) {
         return;   // Socket allready closed
@@ -35,7 +35,7 @@ namespace X13.EsBroker {
       }
       catch(SocketException) {
       }
-      _tcp.BeginAcceptTcpClient(new AsyncCallback(Connect), null);
+      _tcp.BeginAcceptTcpClient(new AsyncCallback(ConnectTCP), null);
     }
     internal void AddRMsg(EsMessage msg) {
       _msgs.Add(msg);
@@ -47,29 +47,34 @@ namespace X13.EsBroker {
       _msgs = new System.Collections.Concurrent.ConcurrentBag<EsMessage>();
     }
 
-    public bool verbose {
+    public bool Verbose {
       get {
-        return _verbose != null && (bool)_verbose.GetState();
+        return _verbose != null && _verbose.GetState().As<bool>();
       }
     }
     #region IPlugModul Members
     public void Init() {
-      _tcp = new TcpListener(IPAddress.Any, 10013);
-      _tcp.Start();
     }
     public void Start() {
       _owner = Topic.root.Get("/$YS/ES");
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-        //#if DEBUG
-        //        _verbose.SetState(true);
-        //#else
         _verbose.SetState(false);
-        //#endif
       }
-
-      _tcp.BeginAcceptTcpClient(new AsyncCallback(Connect), null);
+      var t_tcpPort = _owner.Get("TCP");
+      int tcpPort = EsSocketTCP.portDefault;
+      if (t_tcpPort.GetState().ValueType == JSC.JSValueType.Integer) {
+        tcpPort = t_tcpPort.GetState().As<int>();
+      } else { 
+        t_tcpPort.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
+        t_tcpPort.SetState(tcpPort);
+      }
+      if (tcpPort > 0) {
+        _tcp = new TcpListener(IPAddress.Any, tcpPort);
+        _tcp.Start();
+        _tcp.BeginAcceptTcpClient(new AsyncCallback(ConnectTCP), null);
+      }
     }
     public void Tick() {
       EsMessage msg;
@@ -88,7 +93,7 @@ namespace X13.EsBroker {
           }
         }
         catch(Exception ex) {
-          if(verbose) {
+          if(Verbose) {
             Log.Warning("{0} - {1}", msg, ex);
           }
         }

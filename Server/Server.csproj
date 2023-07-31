@@ -80,12 +80,16 @@
     <Reference Include="System.Data" />
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Xml" />
+    <Reference Include="websocket-sharp, Version=1.0.2.59611, Culture=neutral, PublicKeyToken=5660b08a1845a91e, processorArchitecture=MSIL">
+      <HintPath>..\packages\WebSocketSharp.1.0.3-rc11\lib\websocket-sharp.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="EsBroker\EsMessage.cs" />
     <Compile Include="EsBroker\EsConnection.cs" />
     <Compile Include="EsBroker\EsBrokerPl.cs" />
-    <Compile Include="EsBroker\EsSocket.cs" />
+    <Compile Include="EsBroker\EsSocketTCP.cs" />
+    <Compile Include="EsBroker\IEsSocket.cs" />
     <Compile Include="IPlugModul.cs" />
     <Compile Include="JsExtLib.cs" />
     <Compile Include="JsLib.cs" />

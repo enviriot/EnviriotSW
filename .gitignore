@@ -18,10 +18,4 @@
 *.bak
 *.ldb
 /Output/data/server.xst
-/Output/data/archive-log.ldb
-/Output/data/history.ldb
-/Output/data/persist.ldb
-/Output/data/server.xst
-/Output/data/archive-log.ldb
-/Output/data/history.ldb
-/Output/data/persist.ldb
+/Output/data/ES.cfg

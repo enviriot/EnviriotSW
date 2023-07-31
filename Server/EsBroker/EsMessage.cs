@@ -8,10 +8,10 @@ using System.Text;
 
 namespace X13.EsBroker {
   internal class EsMessage {
-    public readonly EsSocket _conn;
+    public readonly IEsSocket _conn;
     private JST.Array _request;
 
-    public EsMessage(EsSocket conn, JST.Array req) {
+    public EsMessage(IEsSocket conn, JST.Array req) {
       this._conn = conn;
       this._request = req;
       this.Count = req.Count();
