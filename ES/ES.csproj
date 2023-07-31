@@ -102,12 +102,6 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="..\Server\EsBroker\EsMessage.cs">
-      <Link>Data\EsMessage.cs</Link>
-    </Compile>
-    <Compile Include="..\Server\EsBroker\EsSocket.cs">
-      <Link>Data\EsSocket.cs</Link>
-    </Compile>
     <Compile Include="..\Server\JsLib.cs">
       <Link>JsLib.cs</Link>
     </Compile>
@@ -120,6 +114,8 @@
     <Compile Include="Data\Client.cs" />
     <Compile Include="Data\DTopic.cs" />
     <Compile Include="Data\DWorkspace.cs" />
+    <Compile Include="Data\EsMessage.cs" />
+    <Compile Include="Data\EsSocket.cs" />
     <Compile Include="Data\NPC_UI.cs" />
     <Compile Include="Inspector\InBase.cs" />
     <Compile Include="Inspector\InManifest.cs" />

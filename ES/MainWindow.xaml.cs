@@ -68,7 +68,7 @@ namespace X13 {
         Log.Error("Load layout - {0}", ex.Message);
       }
       if(App.Workspace.Clients.Count == 0) {
-        var cl = new Client("localhost", EsBroker.EsSocket.portDefault, null, null);
+        var cl = new Client("localhost", EsSocket.portDefault, null, null);
         App.Workspace.Clients.Add(cl);
       }
     }

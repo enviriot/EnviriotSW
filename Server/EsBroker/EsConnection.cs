@@ -27,10 +27,9 @@ namespace X13.EsBroker {
     private readonly List<Tuple<SubRec, EsMessage>> _subscriptions;
     private readonly Action<Perform, SubRec> _subCB;
 
-    public EsConnection(EsBrokerPl pl, IEsSocket socket){
+    public EsConnection(EsBrokerPl pl, Func<Action<EsMessage>, IEsSocket> s_fab) {
       this._basePl = pl;
-      _socket = socket;
-      _socket.Callback = new Action<EsMessage>(RcvMsg);
+      _socket = s_fab(new Action<EsMessage>(RcvMsg));
       this._subCB = new Action<Perform, SubRec>(TopicChanged);
       this._subscriptions = new List<Tuple<SubRec, EsMessage>>();
       // Hello

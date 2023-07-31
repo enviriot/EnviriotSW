@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace X13.Data {
   internal class Client : NPC_UI {
-    private EsBroker.EsSocket _socket;
+    private EsSocket _socket;
     private List<WaitConnect> _connEvnt;
     private int _msgId;
     private System.Collections.Generic.LinkedList<ClRequest> _reqs;
@@ -54,7 +54,7 @@ namespace X13.Data {
       try {
         var tcp = new TcpClient();
         tcp.Connect(server, port);
-        _socket = new EsBroker.EsSocket(tcp, onRecv);
+        _socket = new EsSocket(tcp, onRecv);
 //#if DEBUG
 //        _socket.verbose = true;
 //#else
@@ -108,7 +108,7 @@ namespace X13.Data {
     }
 
     public override string ToString() {
-      return "x13://" + ( ( userName == null ? string.Empty : ( userName + "@" ) ) + server + ( port != EsBroker.EsSocket.portDefault ? ( ":" + port.ToString() ) : string.Empty ) );
+      return "x13://" + ( ( userName == null ? string.Empty : ( userName + "@" ) ) + server + ( port != EsSocket.portDefault ? ( ":" + port.ToString() ) : string.Empty ) );
     }
 
     private void Send(INotMsg msg) {
@@ -136,7 +136,7 @@ namespace X13.Data {
         }
       }
     }
-    private void onRecv(EsBroker.EsMessage msg) {
+    private void onRecv(EsMessage msg) {
       int cmd, msgId;
       ClRequest req;
 

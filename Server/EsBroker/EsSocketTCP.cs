@@ -9,14 +9,54 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using X13.Repository;
+using NiL.JS.Extensions;
 
 namespace X13.EsBroker {
-  internal class EsSocketTCP
-    : IEsSocket {
-    public const int portDefault = 10013;
+  internal class EsSocketTCP : IEsSocket {
+    #region static
+    private static TcpListener _tcp;
+    private static Action<Func<Action<EsMessage>, IEsSocket>> _onConnect;
+    private static Topic _verbose;
+
+    public static void Start(int port, Topic verbose, Action<Func<Action<EsMessage>, IEsSocket>> onConnect) {
+      _verbose = verbose;
+      _tcp = new TcpListener(IPAddress.Any, port);
+      _onConnect = onConnect;
+      _tcp.Start();
+      _tcp.BeginAcceptTcpClient(new AsyncCallback(ConnectTCP), null);
+    }
+    private static void ConnectTCP(IAsyncResult ar) {
+      TcpClient client = null;
+      try {
+        client = _tcp.EndAcceptTcpClient(ar);
+      }
+      catch (ObjectDisposedException) {
+        return;   // Socket allready closed
+      }
+      catch (NullReferenceException) {
+        return;   // Socket allready destroyed
+      }
+      catch (SocketException) {
+      }
+      _tcp.BeginAcceptTcpClient(new AsyncCallback(ConnectTCP), null);
+      if (client != null) {
+        _onConnect((cb) => new EsSocketTCP(client, cb));
+      }
+    }
+    public static void Stop() {
+      _tcp?.Stop();
+    }
+    private static bool Verbose {
+      get {
+        return _verbose != null && _verbose.GetState().As<bool>();
+      }
+    }
+
+    #endregion static
 
     private readonly TcpClient _socket;
-    private readonly bool _verbose;
+    private readonly Action<EsMessage> _callback;
     private readonly NetworkStream _stream;
     private readonly byte[] _rcvBuf;
     private byte[] _rcvMsgBuf;
@@ -25,9 +65,9 @@ namespace X13.EsBroker {
     private int _rcvState;
     private int _rcvLength;
 
-    public EsSocketTCP(TcpClient tcp, bool verbose) {
+    public EsSocketTCP(TcpClient tcp, Action<EsMessage> cb) {
       this._socket = tcp;
-      this._verbose = verbose;
+      this._callback = cb;
       this._stream = _socket.GetStream();
       this._rcvBuf = new byte[1];
       this._rcvMsgBuf = new byte[2048];
@@ -38,52 +78,6 @@ namespace X13.EsBroker {
       this._stream.BeginRead(_rcvBuf, 0, 1, _rcvCB, _stream);
 
     }
-    public void SendArr(JST.Array arr, bool rep = true) {
-      var ms = JsLib.Stringify(arr);
-      int len = Encoding.UTF8.GetByteCount(ms);
-      int st = 1;
-      int tmp = len;
-      while (tmp > 0x7F) {
-        tmp >>= 7;
-        st++;
-      }
-      var buf = new byte[len + st + 2];
-      Encoding.UTF8.GetBytes(ms, 0, ms.Length, buf, st + 1);
-      tmp = len;
-      buf[0] = 0;
-      for (int i = st; i > 0; i--) {
-        buf[i] = (byte)((tmp & 0x7F) | (i < st ? 0x80 : 0));
-        tmp >>= 7;
-      }
-      buf[buf.Length - 1] = 0xFF;
-      if (this._socket.Connected) {
-        this._stream.Write(buf, 0, buf.Length);
-        if (_verbose && rep) {
-          Log.Debug("{0}.Send({1})", this.ToString(), ms);
-        }
-      }
-    }
-    private void Dispose(bool info) {
-      if (Interlocked.Exchange(ref _connected, 0) != 0) {
-        _stream.Close();
-        _socket.Close();
-        if (info) {
-          Callback(new EsMessage(this, new JST.Array { 99 }));
-        }
-      }
-    }
-    public void Dispose() {
-      Dispose(false);
-    }
-    public IPEndPoint RemoteEndPoint { get { return (_socket == null || !_socket.Connected || _socket.Client == null || !_socket.Client.Connected) ? (new IPEndPoint(IPAddress.Broadcast, 65535)) : (IPEndPoint)_socket.Client.RemoteEndPoint; } }
-    public override string ToString() {
-      if (_socket == null || !_socket.Connected || _socket.Client == null || !_socket.Client.Connected) {
-        return "Disconected";
-      }
-      var rep = (IPEndPoint)_socket.Client.RemoteEndPoint;
-      return Convert.ToBase64String(rep.Address.GetAddressBytes().Union(BitConverter.GetBytes((ushort)rep.Port)).ToArray()).TrimEnd('=').Replace('/', '*');
-    }
-    public Action<EsMessage> Callback { get; set; }
     private void RcvProcess(IAsyncResult ar) {
       bool first = true;
       int len;
@@ -139,18 +133,18 @@ namespace X13.EsBroker {
                 string ms = null;
                 try {
                   ms = Encoding.UTF8.GetString(_rcvMsgBuf, 0, _rcvState);
-                  if (_verbose) {
+                  if (Verbose) {
                     Log.Debug("{0}.Rcv({1})", this.ToString(), ms);
                   }
                   if (JsLib.ParseJson(ms) is JST.Array mj && mj.Count() > 0) {
-                    Callback(new EsMessage(this, mj));
+                    _callback(new EsMessage(this, mj));
                   }
                 }
                 catch (Exception ex) {
                   Log.Warning("{0}.Rcv({1}) - {2}", this.ToString(), ms ?? BitConverter.ToString(_rcvMsgBuf, 0, _rcvState), ex.Message);
                 }
               } else {
-                if (_verbose) {
+                if (Verbose) {
                   Log.Warning("{0}.Rcv - Paranoic", this.ToString());
                 }
               }
@@ -182,5 +176,56 @@ namespace X13.EsBroker {
         return;
       }
     }
+
+    #region IEsSocket Members
+    public void SendArr(JST.Array arr, bool rep = true) {
+      var ms = JsLib.Stringify(arr);
+      int len = Encoding.UTF8.GetByteCount(ms);
+      int st = 1;
+      int tmp = len;
+      while (tmp > 0x7F) {
+        tmp >>= 7;
+        st++;
+      }
+      var buf = new byte[len + st + 2];
+      Encoding.UTF8.GetBytes(ms, 0, ms.Length, buf, st + 1);
+      tmp = len;
+      buf[0] = 0;
+      for (int i = st; i > 0; i--) {
+        buf[i] = (byte)((tmp & 0x7F) | (i < st ? 0x80 : 0));
+        tmp >>= 7;
+      }
+      buf[buf.Length - 1] = 0xFF;
+      if (this._socket.Connected) {
+        this._stream.Write(buf, 0, buf.Length);
+        if (Verbose && rep) {
+          Log.Debug("{0}.Send({1})", this.ToString(), ms);
+        }
+      }
+    }
+    public IPEndPoint RemoteEndPoint { get { return (_socket == null || !_socket.Connected || _socket.Client == null || !_socket.Client.Connected) ? (new IPEndPoint(IPAddress.Broadcast, 65535)) : (IPEndPoint)_socket.Client.RemoteEndPoint; } }
+    #endregion IEsSocket Members
+    public override string ToString() {
+      if (_socket == null || !_socket.Connected || _socket.Client == null || !_socket.Client.Connected) {
+        return "Disconected";
+      }
+      var rep = (IPEndPoint)_socket.Client.RemoteEndPoint;
+      return Convert.ToBase64String(rep.Address.GetAddressBytes().Union(BitConverter.GetBytes((ushort)rep.Port)).ToArray()).TrimEnd('=').Replace('/', '*');
+    }
+
+    #region IDisposable Member
+    public void Dispose() {
+      Dispose(false);
+    }
+    private void Dispose(bool info) {
+      if (Interlocked.Exchange(ref _connected, 0) != 0) {
+        _stream.Close();
+        _socket.Close();
+        if (info) {
+          _callback(new EsMessage(this, new JST.Array { 99 }));
+        }
+      }
+    }
+    #endregion IDisposable Member
   }
 }
