@@ -148,7 +148,7 @@ namespace X13.EsBroker {
       _onConnect(SetCB);
     }
     protected override void OnMessage(MessageEventArgs e) {
-      if(e.IsText) {
+      if (e.IsText) {
         if (Verbose) {
           X13.Log.Debug("{0}.Rcv({1})", this.ToString(), e.Data);
         }
@@ -159,7 +159,7 @@ namespace X13.EsBroker {
     }
     protected override void OnClose(CloseEventArgs e) {
       if (Verbose) {
-        X13.Log.Debug("{0}.onClose({1}){2}", this.ToString(), e.Reason, e.WasClean?" - clean":string.Empty);
+        X13.Log.Debug("{0}.onClose({1}){2}", this.ToString(), e.Reason, e.WasClean ? " - clean" : string.Empty);
       }
       this.Dispose();
     }
@@ -169,10 +169,12 @@ namespace X13.EsBroker {
     public System.Net.IPEndPoint RemoteEndPoint { get { return _remIPE; } }
 
     public void SendArr(NiL.JS.BaseLibrary.Array arr, bool rep = true) {
-      var ms = JsLib.Stringify(arr);
-      Send(ms);
-      if (Verbose && rep) {
-        X13.Log.Debug("{0}.Send({1})", this.ToString(), ms);
+      if (base.State == WebSocketState.Open) {
+        var ms = JsLib.Stringify(arr);
+        Send(ms);
+        if (Verbose && rep) {
+          X13.Log.Debug("{0}.Send({1})", this.ToString(), ms);
+        }
       }
     }
 
