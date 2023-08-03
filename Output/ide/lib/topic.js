@@ -1,7 +1,9 @@
 ﻿import { WsIDE, TopicReq } from './connection.js';
 
-class Topic {
+class Topic{
+  #subs;
   constructor(parent, name) {
+    this.#subs = new Set();
     if (parent instanceof Topic) {
       this.conn = parent.conn;
       this.parent = parent;
@@ -13,8 +15,9 @@ class Topic {
       this.name = "";
       this.path = "/";
     }
+    this.status = 0;
   }
-  subscribe(p) {
+  pull(p) {
     let ts;
     if (!p) {
       ts = this;
@@ -42,29 +45,45 @@ class Topic {
     } else if (create) {
       t = new Topic(this, name);
       this.children[name] = t;
-      //ChangedReise(Art.addChild, t);
+      this.notify("addChild", t);
       return t;
     }
     return null;
   }
   ValuePublished(value) {
     this.state = value;
-    //ChangedReise(Art.value, this);
+    this.notify("value", this);
   }
   ManifestPublished(manifest) {
     this.manifest = manifest;
-    //bool send = true;
-    //if (_manifest.ValueType == JSC.JSValueType.Object && _manifest.Value != null) {
-    //  var tt = _manifest["type"];
-    //  if (tt.ValueType == JSC.JSValueType.String && tt.Value != null) {
-    //    _typeLoading = true;
-    //    this.GetAsync("/$YS/TYPES/" + (tt.Value as string)).ContinueWith(TypeLoaded);
-    //    send = false;
-    //  }
-    //}
-    //if (send) {
-    //  ChangedReise(Art.type, this);
-    //}
+    let send = true;
+    if (this.manifest) {
+      let tt = this.manifest["type"];
+      if (typeof (tt) === "string") {
+        this.status = 2;
+        this.pull("/$YS/TYPES/" + tt); //.then(TypeLoaded);
+        send = false;
+      }
+    }
+    if (send) {
+      this.notify("type", this);
+    }
+  }
+  subscribe(cb) {
+    this.#subs.add(cb);
+  }
+  unsubscribe(cb) {
+    this.#subs.delete(cb);
+  }
+  notify(event, data) {
+    this.#subs.forEach(z => {
+      try {
+        z.call(null, event, data);
+      }
+      catch (e) {
+        console.error(this.path + ".notify(" + event + ") - " + e);
+      }
+    });
   }
 }
 

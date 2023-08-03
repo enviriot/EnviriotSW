@@ -1,9 +1,51 @@
-﻿class WsIDE {
-  #ws;
-  #msgId;
-  #msgs;
-  #msgState;
-  #requests;
+﻿function compareMessages(a, b) {
+  if (!a) return !b ? 0 : 1;
+  if (!b) return -1;
+  let pa = a.Path;
+  let pb = b.Path;
+  if (!pa) return !pb ? 0 : 1;
+  if (!pb) return -1;
+  let sa = pa.split('/');
+  let sb = pb.split('/');
+  let ia = 0, ib = 0;
+  do {
+    if (ia >= sa.length) return -1;
+    if (ib >= sb.length) return 1;
+    if (!sa[ia]) {
+      ia++;
+      continue;
+    }
+    if (!sb[ib]) {
+      ib++;
+      continue;
+    }
+    let r = sa[ia].localeCompare(sb[ib]);
+    if (r != 0) return r;
+  } while (ia < sa.length && ib < sb.length)
+  return 0;
+}
+function binarySearch(arr, el, compare_fn) {
+  let m = 0;
+  let n = arr.length - 1;
+  while (m <= n) {
+    let k = (n + m) >> 1;
+    let cmp = compare_fn(el, arr[k]);
+    if (cmp > 0) {
+      m = k + 1;
+    } else if (cmp < 0) {
+      n = k - 1;
+    } else {
+      return k;
+    }
+  }
+  return ~m;
+}
+class WsIDE {
+  #ws;  // WebSocket
+  #msgId;  // Message ID generator
+  #msgs;   // Messages queue
+  #msgState;  // 1 - connected, 2 - busy
+  #requests;  // requests storage
 
   constructor(root) {
     this.#msgs = [];
@@ -15,8 +57,11 @@
 
   }
   PostMsg(msg) {
-    this.#msgs.push(msg);
-    this.#ProcessMQ();
+    let idx = binarySearch(this.#msgs, msg, compareMessages);
+    if (idx < 0) {
+      this.#msgs.splice(~idx, 0, msg);
+      this.#ProcessMQ();
+    }
   }
   #ProcessMQ() {
     if (this.#msgState != 1) return;
@@ -38,7 +83,6 @@
     req.msgId = mid;
     this.#requests.push(req);
     this.#ws.send(JSON.stringify(arr));
-    //this.Send(new ClRequest(mid, arr, req));
   }
   //SendCmd(int cmd, params JSC.JSValue[] arg)
 
@@ -77,15 +121,15 @@
             console.info("Connected to " + this.alias);
           }
           this.#msgState = 1;
-          this.root.subscribe("/$YS/TYPES/Ext/Manifest")
+          this.root.pull("/$YS/TYPES/Ext/Manifest")
             .then(t => {
-              //this.TypeManifest = t;
-              return this.root.subscribe("/$YS/TYPES/Core");
+              this.typeManifest = t;
+              return this.root.pull("/$YS/TYPES/Core");
             })
             .then(t => {
-              //this.CoreTypes = t;
+              this.coreTypes = t;
               for (var tc in t.children) {
-                t.children[tc].subscribe(null);
+                t.children[tc].pull(null);
               }
             });
         }
@@ -103,15 +147,52 @@
         break;
       case 4:  // [SubscribeResp, path, state, manifest]
       case 8:  // [CreateResp, path, state, manifest]
-        if (jo.length < 2 || typeof (jo[1]) != "string") {
-          console.warn("Synax error " + event.data);
-          break;
-        }
-        if (jo.length == 4) {
-          this.#updateTree(jo[0], jo[1], jo[2], jo[3]);
+        if (jo.length >= 2 && typeof (jo[1]) === "string") {
+          if (jo.length == 4) {
+            this.#updateTree(jo[0], jo[1], jo[2], jo[3]);
+          } else {
+            this.#updateTree(jo[0], jo[1]);
+          }
         } else {
-          this.#updateTree(jo[0], jo[1]);
+          console.warn("Synax error " + event.data);
         }
+        break;
+      case 6:  // [Publish, path, state]
+        if ((jo.length == 2 || jo.length == 3) && typeof (jo[1]) != "string") {
+          this.#updateTree(jo[0], jo[1], jo[2]);
+        } else {
+          console.warn("Synax error " + event.data);
+        }
+        break;
+      //case 10:  // [Move, oldPath, newParent, newName]
+      //  if (msg.Count != 4 || msg[1].ValueType != JSC.JSValueType.String || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String) {
+      //    Log.Warning("Synax error {0}", msg);
+      //    break;
+      //  }
+      //  App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg[2], msg[3]));
+      //  break;
+      case 12:  // [Remove, path]
+        if (jo.length == 2 && typeof (jo[1]) != "string") {
+          this.#updateTree(jo[0], jo[1]);
+        } else {
+          console.warn("Synax error " + event.data);
+        }
+        break;
+      case 14:  // [ManifestChanged, path, manifest]
+        if ((jo.length == 2 || jo.length == 3) && typeof (jo[1]) != "string") {
+          this.#updateTree(jo[0], jo[1], null, jo[2]);
+        } else {
+          console.warn("Synax error " + event.data);
+        }
+        break;
+      //case 90:  // [Log, DateTime, level, message]
+      //  if (msg.Count != 4 || msg[1].ValueType != JSC.JSValueType.Date || !msg[2].IsNumber || msg[3].ValueType != JSC.JSValueType.String) {
+      //    Log.Warning("Synax error {0}", msg);
+      //    break;
+      //  }
+      //  Log.AddEntry((LogLevel)(int)msg[2], (msg[1].Value as JSL.Date).ToDateTime(), msg[3].Value as string);
+      //  break;
+      case 99:  // EsSocket Closed
         break;
     }
   }
@@ -149,7 +230,6 @@ class TopicReq {
   #prom;
   #resolve
   #reject;
-  //private List<TopicReq> _reqs;
 
   constructor(cur, path, state, manifest) {
     this.#cur = cur;
@@ -165,67 +245,25 @@ class TopicReq {
   get Task() {
     return this.#prom;
   }
+  get Path() { return this.#cur.path; }
   Process() {
-    let idx1 = this.#cur.path.length;
-    if (idx1 > 1) {
-      idx1++;
-    }
+    let idx1 = this.#cur.path == '/' ? 1 : (this.#cur.path.length + 1);
     if (this.#path == null || this.#path.length <= this.#cur.path.length) {
-      //    if (_cur._disposed) {
-      //      _tcs.SetResult(null);
-      //      lock(_cur) {
-      //        _cur._req = null;
-      //        if (this._reqs != null) {
-      //          foreach(var r in _reqs) {
-      //            App.PostMsg(r);
-      //          }
-      //        }
-      //      }
-      //    } else 
-      if (this.#cur.children || this.#cur.state || this.#cur.manifest) {
-        //      if (_cur._typeLoading) {
-        //        _cur.changed += TypeLoaded;
-        //      } else {
-        this.#resolve(this.#cur);
-        //        _tcs.SetResult(_cur);
-        //      }
-        //      lock(_cur) {
-        //        _cur._req = null;
-        //        if (this._reqs != null) {
-        //          foreach(var r in _reqs) {
-        //            App.PostMsg(r);
-        //          }
-        //        }
-        //      }
+      if (this.#cur.status < 0) {
+        this.#resolve(null);
+      } else if (this.#cur.status > 0) {
+        if (this.#cur.status > 1) {
+          this.#cur.subscribe(this.#typeLoaded.bind(this));
+        } else {
+          this.#resolve(this.#cur);
+        }
       } else {
-        //      lock(_cur) {
-        //        if (_cur._req != null && _cur._req != this) { //-V3054
-        //          if (_cur._req._reqs == null) {
-        //            _cur._req._reqs = new List < TopicReq > ();
-        //          }
-        //          _cur._req._reqs.Add(this);
-        //          return;
-        //        } else {
-        //          _cur._req = this;
-        //        }
-        //      }
         this.#cur.conn.SendReq(4, this, this.#cur.path, 3);
       }
       return;
     }
 
-    if (!this.#cur.children && !this.#cur.state && !this.#cur.manifest) {
-      //lock(_cur) {
-      //  if (_cur._req != null && _cur._req != this) { //-V3054
-      //    if (_cur._req._reqs == null) {
-      //      _cur._req._reqs = new List < TopicReq > ();
-      //    }
-      //    _cur._req._reqs.Add(this);
-      //    return;
-      //  } else {
-      //    _cur._req = this;
-      //  }
-      //}
+    if (this.#cur.status == 0) {
       this.#cur.conn.SendReq(4, this, this.#cur.path, 3);
       return;
     }
@@ -247,14 +285,6 @@ class TopicReq {
         }
       } else {
         this.#resolve(null);
-        //lock(_cur) {
-        //  _cur._req = null;
-        //  if (this._reqs != null) {
-        //    foreach(var r in _reqs) {
-        //      App.PostMsg(r);
-        //    }
-        //  }
-        //}
       }
       return;
     }
@@ -264,23 +294,25 @@ class TopicReq {
   Response(success, value) {
     if (success) {   // value == null after connect
       if (value === false) {
-        //_cur._disposed = true;
-        //var parent = _cur.parent;
-        //if (parent != null) {
-        //  parent.RemoveChild(_cur);
-        //  _cur.ChangedReise(Art.RemoveChild, _cur);
-        //  parent.ChangedReise(Art.RemoveChild, _cur);
-        //}
+        this.#cur.status = -1; // deleted
+        let parent = this.#cur.parent;
+        if (parent) {
+          parent.RemoveChild(_cur);
+          this.#cur.notify("RemoveChild", this.#cur);
+          parent.notify("RemoveChild", this.#cur);
+        }
+      } else if (value === true) {
+        this.#cur.status = 1; // loaded
       }
     } else {
       this.#reject(value ?? "TopicReqError");
     }
   }
-  //private void TypeLoaded(Art a, DTopic t) {
-  //  if (a == Art.type && t == _cur && !_cur._typeLoading) {
-  //    _cur.changed -= TypeLoaded;
-  //    _tcs.SetResult(_cur);
-  //  }
-  //}
+  #typeLoaded(a, t) {
+    if (a == "type" && t == this.#cur && this.#cur.status!=2) {
+      this.#cur.unsubscribe(this.#typeLoaded.bind(this));
+      this.#resolve(this.#cur);
+    }
+  }
 }
 export { WsIDE, TopicReq };
