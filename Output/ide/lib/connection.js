@@ -1,27 +1,19 @@
-﻿function compareMessages(a, b) {
-  if (!a) return !b ? 0 : 1;
-  if (!b) return -1;
-  let pa = a.Path;
-  let pb = b.Path;
+function compareMessages(a, b) {
+  let pa = !a?null:a.Path;
+  let pb = !b?null:b.Path;
   if (!pa) return !pb ? 0 : 1;
   if (!pb) return -1;
-  let sa = pa.split('/');
-  let sb = pb.split('/');
+  let sa = pa.split('/').filter((z) => !!z);
+  let sb = pb.split('/').filter((z) => !!z);
   let ia = 0, ib = 0;
-  do {
+  while (ia < sa.length || ib < sb.length) {
     if (ia >= sa.length) return -1;
     if (ib >= sb.length) return 1;
-    if (!sa[ia]) {
-      ia++;
-      continue;
-    }
-    if (!sb[ib]) {
-      ib++;
-      continue;
-    }
     let r = sa[ia].localeCompare(sb[ib]);
     if (r != 0) return r;
-  } while (ia < sa.length && ib < sb.length)
+    ia++;
+    ib++;
+  } 
   return 0;
 }
 function binarySearch(arr, el, compare_fn) {
@@ -58,10 +50,9 @@ class WsIDE {
   }
   PostMsg(msg) {
     let idx = binarySearch(this.#msgs, msg, compareMessages);
-    if (idx < 0) {
-      this.#msgs.splice(~idx, 0, msg);
-      this.#ProcessMQ();
-    }
+    this.#msgs.splice(idx<0?~idx:(idx+1), 0, msg);
+    this.#ProcessMQ();
+    
   }
   #ProcessMQ() {
     if (this.#msgState != 1) return;
@@ -82,7 +73,9 @@ class WsIDE {
     }
     req.msgId = mid;
     this.#requests.push(req);
-    this.#ws.send(JSON.stringify(arr));
+    let rj = JSON.stringify(arr);
+    this.#ws.send(rj);
+    console.log("S " + rj);
   }
   //SendCmd(int cmd, params JSC.JSValue[] arg)
 
@@ -108,7 +101,7 @@ class WsIDE {
     }
   }
   #onMessage(event) {
-    console.log(event.data);
+    console.log("R " + event.data);
     let jo = JSON.parse(event.data);
     if (!Array.isArray(jo) || jo.length == 0 || typeof (jo[0]) !== "number") {
       return;
@@ -131,7 +124,7 @@ class WsIDE {
               for (var tc in t.children) {
                 t.children[tc].pull(null);
               }
-            });
+            }); 
         }
         break;
       case 3:  // [Response, msgId, success, [parameter | error]]
@@ -172,14 +165,14 @@ class WsIDE {
       //  App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg[2], msg[3]));
       //  break;
       case 12:  // [Remove, path]
-        if (jo.length == 2 && typeof (jo[1]) != "string") {
+        if (jo.length == 2 && typeof (jo[1]) == "string") {
           this.#updateTree(jo[0], jo[1]);
         } else {
           console.warn("Synax error " + event.data);
         }
         break;
       case 14:  // [ManifestChanged, path, manifest]
-        if ((jo.length == 2 || jo.length == 3) && typeof (jo[1]) != "string") {
+        if ((jo.length == 2 || jo.length == 3) && typeof (jo[1]) == "string") {
           this.#updateTree(jo[0], jo[1], null, jo[2]);
         } else {
           console.warn("Synax error " + event.data);
@@ -212,7 +205,7 @@ class WsIDE {
       }
       cur = next;
     }
-    if (state) {
+    if (typeof(state) != "undefined") {
       cur.ValuePublished(state);
     }
     if (manifest) {
@@ -230,6 +223,7 @@ class TopicReq {
   #prom;
   #resolve
   #reject;
+  #typeLoaded_cb;
 
   constructor(cur, path, state, manifest) {
     this.#cur = cur;
@@ -240,44 +234,52 @@ class TopicReq {
       this.#manifest = manifest;
     }
     this.#prom = new Promise((res, rej) => { this.#resolve = res; this.#reject = rej; })
+    this.#typeLoaded_cb = this.#typeLoaded.bind(this);
   }
 
   get Task() {
     return this.#prom;
   }
-  get Path() { return this.#cur.path; }
+  get Path() { return this.#cur.Path; }
   Process() {
-    let idx1 = this.#cur.path == '/' ? 1 : (this.#cur.path.length + 1);
-    if (this.#path == null || this.#path.length <= this.#cur.path.length) {
-      if (this.#cur.status < 0) {
-        this.#resolve(null);
-      } else if (this.#cur.status > 0) {
-        if (this.#cur.status > 1) {
-          this.#cur.subscribe(this.#typeLoaded.bind(this));
-        } else {
-          this.#resolve(this.#cur);
+    if (this.#cur.status == 0) {
+      if(this.#cur.pull_req){
+        if(!this.#cur.pull_req.wreqs){
+          this.#cur.pull_req.wreqs = [];
         }
-      } else {
-        this.#cur.conn.SendReq(4, this, this.#cur.path, 3);
+        this.#cur.pull_req.wreqs.push(this);
+      } else{
+        this.#cur.pull_req = this;
+        this.#cur.conn.SendReq(4, this, this.#cur.Path, 3);
       }
       return;
     }
-
-    if (this.#cur.status == 0) {
-      this.#cur.conn.SendReq(4, this, this.#cur.path, 3);
+    if (this.#path == null || this.#path.length <= this.#cur.Path.length) {
+      if (this.#cur.status < 0) {
+        this.#resolve(null);
+        this.#reqFinished();
+      } else {
+        if (this.#cur.status == 2) {
+          this.#cur.subscribe(this.#typeLoaded_cb);
+        } else {
+          this.#resolve(this.#cur);
+          this.#reqFinished();
+        }
+      }
       return;
     }
-    let next = null;
+    this.#reqFinished();
+    let idx1 = this.#cur.Path == '/' ? 1 : (this.#cur.Path.length + 1);
     let idx2 = this.#path.indexOf('/', idx1);
     if (idx2 < 0) {
       idx2 = this.#path.length;
     }
     let name = this.#path.substring(idx1, idx2);
 
-    next = this.#cur.GetChild(name, false);
+    let next = this.#cur.GetChild(name, false);
     if (!next) {
       if (this.#create) {
-        this.#create = false;
+        //this.#create = false;  // ???????????
         if (this.#path.Length <= idx2 && this.#state != null) {
           this.#cur.conn.SendReq(8, this, this.#path.Substring(0, idx2), this.#state, this.#manifest);
         } else {
@@ -297,22 +299,35 @@ class TopicReq {
         this.#cur.status = -1; // deleted
         let parent = this.#cur.parent;
         if (parent) {
-          parent.RemoveChild(_cur);
+          parent.RemoveChild(this.#cur);
           this.#cur.notify("RemoveChild", this.#cur);
           parent.notify("RemoveChild", this.#cur);
         }
       } else if (value === true) {
-        this.#cur.status = 1; // loaded
+        if(this.#cur.status == 0){
+          this.#cur.status = 1; // loaded
+        }
       }
     } else {
       this.#reject(value ?? "TopicReqError");
     }
   }
+  #reqFinished(){
+    if(this.#cur.pull_req==this){
+      this.#cur.pull_req = null;
+      if(this.wreqs){
+        for(let r in this.wreqs){
+          this.#cur.conn.PostMsg(this.wreqs[r]);
+        }
+        this.wreqs = null;
+      }
+    }
+  }
   #typeLoaded(a, t) {
     if (a == "type" && t == this.#cur && this.#cur.status!=2) {
-      this.#cur.unsubscribe(this.#typeLoaded.bind(this));
+      this.#cur.unsubscribe(this.#typeLoaded_cb);
       this.#resolve(this.#cur);
     }
   }
 }
-export { WsIDE, TopicReq };
+export { WsIDE, TopicReq, binarySearch};
