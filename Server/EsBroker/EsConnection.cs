@@ -1,6 +1,7 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
-using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
+using JSC = NiL.JS.Core;
+using NiL.JS.Extensions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -69,44 +70,45 @@ namespace X13.EsBroker {
       try {
         if(msg[0].IsNumber) {
           switch((int)msg[0]) {
-          case 4:
-            this.Subscribe(msg);
-            break;
-          case 6:
-            this.SetState(msg);
-            break;
-          case 8:
-            this.Create(msg);
-            break;
-          case 10:
-            this.Move(msg);
-            break;
-          case 12:
-            this.Remove(msg);
-            break;
-          case 14:
-            this.SetField(msg);
-            break;
-          case 16:
-            this.Import(msg);
-            break;
-          case 91:
-            this.History(msg);
-            break;
-          case 99: {
-              var o = Interlocked.Exchange(ref _owner, null);
-              if(o != null) {
-                Log.Write -= Log_Write;
-                Log.Info("{0} connection dropped", o.path);
-                o.Remove(o); //-V3062
-                lock(_subscriptions) {
-                  foreach(var sr in _subscriptions) {
-                    sr.Item1.Dispose();
+            case 4:
+            case 5:
+              this.Subscribe(msg);
+              break;
+            case 6:
+              this.SetState(msg);
+              break;
+            case 8:
+              this.Create(msg);
+              break;
+            case 10:
+              this.Move(msg);
+              break;
+            case 12:
+              this.Remove(msg);
+              break;
+            case 14:
+              this.SetField(msg);
+              break;
+            case 16:
+              this.Import(msg);
+              break;
+            case 91:
+              this.History(msg);
+              break;
+            case 99: {
+                var o = Interlocked.Exchange(ref _owner, null);
+                if(o != null) {
+                  Log.Write -= Log_Write;
+                  Log.Info("{0} connection dropped", o.path);
+                  o.Remove(o); //-V3062
+                  lock(_subscriptions) {
+                    foreach(var sr in _subscriptions) {
+                      sr.Item1.Dispose();
+                    }
                   }
                 }
               }
-            }
-            break;    // Disconnect
+              break;    // Disconnect
           }
         } else {
           _basePl.AddRMsg(msg);
@@ -126,11 +128,13 @@ namespace X13.EsBroker {
 
     /// <summary>Subscribe topics</summary>
     /// <param name="args">
-    /// REQUEST:  [4, msgId, path, mask], mask: 1 - data, 2 - children
+    /// REQUEST:  [4, msgId, path]
+    /// REQUEST:  [5, msgId, path]
     /// RESPONSE: [3, msgId, success, exist]
+    /// RESPONSE: [5, msgId, state, manifest, [children]]
     /// </param>
     private void Subscribe(EsMessage msg) {
-      if(msg.Count != 4 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || !msg[3].IsNumber) {
+      if(msg.Count < 3 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String) {
         if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
@@ -213,11 +217,11 @@ namespace X13.EsBroker {
       if(manifest != null && (typeS = manifest["type"]).ValueType == JSC.JSValueType.String && !string.IsNullOrWhiteSpace(typeS.Value as string)
         && Topic.root.Get("/$YS/TYPES").Exist(typeS.Value as string, out typeT) && (typeV = typeT.GetState()) != null && typeV.ValueType == JSC.JSValueType.Object && typeV.Value != null
         && (ChL = typeV["Children"]).ValueType == JSC.JSValueType.Object && ChL.Value != null) {
-          foreach(var ch in ChL) {
-            if((JsLib.OfInt(JsLib.GetField(ch.Value, "manifest.attr"), 0) & (int)Topic.Attribute.Required) != 0) {
-              Create(t, ch.Key, ch.Value["default"], ch.Value["manifest"]);
-            }
+        foreach(var ch in ChL) {
+          if((JsLib.OfInt(JsLib.GetField(ch.Value, "manifest.attr"), 0) & (int)Topic.Attribute.Required) != 0) {
+            Create(t, ch.Key, ch.Value["default"], ch.Value["manifest"]);
           }
+        }
       }
     }
     /// <summary>Move topic</summary>
@@ -226,7 +230,7 @@ namespace X13.EsBroker {
     /// </param>
     private void Move(EsMessage msg) {
       if(msg.Count < 4 || msg.Count > 5 || !msg[1].IsNumber || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String
-        || ( msg.Count == 5 && msg[4].ValueType != JSC.JSValueType.String )) {
+        || (msg.Count == 5 && msg[4].ValueType != JSC.JSValueType.String)) {
         if(_basePl.Verbose) {
           Log.Warning("Syntax error: {0}", msg);
         }
@@ -300,59 +304,76 @@ namespace X13.EsBroker {
 
     private void TopicChanged(Perform p, SubRec sb) {
       switch(p.art) { //-V3002
-      case Perform.Art.create:
-        if(sb.setTopic != p.src) {
+        case Perform.Art.create:
+          if(sb.setTopic != p.src) {
             _socket.SendArr(new JSL.Array { 4, p.src.path });
-        }
-        break;
-      case Perform.Art.subscribe:
-        if(sb.setTopic == p.src) {
-          var m = p.src.GetField(null);
-          if(m == null || m.ValueType!=JSC.JSValueType.Object || m.Value == null) {
-            m = EmptyManifest;
           }
-          var s= p.src.GetState();
-          if(s==null){
-            s=JSC.JSValue.Undefined;
-          }
-            _socket.SendArr(new JSL.Array { 4, p.src.path, s, m });
-        } else {
-            _socket.SendArr(new JSL.Array { 4, p.src.path });
-        }
-        break;
-      case Perform.Art.subAck:
-        var sr = p.o as SubRec;
-        if(sr != null) {
-          lock(_subscriptions) {
-            foreach(var msg in _subscriptions.Where(z => z.Item1 == sr && z.Item2 != null).Select(z => z.Item2)) {
-              msg.Response(3, msg[1], true, true);
+          break;
+        case Perform.Art.subscribe:
+          if(p.o is SubRec sr_sub) {
+            bool sub5;
+            lock(_subscriptions) {
+              sub5 = _subscriptions.Where(z => z.Item1 == sr_sub && z.Item2 != null).Select(z => z.Item2).All(z => z[0].As<int>() == 5);
+            }
+            if(sub5) {
+              break;
             }
           }
-        }
-        break;
-      case Perform.Art.changedState:
-        if(!p.src.disposed && p.prim != _owner && sb.setTopic == p.src) {
-            _socket.SendArr(new JSL.Array { 6, p.src.path, p.src.GetState() });
-        }
-        break;
-      case Perform.Art.changedField:
-        if(sb.setTopic == p.src) {
-          _socket.SendArr(new JSL.Array { 14, p.src.path, p.src.GetField(null) });
-        }
-        break;
-      case Perform.Art.move:
-        if(sb.setTopic != p.src) {
-            _socket.SendArr(new JSL.Array { 10, p.o as string, p.src.parent.path, p.src.name });
-        }
-        break;
-      case Perform.Art.remove:
-        if(sb.setTopic == p.src.parent) {
-            _socket.SendArr(new JSL.Array { 12, p.src.path });
-          lock(_subscriptions) {
-            _subscriptions.RemoveAll(z => z.Item1.setTopic == p.src);
+          if(sb.setTopic == p.src) {
+            var m = p.src.GetField(null);
+            if(m == null || m.ValueType != JSC.JSValueType.Object || m.Value == null) {
+              m = EmptyManifest;
+            }
+            var s = p.src.GetState() ?? JSC.JSValue.Undefined;
+            _socket.SendArr(new JSL.Array { 4, p.src.path, s, m });
+          } else {
+            _socket.SendArr(new JSL.Array { 4, p.src.path });
           }
-        }
-        break;
+          break;
+        case Perform.Art.subAck:
+          if(p.o is SubRec sr) {
+            EsMessage[] msgs;
+            lock(_subscriptions) {
+              msgs = _subscriptions.Where(z => z.Item1 == sr && z.Item2 != null).Select(z => z.Item2).ToArray();
+            }
+            var m = p.src.GetField(null);
+            if(m == null || m.ValueType != JSC.JSValueType.Object || m.Value == null) {
+              m = EmptyManifest;
+            }
+            var s = p.src.GetState() ?? JSC.JSValue.Undefined;
+            var ch = new JSL.Array(p.src.children.Select(z => new JSL.String(z.name)).ToArray());
+            foreach(var msg in msgs) {
+              if(msg[0].As<int>() == 5) {
+                msg.Response(5, msg[1], s, m, ch);
+              } else {
+                msg.Response(3, msg[1], true, true);
+              }
+            }
+          }
+          break;
+        case Perform.Art.changedState:
+          if(!p.src.disposed && p.prim != _owner && sb.setTopic == p.src) {
+            _socket.SendArr(new JSL.Array { 6, p.src.path, p.src.GetState() });
+          }
+          break;
+        case Perform.Art.changedField:
+          if(sb.setTopic == p.src) {
+            _socket.SendArr(new JSL.Array { 14, p.src.path, p.src.GetField(null) });
+          }
+          break;
+        case Perform.Art.move:
+          if(sb.setTopic != p.src) {
+            _socket.SendArr(new JSL.Array { 10, p.o as string, p.src.parent.path, p.src.name });
+          }
+          break;
+        case Perform.Art.remove:
+          if(sb.setTopic == p.src.parent) {
+            _socket.SendArr(new JSL.Array { 12, p.src.path });
+            lock(_subscriptions) {
+              _subscriptions.RemoveAll(z => z.Item1.setTopic == p.src);
+            }
+          }
+          break;
 
       }
     }

@@ -106,6 +106,7 @@ class WsIDE {
     if (!Array.isArray(jo) || jo.length == 0 || typeof (jo[0]) !== "number") {
       return;
     }
+    let msgId, idx;
     switch (jo[0]) {
       case 1: // [Hello, (<string> server name)]
         if (jo.length > 1 && typeof (jo[1]) === "string") {
@@ -128,8 +129,8 @@ class WsIDE {
         }
         break;
       case 3:  // [Response, msgId, success, [parameter | error]]
-        let msgId = jo[1];
-        let idx = this.#requests.findIndex(z => z.msgId == msgId);
+        msgId = jo[1];
+        idx = this.#requests.findIndex(z => z.msgId == msgId);
         if (idx >= 0) {
           let req = this.#requests[idx];
           req.msgId = null;
@@ -150,8 +151,23 @@ class WsIDE {
           console.warn("Synax error " + event.data);
         }
         break;
+      case 5:  // [SubAck, msgId, state, manifest, [children]]
+        msgId = jo[1];
+        idx = this.#requests.findIndex(z => z.msgId == msgId);
+        if (idx >= 0) {
+          let req = this.#requests[idx];
+          req.msgId = null;
+          this.#requests.splice(idx, 1);
+          this.#updateTree(jo[0], req.Path, jo[2], jo[3]);
+          for (let ch in jo[4]) {
+            this.#updateTree(jo[0], (req.Path == "/" ? "" : req.Path) + "/" + jo[4][ch]);
+          }
+          req.Response(true, true);
+          this.PostMsg(req);
+        }
+        break;
       case 6:  // [Publish, path, state]
-        if ((jo.length == 2 || jo.length == 3) && typeof (jo[1]) != "string") {
+        if ((jo.length == 2 || jo.length == 3) && typeof (jo[1]) == "string") {
           this.#updateTree(jo[0], jo[1], jo[2]);
         } else {
           console.warn("Synax error " + event.data);
@@ -250,7 +266,7 @@ class TopicReq {
         this.#cur.pull_req.wreqs.push(this);
       } else{
         this.#cur.pull_req = this;
-        this.#cur.conn.SendReq(4, this, this.#cur.Path, 3);
+        this.#cur.conn.SendReq(5, this, this.#cur.Path);
       }
       return;
     }
