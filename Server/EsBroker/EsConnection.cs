@@ -12,7 +12,7 @@ using System.Threading;
 using X13.Repository;
 
 namespace X13.EsBroker {
-  internal class EsConnection : EsSocket {
+  internal class EsConnection : EsSocketTCP {
     private static readonly JSC.JSValue EmptyManifest;
 
     static EsConnection() {

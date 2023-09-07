@@ -14,3 +14,14 @@
 /plugins/MQTT_SN/obj
 /plugins/WebUI/obj
 /Server/obj
+/Output/data/archive-log.ldb
+/Output/data/archive-tmp.ldb
+/Output/data/archive.ldb
+/Output/data/history.ldb
+/Output/data/persist.ldb
+/Output/data/server.xst
+/Output/log/230821_enviriot.log
+/Output/log/230823_enviriot.log
+/Output/log/230830_enviriot.log
+/Output/log/230831_enviriot.log
+/Output/log/230904_enviriot.log

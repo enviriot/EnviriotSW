@@ -85,7 +85,7 @@
     <Compile Include="EsBroker\EsMessage.cs" />
     <Compile Include="EsBroker\EsConnection.cs" />
     <Compile Include="EsBroker\EsBrokerPl.cs" />
-    <Compile Include="EsBroker\EsSocket.cs" />
+    <Compile Include="EsBroker\EsSocketTCP.cs" />
     <Compile Include="IPlugModul.cs" />
     <Compile Include="JsExtLib.cs" />
     <Compile Include="JsLib.cs" />

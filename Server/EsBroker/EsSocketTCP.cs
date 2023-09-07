@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading;
 
 namespace X13.EsBroker {
-  internal class EsSocket : IDisposable {
+  internal class EsSocketTCP : IDisposable {
     public const int portDefault = 10013;
 
     private TcpClient _socket;
@@ -24,7 +24,7 @@ namespace X13.EsBroker {
     private int _rcvLength;
     protected Action<EsMessage> _callback;
 
-    public EsSocket(TcpClient tcp, Action<EsMessage> cb) {
+    public EsSocketTCP(TcpClient tcp, Action<EsMessage> cb) {
       this._socket = tcp;
       this._stream = _socket.GetStream();
       this._rcvBuf = new byte[1];
