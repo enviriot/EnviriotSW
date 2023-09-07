@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace X13.Data {
   internal class Client : NPC_UI {
-    private EsBroker.EsSocket _socket;
+    private EsBroker.IEsSocket _socket;
     private List<WaitConnect> _connEvnt;
     private int _msgId;
     private System.Collections.Generic.LinkedList<ClRequest> _reqs;
@@ -54,12 +54,12 @@ namespace X13.Data {
       try {
         var tcp = new TcpClient();
         tcp.Connect(server, port);
-        _socket = new EsBroker.EsSocket(tcp, onRecv);
-//#if DEBUG
-//        _socket.verbose = true;
-//#else
-        _socket.verbose = false;
-//#endif
+        //#if DEBUG
+        //var v_cb = new Func<bool>(() => true);
+        //#else
+        var v_cb = new Func<bool>(() => false);
+        //#endif
+        _socket = EsBroker.EsSocketTCP.ConnectCl(tcp, v_cb, onRecv);
       }
       catch(Exception ex) {
         Log.Warning("{0}.Connect - {1}", this.ToString(), ex.Message);
@@ -108,7 +108,7 @@ namespace X13.Data {
     }
 
     public override string ToString() {
-      return "x13://" + ( ( userName == null ? string.Empty : ( userName + "@" ) ) + server + ( port != EsBroker.EsSocket.portDefault ? ( ":" + port.ToString() ) : string.Empty ) );
+      return "x13://" + ( ( userName == null ? string.Empty : ( userName + "@" ) ) + server + ( port != EsBroker.EsSocketTCP.portDefault ? ( ":" + port.ToString() ) : string.Empty ) );
     }
 
     private void Send(INotMsg msg) {

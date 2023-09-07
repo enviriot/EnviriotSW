@@ -105,8 +105,11 @@
     <Compile Include="..\Server\EsBroker\EsMessage.cs">
       <Link>Data\EsMessage.cs</Link>
     </Compile>
-    <Compile Include="..\Server\EsBroker\EsSocket.cs">
-      <Link>Data\EsSocket.cs</Link>
+    <Compile Include="..\Server\EsBroker\EsSocketTCP.cs">
+      <Link>Data\EsSocketTCP.cs</Link>
+    </Compile>
+    <Compile Include="..\Server\EsBroker\IEsSocket.cs">
+      <Link>Data\IEsSocket.cs</Link>
     </Compile>
     <Compile Include="..\Server\JsLib.cs">
       <Link>JsLib.cs</Link>

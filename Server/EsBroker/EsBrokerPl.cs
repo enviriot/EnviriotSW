@@ -49,7 +49,7 @@ namespace X13.EsBroker {
       }
       int tcpPort = GetOrDefault(_owner.Get("TCP"), 10013);
       if (tcpPort > 0) {
-        EsSocketTCP.Start(tcpPort, _verbose, OnConnect);
+        EsSocketTCP.Start(tcpPort, () => this.Verbose, OnConnect);
       }
     }
     public void Tick() {

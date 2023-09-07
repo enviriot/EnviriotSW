@@ -53,7 +53,7 @@ namespace X13.Data {
                 }
                 tmp = xc.Attributes["Port"];
                 if(tmp == null || !int.TryParse(tmp.Value, out port) || port == 0) {
-                  port = EsBroker.EsSocket.portDefault;
+                  port = EsBroker.EsSocketTCP.portDefault;
                 }
                 tmp = xc.Attributes["User"];
                 userName = tmp != null ? tmp.Value : null;
@@ -146,12 +146,12 @@ namespace X13.Data {
     public Task<DTopic> GetAsync(Uri url) {
       var up = Uri.UnescapeDataString(url.UserInfo).Split(':');
       string uName = (up.Length > 0 && !string.IsNullOrWhiteSpace(up[0])) ? up[0] : null;
-      Client cl = _clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port));
+      Client cl = _clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocketTCP.portDefault : url.Port));
       if(cl == null) {
         lock(_clients) {
-          cl = _clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port));
+          cl = _clients.FirstOrDefault(z => z.server == url.DnsSafeHost && z.userName == uName && z.port == (url.IsDefaultPort ? EsBroker.EsSocketTCP.portDefault : url.Port));
           if(cl == null) {
-            cl = new Client(url.DnsSafeHost, url.IsDefaultPort ? EsBroker.EsSocket.portDefault : url.Port, uName, up.Length == 2 ? up[1] : null);
+            cl = new Client(url.DnsSafeHost, url.IsDefaultPort ? EsBroker.EsSocketTCP.portDefault : url.Port, uName, up.Length == 2 ? up[1] : null);
             _clients.Add(cl);
           }
         }
@@ -183,7 +183,7 @@ namespace X13.Data {
         tmp = cfg.CreateAttribute("URL");
         tmp.Value = cl.server;
         xc.Attributes.Append(tmp);
-        if(cl.port != EsBroker.EsSocket.portDefault) {
+        if(cl.port != EsBroker.EsSocketTCP.portDefault) {
           tmp = cfg.CreateAttribute("Port");
           tmp.Value = cl.port.ToString();
           xc.Attributes.Append(tmp);

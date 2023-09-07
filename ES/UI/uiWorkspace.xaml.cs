@@ -68,7 +68,7 @@ namespace X13.UI {
       int port;
       if(Uri.TryCreate(url, UriKind.Absolute, out uri)) {
         server = uri.DnsSafeHost;
-        port = uri.IsDefaultPort?EsBroker.EsSocket.portDefault:uri.Port;
+        port = uri.IsDefaultPort?EsBroker.EsSocketTCP.portDefault:uri.Port;
         if(string.IsNullOrWhiteSpace(uri.UserInfo)){
         user = null;
         pass = null;
@@ -84,7 +84,7 @@ namespace X13.UI {
         }
       } else {
         server = url;
-        port = EsBroker.EsSocket.portDefault;
+        port = EsBroker.EsSocketTCP.portDefault;
         user = null;
         pass = null;
       }

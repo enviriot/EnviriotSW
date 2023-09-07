@@ -9,7 +9,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using X13.Repository;
 using NiL.JS.Extensions;
 
 namespace X13.EsBroker {
@@ -17,14 +16,19 @@ namespace X13.EsBroker {
     #region static
     private static TcpListener _tcp;
     private static Action<Func<Action<EsMessage>, IEsSocket>> _onConnect;
-    private static Topic _verbose;
+    private static Func<bool> _verbose;
 
-    public static void Start(int port, Topic verbose, Action<Func<Action<EsMessage>, IEsSocket>> onConnect) {
+    public const int portDefault = 10013;
+    public static void Start(int port, Func<bool> verbose, Action<Func<Action<EsMessage>, IEsSocket>> onConnect) {
       _verbose = verbose;
       _tcp = new TcpListener(IPAddress.Any, port);
       _onConnect = onConnect;
       _tcp.Start();
       _tcp.BeginAcceptTcpClient(new AsyncCallback(ConnectTCP), null);
+    }
+    public static EsSocketTCP ConnectCl(TcpClient tcp, Func<bool> verbose, Action<EsMessage> cb) {
+      _verbose = verbose;
+      return new EsSocketTCP(tcp, cb);
     }
     private static void ConnectTCP(IAsyncResult ar) {
       TcpClient client = null;
@@ -49,7 +53,7 @@ namespace X13.EsBroker {
     }
     private static bool Verbose {
       get {
-        return _verbose != null && _verbose.GetState().As<bool>();
+        return _verbose();
       }
     }
 
@@ -65,7 +69,7 @@ namespace X13.EsBroker {
     private int _rcvState;
     private int _rcvLength;
 
-    public EsSocketTCP(TcpClient tcp, Action<EsMessage> cb) {
+    private EsSocketTCP(TcpClient tcp, Action<EsMessage> cb) {
       this._socket = tcp;
       this._callback = cb;
       this._stream = _socket.GetStream();
