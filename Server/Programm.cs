@@ -16,7 +16,7 @@ namespace X13 {
     private static void Main(string[] args) {
       string name = Assembly.GetExecutingAssembly().Location;
       string path = Path.GetDirectoryName(name);
-      string cfgPath = Path.Combine(path, "../data/enviriot.xst");
+      string cfgPath = Path.Combine(path, "../enviriot.xst");
       int flag = Environment.UserInteractive ? 0 : 1;
       for(int i = 0; i < args.Length; i++) {
         if(string.IsNullOrWhiteSpace(args[i])) {

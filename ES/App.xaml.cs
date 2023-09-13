@@ -73,7 +73,7 @@ namespace X13 {
       if(e.Args.Length > 0) {
         cfgPath = e.Args[0];
       } else {
-        cfgPath = @"../data/ES.cfg";
+        cfgPath = @"../ES.cfg";
       }
 
       _icons = new SortedDictionary<string, BitmapSource>();
