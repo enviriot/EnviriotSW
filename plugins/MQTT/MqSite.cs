@@ -129,13 +129,13 @@ namespace X13.MQTT {
         Log.Warning("{0}.Changed({1}) - Client OFFLINE", Owner.path, p.ToString());
         return;
       }
-      if((p.art == Perform.Art.subscribe || ((p.art == Perform.Art.changedState || p.art == Perform.Art.create) && p.prim != Owner)) && !p.src.CheckAttribute(Topic.Attribute.Internal)) {
+      if((p.Art == Perform.E_Art.subscribe || ((p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.create) && p.Prim != Owner)) && !p.src.CheckAttribute(Topic.Attribute.Internal)) {
         var rp = remotePrefix + p.src.path.Substring(Owner.path.Length);
         var payload = JsLib.Stringify(p.src.GetState() ?? JSC.JSValue.Null);
         if(!string.IsNullOrEmpty(rp) && payload != null) {
           Client.Send(new MqPublish(rp, payload) { Retained = _retainedEn });
         }
-      } else if(p.art == Perform.Art.subAck && _subEn) {
+      } else if(p.Art == Perform.E_Art.subAck && _subEn) {
         Client.Subscribe(this);
       }
     }

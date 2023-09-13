@@ -140,15 +140,15 @@ namespace X13.Periphery {
     }
 
     private void OwnerChanged(Perform p, SubRec sr) {
-      if(p.art == Perform.Art.remove) {
+      if(p.Art == Perform.E_Art.remove) {
         _pl._devs.Remove(this);
         this.Stop();
         return;
       }
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || p.prim == owner) {
+      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || p.Prim == owner) {
         return;
       }
-      if(p.art == Perform.Art.changedField) {
+      if(p.Art == Perform.E_Art.changedField) {
         var fp = "." + (p.FieldPath ?? string.Empty);
         var pt = PredefinedTopics.FirstOrDefault(z => z.Item2 == fp);
         if(pt == null || pt.Item1 >= 0xFFC0) {
@@ -158,7 +158,7 @@ namespace X13.Periphery {
         if(!val.IsNull) {
           Send(new MsPublish(pt.Item1, Serialize(val, pt.Item3)));
         }
-      } else if(p.art == Perform.Art.move) {
+      } else if(p.Art == Perform.E_Art.move) {
         if(_oldName != owner.name) {
           Send(new MsPublish(0xFF00, Encoding.UTF8.GetBytes(owner.name)));  // _sName
           _state = State.Disconnected;
@@ -899,10 +899,10 @@ namespace X13.Periphery {
     }
 
     private void PublishTopic(Perform p, SubRec sb) {
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.prim == owner && p.art != Perform.Art.subscribe) || p.src == owner) {
+      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.Prim == owner && p.Art != Perform.E_Art.subscribe) || p.src == owner) {
         return;
       }
-      if(p.art == Perform.Art.create) {
+      if(p.Art == Perform.E_Art.create) {
         GetTopicInfo(p.src);
         return;
       }
@@ -913,7 +913,7 @@ namespace X13.Periphery {
           break;
         }
       }
-      if(p.art == Perform.Art.changedField && ti != null) {
+      if(p.Art == Perform.E_Art.changedField && ti != null) {
         var sTag = p.src.GetField("MQTT-SN.tag").Value as string;
         if(ti.tag!=sTag) {
           Send(new MsRegister(0xFFFF, ti.tag));  // unregister
@@ -923,17 +923,17 @@ namespace X13.Periphery {
         UpdateConverters(ti);
         UpdateSuppressedInputs();
       }
-      if(ti == null && (p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe)) {
+      if(ti == null && (p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.subscribe)) {
         ti = GetTopicInfo(p.src, true);
       }
       if(ti == null || ti.TopicId >= 0xFFC0 || !ti.registred) {
         return;
       }
-      if((p.art == Perform.Art.changedState || p.art == Perform.Art.subscribe)) {
+      if((p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.subscribe)) {
         if((ti.dType & DType.ExtensionType) == DType.None) {
           Send(new MsPublish(ti));
         }
-      } else if(p.art == Perform.Art.remove) {          // Remove by device
+      } else if(p.Art == Perform.E_Art.remove) {          // Remove by device
         if(ti.it == TopicIdType.Normal && ti.registred) {
           Send(new MsRegister(0xFFFF, ti.tag));
         }

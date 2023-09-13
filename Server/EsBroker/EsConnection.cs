@@ -303,13 +303,13 @@ namespace X13.EsBroker {
     }
 
     private void TopicChanged(Perform p, SubRec sb) {
-      switch(p.art) { //-V3002
-        case Perform.Art.create:
+      switch(p.Art) { //-V3002
+        case Perform.E_Art.create:
           if(sb.setTopic != p.src) {
             _socket.SendArr(new JSL.Array { 4, p.src.path });
           }
           break;
-        case Perform.Art.subscribe:
+        case Perform.E_Art.subscribe:
           if(p.o is SubRec sr_sub) {
             bool sub5;
             lock(_subscriptions) {
@@ -330,7 +330,7 @@ namespace X13.EsBroker {
             _socket.SendArr(new JSL.Array { 4, p.src.path });
           }
           break;
-        case Perform.Art.subAck:
+        case Perform.E_Art.subAck:
           if(p.o is SubRec sr) {
             EsMessage[] msgs;
             lock(_subscriptions) {
@@ -351,22 +351,22 @@ namespace X13.EsBroker {
             }
           }
           break;
-        case Perform.Art.changedState:
-          if(!p.src.disposed && p.prim != _owner && sb.setTopic == p.src) {
+        case Perform.E_Art.changedState:
+          if(!p.src.disposed && p.Prim != _owner && sb.setTopic == p.src) {
             _socket.SendArr(new JSL.Array { 6, p.src.path, p.src.GetState() });
           }
           break;
-        case Perform.Art.changedField:
+        case Perform.E_Art.changedField:
           if(sb.setTopic == p.src) {
             _socket.SendArr(new JSL.Array { 14, p.src.path, p.src.GetField(null) });
           }
           break;
-        case Perform.Art.move:
+        case Perform.E_Art.move:
           if(sb.setTopic != p.src) {
             _socket.SendArr(new JSL.Array { 10, p.o as string, p.src.parent.path, p.src.name });
           }
           break;
-        case Perform.Art.remove:
+        case Perform.E_Art.remove:
           if(sb.setTopic == p.src.parent) {
             _socket.SendArr(new JSL.Array { 12, p.src.path });
             lock(_subscriptions) {

@@ -39,7 +39,7 @@ namespace X13.Repository {
       int i;
       for(i = 0; i < _prOp.Count; i++) {
         if(_prOp[i].EqualsGr(cmd)) {
-          if(_prOp[i].art == Perform.Art.changedState) {
+          if(_prOp[i].Art == Perform.E_Art.changedState) {
             cmd.old_o = _prOp[i].old_o;
           }
           _prOp.RemoveAt(i);
@@ -57,17 +57,17 @@ namespace X13.Repository {
     private void TickStep1(Perform c) {
       SubRec sr;
 
-      switch(c.art) {
-      case Perform.Art.create:
+      switch(c.Art) {
+      case Perform.E_Art.create:
         Topic.I.SubscribeByCreation(c.src);
         EnquePerf(c);
         break;
-      case Perform.Art.subscribe:
-      case Perform.Art.unsubscribe:
+      case Perform.E_Art.subscribe:
+      case Perform.E_Art.unsubscribe:
         if((sr = c.o as SubRec) != null) {
           Topic.Bill b = null;
           Perform np;
-          if(c.art == Perform.Art.subscribe && (sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once) {
+          if(c.Art == Perform.E_Art.subscribe && (sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once) {
             EnquePerf(c);
           }
           if((sr.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren) {
@@ -78,11 +78,11 @@ namespace X13.Repository {
           }
           if(b != null) {
             foreach(Topic tmp in b) {
-              if(c.art == Perform.Art.subscribe) {
+              if(c.Art == Perform.E_Art.subscribe) {
                 Topic.I.Subscribe(tmp, sr);
                 if((sr.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value
                   || (sr.mask & SubRec.SubMask.Field) == SubRec.SubMask.None || string.IsNullOrEmpty(sr.prefix) || tmp.GetField(sr.prefix).Defined) {
-                  np = Perform.Create(tmp, Perform.Art.subscribe, c.src);
+                  np = Perform.Create(tmp, Perform.E_Art.subscribe, c.src);
                   np.o = c.o;
                   EnquePerf(np);
                 }
@@ -91,66 +91,66 @@ namespace X13.Repository {
               }
             }
           }
-          if(c.art == Perform.Art.subscribe) {
-            np = Perform.Create(c.src, Perform.Art.subAck, c.src);
+          if(c.Art == Perform.E_Art.subscribe) {
+            np = Perform.Create(c.src, Perform.E_Art.subAck, c.src);
             np.o = c.o;
             EnquePerf(np);
           }
         }
         break;
-      case Perform.Art.setField: {
+      case Perform.E_Art.setField: {
           if(Topic.I.SetField(c)) {
-            c.art = Perform.Art.changedField;
+            c.Art = Perform.E_Art.changedField;
             EnquePerf(c);
           }
         }
         break;
 
-      case Perform.Art.changedState:
-      case Perform.Art.setState:
-      case Perform.Art.changedField:
-      case Perform.Art.move:
-      case Perform.Art.subAck:
+      case Perform.E_Art.changedState:
+      case Perform.E_Art.setState:
+      case Perform.E_Art.changedField:
+      case Perform.E_Art.move:
+      case Perform.E_Art.subAck:
         EnquePerf(c);
         break;
-      case Perform.Art.remove:
+      case Perform.E_Art.remove:
         foreach(Topic tmp in c.src.all) {
-          EnquePerf(Perform.Create(tmp, Perform.Art.remove, c.prim));
+          EnquePerf(Perform.Create(tmp, Perform.E_Art.remove, c.Prim));
         }
         break;
       }
     }
     private void TickStep2(Perform cmd) {
-      if(cmd.art == Perform.Art.remove || (cmd.art == Perform.Art.setState && !object.ReferenceEquals(cmd.src.GetState(), cmd.o))) {
+      if(cmd.Art == Perform.E_Art.remove || (cmd.Art == Perform.E_Art.setState && !object.ReferenceEquals(cmd.src.GetState(), cmd.o))) {
         cmd.old_o = cmd.src.GetState();
         Topic.I.SetValue(cmd.src, cmd.o as JSValue);
-        if(cmd.art != Perform.Art.remove) {
-          cmd.art = Perform.Art.changedState;
+        if(cmd.Art != Perform.E_Art.remove) {
+          cmd.Art = Perform.E_Art.changedState;
         }
       }
-      if(cmd.art == Perform.Art.changedField) {
+      if(cmd.Art == Perform.E_Art.changedField) {
         Topic.I.SetField2(cmd.src);
       }
-      if(cmd.art == Perform.Art.move) {
+      if(cmd.Art == Perform.E_Art.move) {
         Topic.I.SubscribeByMove(cmd.src);
       }
-      if(cmd.art == Perform.Art.remove) {
+      if(cmd.Art == Perform.E_Art.remove) {
         Topic.I.Remove(cmd.src);
       }
     }
     private void CheckCCtor(Perform p) {
       SortedList<string, JSValue> lo = null, ln = null, lc = null;
       JSValue to = null, tn = p.src.GetField("type"), vn;
-      if(p.art == Perform.Art.changedField) {
+      if(p.Art == Perform.E_Art.changedField) {
         JSValue o = JsLib.GetField(p.old_o as JSValue, "cctor"), n = p.src.GetField("cctor");
         to = JsLib.GetField(p.old_o as JSValue, "type");
         if(!object.ReferenceEquals(o, n)) {
           JsLib.Propertys(ref lo, o);
           JsLib.Propertys(ref ln, n);
         }
-      } else if(p.art == Perform.Art.create) {
+      } else if(p.Art == Perform.E_Art.create) {
         JsLib.Propertys(ref ln, p.src.GetField("cctor"));
-      } else if(p.art == Perform.Art.remove) {
+      } else if(p.Art == Perform.E_Art.remove) {
         JsLib.Propertys(ref lo, p.src.GetField("cctor"));
       } else {
         return;
@@ -179,24 +179,24 @@ namespace X13.Repository {
       }
 
       if(lo != null) {
-        ProcessCCtor(lo, p.src, Perform.Art.remove);
+        ProcessCCtor(lo, p.src, Perform.E_Art.remove);
       }
       if(ln != null) {
-        ProcessCCtor(ln, p.src, Perform.Art.create);
+        ProcessCCtor(ln, p.src, Perform.E_Art.create);
       }
       if(lc != null) {
-        ProcessCCtor(lc, p.src, Perform.Art.changedField);
+        ProcessCCtor(lc, p.src, Perform.E_Art.changedField);
       }
     }
 
-    private void ProcessCCtor(SortedList<string, JSValue> l, Topic t, Perform.Art a) {
+    private void ProcessCCtor(SortedList<string, JSValue> l, Topic t, Perform.E_Art a) {
       foreach(var kv in l) {
         RPC.CCtor(kv.Key, t, a);
       }
     }
 
     private void PublishSaveConfig(Perform p) {
-      if(p.art==Perform.Art.changedField || p.art==Perform.Art.changedState || p.art==Perform.Art.remove) {
+      if(p.Art==Perform.E_Art.changedField || p.Art==Perform.E_Art.changedState || p.Art==Perform.E_Art.remove) {
         if(p.src.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.Config)) {
           _saveConfigT = DateTime.Now.AddSeconds(5);
         }
@@ -398,7 +398,7 @@ namespace X13.Repository {
       // Publish
       for(_pfPos = 0; _pfPos < _prOp.Count; _pfPos++) {
         cmd = _prOp[_pfPos];
-        if(cmd.art != Perform.Art.setState && cmd.art != Perform.Art.setField) {
+        if(cmd.Art != Perform.E_Art.setState && cmd.Art != Perform.E_Art.setField) {
           Topic.I.Publish(cmd);
           for(int i = _subscribers.Count-1; i>=0; i--) {
             var func = _subscribers[i];

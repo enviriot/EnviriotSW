@@ -364,7 +364,7 @@ namespace X13.Periphery {
       byte con;
       int tmp;
       var en = _enableT.GetState();
-      if((en.ValueType == JSC.JSValueType.Boolean && !((bool)en)) || p.prim==_owner || p.src.path.Length < 17 || !p.src.path.StartsWith("/export/req/con") || !byte.TryParse(p.src.path.Substring(15, 1), out con) || con==0 || con > 8) {
+      if((en.ValueType == JSC.JSValueType.Boolean && !((bool)en)) || p.Prim==_owner || p.src.path.Length < 17 || !p.src.path.StartsWith("/export/req/con") || !byte.TryParse(p.src.path.Substring(15, 1), out con) || con==0 || con > 8) {
         return;
       }
       switch(p.src.name) {

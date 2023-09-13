@@ -2,7 +2,6 @@
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using LiteDB;
-using LiteDB.Engine;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -70,61 +69,61 @@ namespace X13.PersistentStorage {
         return BsonValue.Null;
       }
       switch(val.ValueType) {
-      case JSC.JSValueType.NotExists:
-      case JSC.JSValueType.NotExistsInObject:
-      case JSC.JSValueType.Undefined:
-        return BsonValue.Null;
-      case JSC.JSValueType.Boolean:
-        return new BsonValue((bool)val);
-      case JSC.JSValueType.Date: {
-          if(val.Value is JSL.Date jsd) {
-            return new BsonValue(jsd.ToDateTime().ToUniversalTime());
-          }
+        case JSC.JSValueType.NotExists:
+        case JSC.JSValueType.NotExistsInObject:
+        case JSC.JSValueType.Undefined:
           return BsonValue.Null;
-        }
-      case JSC.JSValueType.Double:
-        return new BsonValue((double)val);
-      case JSC.JSValueType.Integer:
-        return new BsonValue((int)val);
-      case JSC.JSValueType.String: {
-          var s = val.Value as string;
-          if(s != null && s.StartsWith("¤TR")) {
-            var t = Topic.I.Get(Topic.root, s.Substring(3), false, null, false, false);
-            if(t != null) {
-              if(_base.TryGetValue(t, out Stash tu)) {
-                return tu.bm["_id"];
+        case JSC.JSValueType.Boolean:
+          return new BsonValue((bool)val);
+        case JSC.JSValueType.Date: {
+            if(val.Value is JSL.Date jsd) {
+              return new BsonValue(jsd.ToDateTime().ToUniversalTime());
+            }
+            return BsonValue.Null;
+          }
+        case JSC.JSValueType.Double:
+          return new BsonValue((double)val);
+        case JSC.JSValueType.Integer:
+          return new BsonValue((int)val);
+        case JSC.JSValueType.String: {
+            var s = val.Value as string;
+            if(s != null && s.StartsWith("¤TR")) {
+              var t = Topic.I.Get(Topic.root, s.Substring(3), false, null, false, false);
+              if(t != null) {
+                if(_base.TryGetValue(t, out Stash tu)) {
+                  return tu.bm["_id"];
+                }
+              }
+              throw new ArgumentException("TopicRefernce(" + s.Substring(3) + ") NOT FOUND");
+            }
+            return new BsonValue(s);
+          }
+        case JSC.JSValueType.Object:
+          if(val.IsNull) {
+            return BsonValue.Null;
+          }
+          if(val is JSL.Array arr) {
+            var r = new BsonArray();
+            foreach(var f in arr) {
+              if(int.TryParse(f.Key, out int i)) {
+                while(i >= r.Count()) { r.Add(BsonValue.Null); }
+                r[i] = Js2Bs(f.Value);
               }
             }
-            throw new ArgumentException("TopicRefernce(" + s.Substring(3) + ") NOT FOUND");
+            return r;
           }
-          return new BsonValue(s);
-        }
-      case JSC.JSValueType.Object:
-        if(val.IsNull) {
-          return BsonValue.Null;
-        }
-        if(val is JSL.Array arr) {
-          var r = new BsonArray();
-          foreach(var f in arr) {
-            if(int.TryParse(f.Key, out int i)) {
-              while(i >= r.Count()) { r.Add(BsonValue.Null); }
-              r[i] = Js2Bs(f.Value);
+          ByteArray ba = val as ByteArray;
+          if(ba != null || (ba = val.Value as ByteArray) != null) {
+            return new BsonValue(ba.GetBytes());
+          } {
+            var r = new BsonDocument();
+            foreach(var f in val) {
+              r[EscapFieldName(f.Key)] = Js2Bs(f.Value);
             }
+            return r;
           }
-          return r;
-        }
-        ByteArray ba = val as ByteArray;
-        if(ba != null || (ba = val.Value as ByteArray) != null) {
-          return new BsonValue(ba.GetBytes());
-        } {
-          var r = new BsonDocument();
-          foreach(var f in val) {
-            r[EscapFieldName(f.Key)] = Js2Bs(f.Value);
-          }
-          return r;
-        }
-      default:
-        throw new NotImplementedException("js2Bs(" + val.ValueType.ToString() + ")");
+        default:
+          throw new NotImplementedException("js2Bs(" + val.ValueType.ToString() + ")");
       }
     }
     private string Id2Topic(ObjectId id) {
@@ -140,49 +139,49 @@ namespace X13.PersistentStorage {
         return JSC.JSValue.Undefined;
       }
       switch(val.Type) { //-V3002
-      case BsonType.ObjectId: {
-          var p = Id2Topic(val.AsObjectId);
-          if(p != null) {
-            return new JSL.String("¤TR" + p);
-          } else {
-            throw new ArgumentException("Unknown ObjectId: " + val.AsObjectId.ToString());
-          }
-        }
-      case BsonType.Array: {
-          var arr = val.AsArray;
-          var r = new JSL.Array(arr.Count);
-          for(int i = 0; i < arr.Count; i++) {
-            if(!arr[i].IsNull) {
-              r[i] = Bs2Js(arr[i]);
+        case BsonType.ObjectId: {
+            var p = Id2Topic(val.AsObjectId);
+            if(p != null) {
+              return new JSL.String("¤TR" + p);
+            } else {
+              throw new ArgumentException("Unknown ObjectId: " + val.AsObjectId.ToString());
             }
           }
-          return r;
-        }
-      case BsonType.Boolean:
-        return new JSL.Boolean(val.AsBoolean);
-      case BsonType.DateTime:
-        return JSC.JSValue.Marshal(val.AsDateTime.ToLocalTime());
-      case BsonType.Binary:
-        return new ByteArray(val.AsBinary);
-      case BsonType.Document: {
-          var r = JSC.JSObject.CreateObject();
-          var o = val.AsDocument;
-          foreach(var i in o) {
-            r[UnescapFieldName(i.Key)] = Bs2Js(i.Value);
+        case BsonType.Array: {
+            var arr = val.AsArray;
+            var r = new JSL.Array(arr.Count);
+            for(int i = 0; i < arr.Count; i++) {
+              if(!arr[i].IsNull) {
+                r[i] = Bs2Js(arr[i]);
+              }
+            }
+            return r;
           }
-          return r;
-        }
-      case BsonType.Double: {
-          return new JSL.Number(val.AsDouble);
-        }
-      case BsonType.Int32:
-        return new JSL.Number(val.AsInt32);
-      case BsonType.Int64:
-        return new JSL.Number(val.AsInt64);
-      case BsonType.Null:
-        return JSC.JSValue.Null;
-      case BsonType.String:
-        return new JSL.String(val.AsString);
+        case BsonType.Boolean:
+          return new JSL.Boolean(val.AsBoolean);
+        case BsonType.DateTime:
+          return JSC.JSValue.Marshal(val.AsDateTime.ToLocalTime());
+        case BsonType.Binary:
+          return new ByteArray(val.AsBinary);
+        case BsonType.Document: {
+            var r = JSC.JSObject.CreateObject();
+            var o = val.AsDocument;
+            foreach(var i in o) {
+              r[UnescapFieldName(i.Key)] = Bs2Js(i.Value);
+            }
+            return r;
+          }
+        case BsonType.Double: {
+            return new JSL.Number(val.AsDouble);
+          }
+        case BsonType.Int32:
+          return new JSL.Number(val.AsInt32);
+        case BsonType.Int64:
+          return new JSL.Number(val.AsInt64);
+        case BsonType.Null:
+          return JSC.JSValue.Null;
+        case BsonType.String:
+          return new JSL.String(val.AsString);
       }
       throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
     }
@@ -227,7 +226,7 @@ namespace X13.PersistentStorage {
           try {
             ShrinkHistory();
           }
-          catch (Exception ex) {
+          catch(Exception ex) {
             Log.Warning("ShrinkHistory failed - " + ex.ToString());
           }
         }
@@ -301,7 +300,7 @@ namespace X13.PersistentStorage {
         oldId.Clear();
       }
       exist = File.Exists(DBA_PATH);
-      _dba = new LiteDatabase(new ConnectionString { Upgrade=true, Filename=DBA_PATH });
+      _dba = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DBA_PATH });
       if(exist && !_dba.GetCollectionNames().Any(z => z == "archive")) {
         exist = false;
       }
@@ -317,7 +316,7 @@ namespace X13.PersistentStorage {
       JSC.JSValue jTmp;
       bool saveM = false, saveS = false, saveA = false;
       if(!_base.TryGetValue(t, out a)) {
-        if(p.art == Perform.Art.remove) {
+        if(p.Art == Perform.E_Art.remove) {
           return;
         }
         var obj = _objects.FindOne(Query.EQ("p", t.path));
@@ -325,7 +324,7 @@ namespace X13.PersistentStorage {
         _base[t] = a;
       }
 
-      if(p.art == Perform.Art.remove) {
+      if(p.Art == Perform.E_Art.remove) {
         _states.Delete(a.id);
         _objects.Delete(a.id);
         _base.Remove(t);
@@ -344,7 +343,7 @@ namespace X13.PersistentStorage {
           saveM = true;
         }
         // State
-        if(p.art == Perform.Art.changedState && t.GetField("Arch.enable").As<bool>()) {
+        if(p.Art == Perform.E_Art.changedState && t.GetField("Arch.enable").As<bool>()) {
           saveA = true;
         }
         if(t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
@@ -370,7 +369,7 @@ namespace X13.PersistentStorage {
           }
         }
 
-        if(p.art == Perform.Art.move) {
+        if(p.Art == Perform.E_Art.move) {
           a.bm["p"] = t.path;
           saveM = true;
         }
@@ -380,7 +379,7 @@ namespace X13.PersistentStorage {
         if(saveS && a.bs != null) {
           _states.Upsert(a.bs);
         }
-        if(saveA && ((a.js.ValueType==JSC.JSValueType.Double && !double.IsNaN(a.js.As<double>())) || a.js.ValueType == JSC.JSValueType.Integer)) {
+        if(saveA && ((a.js.ValueType == JSC.JSValueType.Double && !double.IsNaN(a.js.As<double>())) || a.js.ValueType == JSC.JSValueType.Integer)) {
           _archive.Insert(new BsonDocument { ["_id"] = ObjectId.NewObjectId(), ["t"] = new BsonValue(DateTime.UtcNow), ["p"] = t.path, ["v"] = a.bs["v"] });
         }
       }
@@ -430,7 +429,7 @@ namespace X13.PersistentStorage {
       foreach(var t in t_list) {
         var keep = t.GetField("Arch.keep");
         double k_d;
-        if((keep.ValueType==JSC.JSValueType.Double || keep.ValueType==JSC.JSValueType.Integer) && (k_d = keep.As<double>())>0) {
+        if((keep.ValueType == JSC.JSValueType.Double || keep.ValueType == JSC.JSValueType.Integer) && (k_d = keep.As<double>()) > 0) {
           _archive.DeleteMany(Query.And(Query.EQ("p", t.path), Query.LT("t", DateTime.Now.AddDays(-k_d))));
         }
       }
@@ -441,7 +440,7 @@ namespace X13.PersistentStorage {
       _dbHist.Rebuild();
     }
     private void SubFunc(Perform p) {
-      if(p.art == Perform.Art.subscribe || p.art == Perform.Art.subAck || p.art == Perform.Art.setField || p.art == Perform.Art.setState || p.art == Perform.Art.unsubscribe || p.prim == _owner) {
+      if(p.Art == Perform.E_Art.subscribe || p.Art == Perform.E_Art.subAck || p.Art == Perform.E_Art.setField || p.Art == Perform.E_Art.setState || p.Art == Perform.E_Art.unsubscribe || p.Prim == _owner) {
         return;
       }
       _q.Enqueue(p);
@@ -457,44 +456,44 @@ namespace X13.PersistentStorage {
     #region Archivist
     private JSL.Array AQuery(string[] topics, DateTime begin, int count, DateTime end) {
       //var sw = System.Diagnostics.Stopwatch.StartNew();
-      var tba = topics.Select(z=>new BsonValue(z)).ToArray();
+      var tba = topics.Select(z => new BsonValue(z)).ToArray();
 
       var rez = new JSL.Array();
 
-      if(end <= begin || count==0) {  // end == MinValue
+      if(end <= begin || count == 0) {  // end == MinValue
         var p1 = new BsonValue(begin);
         var p3 = new BsonValue(end);
         var resp1 = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1);
         if(end > begin) {
           resp1 = resp1.Where(z => z["t"] < p3);
         }
-        if(count<0) {
+        if(count < 0) {
           resp1 = resp1.OrderByDescending(z => z["t"]);
-        } else if(count>=0) {
+        } else if(count >= 0) {
           resp1 = resp1.OrderBy(z => z["t"]);
         }
         var resp2 = count != 0 ? resp1.Limit(Math.Abs(count)).ToEnumerable() : resp1.ToEnumerable();
-        JSL.Array lo=null;
+        JSL.Array lo = null;
         foreach(var li in resp2) {
           var p = li["p"];
           int i;
-          for(i=0; p != tba[i]; i++)
+          for(i = 0; p != tba[i]; i++)
             ;
           i++;
-          if(lo!=null && lo[i].ValueType==JSC.JSValueType.Object && (li["t"].AsDateTime-((JSL.Date)lo[0].Value).ToDateTime()).TotalSeconds<15) {  // Null.ValueType==Object
-            lo[i]=Bs2Js(li["v"]);
+          if(lo != null && lo[i].ValueType == JSC.JSValueType.Object && (li["t"].AsDateTime - ((JSL.Date)lo[0].Value).ToDateTime()).TotalSeconds < 15) {  // Null.ValueType==Object
+            lo[i] = Bs2Js(li["v"]);
           } else {
             lo = new JSL.Array(tba.Length + 1) {
               [0] = Bs2Js(li["t"])
             };
             for(var j = 1; j <= tba.Length; j++) {
-              lo[j] = (i==j) ? Bs2Js(li["v"]) : JSC.JSValue.Null;
+              lo[j] = (i == j) ? Bs2Js(li["v"]) : JSC.JSValue.Null;
             }
             rez.Add(lo);
           }
         }
       } else {
-        var step = (end - begin).TotalSeconds/Math.Abs(count);
+        var step = (end - begin).TotalSeconds / Math.Abs(count);
         var p1 = new BsonValue(begin);
         var p3 = new BsonValue(end);
 
@@ -507,37 +506,37 @@ namespace X13.PersistentStorage {
         double t_sum = 0;
         int i;
 
-        for(i = 0; i<tba.Length; i++) {
+        for(i = 0; i < tba.Length; i++) {
           f_val[i] = 0;
-          f_cnt[i]=0;
-          l_delta[i]=-step;
+          f_cnt[i] = 0;
+          l_delta[i] = -step;
           var p_i = tba[i];
           var r = _archive.Query().Where(z => z["p"] == p_i && z["t"] < p1).OrderByDescending(z => z["t"]).Limit(1).ToArray();
-          l_val[i]=r.Length==1 ? r[0]["v"].AsDouble : double.NaN;
+          l_val[i] = r.Length == 1 ? r[0]["v"].AsDouble : double.NaN;
         }
         var resp = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1 && z["t"] < p3).OrderBy(z => z["t"]).ToEnumerable();
         foreach(var li in resp) {
           var t_cur = li["t"].AsDateTime;
-          if(t_cur>=cursor) {
+          if(t_cur >= cursor) {
             AddRecord();
             do {
-              cursor=cursor.AddSeconds(step);
-            } while(t_cur>=cursor);
+              cursor = cursor.AddSeconds(step);
+            } while(t_cur >= cursor);
           }
           var p = li["p"];
-          for(i=0; i<tba.Length; i++) {
+          for(i = 0; i < tba.Length; i++) {
             if(p == tba[i]) {
               var v = li["v"].AsDouble;
               if(!double.IsNaN(v)) {
                 var td = (t_cur - cursor).TotalSeconds;
                 if(!double.IsNaN(l_val[i])) {
-                  f_val[i]+=l_val[i]*(td-l_delta[i])/step;
-                  l_delta[i]=td;
+                  f_val[i] += l_val[i] * (td - l_delta[i]) / step;
+                  l_delta[i] = td;
                 }
                 f_cnt[i]++;
                 l_val[i] = v;
                 t_cnt++;
-                t_sum+=td;
+                t_sum += td;
               }
               break;
             }
@@ -545,13 +544,13 @@ namespace X13.PersistentStorage {
         }
         AddRecord();
         void AddRecord() {
-          JSL.Array lo=new JSL.Array(tba.Length + 1) {
-            [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt==1?t_sum:(-step/2)).ToLocalTime()),
+          JSL.Array lo = new JSL.Array(tba.Length + 1) {
+            [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt == 1 ? t_sum : (-step / 2)).ToLocalTime()),
           };
           t_cnt = 0;
           t_sum = 0;
           for(i = 0; i < tba.Length; i++) {
-            lo[i+1] = f_cnt[i]>0 ? new JSL.Number(f_val[i] + l_val[i]*(-l_delta[i])/step) : (double.IsNaN(l_val[i]) ? JSC.JSValue.Null : l_val[i]);
+            lo[i + 1] = f_cnt[i] > 0 ? new JSL.Number(f_val[i] + l_val[i] * (-l_delta[i]) / step) : (double.IsNaN(l_val[i]) ? JSC.JSValue.Null : l_val[i]);
             f_val[i] = 0;
             f_cnt[i] = 0;
             l_delta[i] = -step;

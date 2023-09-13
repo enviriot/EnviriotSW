@@ -128,10 +128,10 @@ namespace X13.Logram {
       _TaskIn.Enqueue(it);
     }
 
-    private void BindCh(Topic t, Perform.Art a) {
+    private void BindCh(Topic t, Perform.E_Art a) {
       ILoItem it;
       LoVariable v = null;
-      if(( !_items.TryGetValue(t, out it) || ( v = it as LoVariable )==null ) && a == Perform.Art.create) {
+      if(( !_items.TryGetValue(t, out it) || ( v = it as LoVariable )==null ) && a == Perform.E_Art.create) {
         v = new LoVariable(this, t);
         _items[t] = v;
       }
@@ -139,11 +139,11 @@ namespace X13.Logram {
         v.ManifestChanged();
       }
     }
-    private void BlockCh(Topic t, Perform.Art a) {
+    private void BlockCh(Topic t, Perform.E_Art a) {
       ILoItem it;
       LoBlock v = null;
       if(!_items.TryGetValue(t, out it) || ( v = it as LoBlock )==null) {
-        if(a == Perform.Art.create) {
+        if(a == Perform.E_Art.create) {
           v = new LoBlock(this, t);
           _items[t] = v;
         }
@@ -154,7 +154,7 @@ namespace X13.Logram {
     private void SubFunc(Perform p) {
       ILoItem it;
       if(!_items.TryGetValue(p.src, out it)) {
-        if(p.art==Perform.Art.create) {
+        if(p.Art==Perform.E_Art.create) {
           LoBlock lb;
           if(p.src.parent!=null && _items.TryGetValue(p.src.parent, out it) && ( lb = it as LoBlock )!=null) {
             lb.GetPin(p.src);
@@ -162,9 +162,9 @@ namespace X13.Logram {
         }
         return;
       }
-      if(p.art==Perform.Art.changedState) {
-        it.SetValue(p.src.GetState(), p.prim);
-      } else if(p.art==Perform.Art.remove) {
+      if(p.Art==Perform.E_Art.changedState) {
+        it.SetValue(p.src.GetState(), p.Prim);
+      } else if(p.Art==Perform.E_Art.remove) {
         _TaskIn.Enqueue(it);
       }
     }

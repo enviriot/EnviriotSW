@@ -104,7 +104,7 @@ namespace X13.Repository {
         Log.Warning("{0}.Move({1}, {2}) remove FAILED", this._path, nParent._path, nName);
         return;
       }
-      var c = Perform.Create(this, Perform.Art.move, prim);
+      var c = Perform.Create(this, Perform.E_Art.move, prim);
       c.o = this._path;
       _parent = nParent;
       this._name = nName;
@@ -113,7 +113,7 @@ namespace X13.Repository {
     }
     public void Remove(Topic prim = null) {
       this.disposed = true;
-      var c = Perform.Create(this, Perform.Art.remove, prim);
+      var c = Perform.Create(this, Perform.E_Art.remove, prim);
       _repo.DoCmd(c, false);
     }
     public SubRec Subscribe(SubRec.SubMask mask, Action<Perform, SubRec> func) {
@@ -142,11 +142,11 @@ namespace X13.Repository {
         }
       }
       if(!exist) {
-        var c = Perform.Create(this, Perform.Art.subscribe, this);
+        var c = Perform.Create(this, Perform.E_Art.subscribe, this);
         c.o = sb;
         _repo.DoCmd(c, false);
       } else {
-        var c = Perform.Create(this, Perform.Art.subAck, this);
+        var c = Perform.Create(this, Perform.E_Art.subAck, this);
         c.o = sb;
         _repo.DoCmd(c, false);
       }
@@ -296,7 +296,7 @@ namespace X13.Repository {
         return GetEnumerator();
       }
     }
-    internal static class I {
+    public static class I {
       public static void Init(Repo repo) {
         Topic._repo = repo;
         Topic.root = new Topic(null, "/", false);
@@ -310,7 +310,7 @@ namespace X13.Repository {
           t._manifest = JsLib.SetField(t._manifest, "attr", new JST.Number(0));
         }
 
-        var c = Perform.Create(t, Perform.Art.create, prim);
+        var c = Perform.Create(t, Perform.E_Art.create, prim);
         _repo.DoCmd(c, false);
 
         if(state != null) {
@@ -360,7 +360,7 @@ namespace X13.Repository {
                 next = new Topic(home, pt[i], fill);
                 home._children[pt[i]] = next;
                 if(fill) {  // else the Perform(create) will be added in Fill()
-                  var c = Perform.Create(next, Perform.Art.create, prim);
+                  var c = Perform.Create(next, Perform.E_Art.create, prim);
                   _repo.DoCmd(c, inter);
                 }
               }
@@ -386,8 +386,8 @@ namespace X13.Repository {
         } else {
           r = false;
           oc = t._mfst_pu.f_v;
-          if(cmd.prim != t._mfst_pu.prim) {
-            t._mfst_pu.prim = null; // inform all subscribers
+          if(cmd.Prim != t._mfst_pu.Prim) {
+            t._mfst_pu.Prim = null; // inform all subscribers
           }
         }
         t._mfst_pu.f_v = JsLib.SetField(oc, cmd.o as string, cmd.f_v);
@@ -417,7 +417,7 @@ namespace X13.Repository {
         SubRec sb;
         Topic t = cmd.src;
 
-        if((cmd.art == Perform.Art.subscribe || cmd.art == Perform.Art.subAck) && (sb = cmd.o as SubRec) != null) {
+        if((cmd.Art == Perform.E_Art.subscribe || cmd.Art == Perform.E_Art.subAck) && (sb = cmd.o as SubRec) != null) {
           try {
             sb.func(cmd, sb);
           }
@@ -429,8 +429,8 @@ namespace X13.Repository {
             for(int i = t._subRecords.Count-1; i >= 0; i--) {
               sb = t._subRecords[i];
               if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
-                  && (cmd.art != Perform.Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
-                  && (cmd.art != Perform.Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.old_o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
+                  && (cmd.Art != Perform.E_Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
+                  && (cmd.Art != Perform.E_Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.old_o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
                   ) {
                 try {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());
@@ -496,7 +496,7 @@ namespace X13.Repository {
       }
       public static bool Unsubscribe(Topic t, SubRec sr) {
         if(RemoveSubscripton(t, sr)) {
-          var c = Perform.Create(t, Perform.Art.unsubscribe, null);
+          var c = Perform.Create(t, Perform.E_Art.unsubscribe, null);
           c.o = sr;
           _repo.DoCmd(c, false);
           return true;

@@ -137,7 +137,7 @@ namespace X13.Periphery {
         d.Dispose();
       }
       JSC.JSValue jType;
-      if((p.art == Perform.Art.create || p.art == Perform.Art.changedField || p.art == Perform.Art.subscribe) && (jType = p.src.GetField("type")).ValueType == JSC.JSValueType.String
+      if((p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedField || p.Art == Perform.E_Art.subscribe) && (jType = p.src.GetField("type")).ValueType == JSC.JSValueType.String
         && jType.Value != null && (jType.Value as string).StartsWith("TWI")) {
         _devs.Add(new TwiDevice(p.src, this));
       }

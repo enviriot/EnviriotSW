@@ -163,7 +163,7 @@ namespace X13.Periphery {
       }
     }
 
-    private void MqsDevCctor(Topic t, Perform.Art a) {
+    private void MqsDevCctor(Topic t, Perform.E_Art a) {
       var dev = _devs.FirstOrDefault(z => z.name == t.name);
       if(dev == null) {
         dev = new MsDevice(this, t);

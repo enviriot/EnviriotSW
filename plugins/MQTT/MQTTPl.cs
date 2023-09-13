@@ -91,7 +91,7 @@ namespace X13.MQTT {
 
 
     private void SubFunc(Perform p, SubRec sr) {
-      if(p.art == Perform.Art.create) {
+      if(p.Art == Perform.E_Art.create) {
         return;
       }
       MqSite ms = _sites.FirstOrDefault(z => z.Owner == p.src);
@@ -100,7 +100,7 @@ namespace X13.MQTT {
         ms.Dispose();
         _sites.Remove(ms);
       }
-      if(p.art == Perform.Art.changedField || p.art==Perform.Art.subscribe) {
+      if(p.Art == Perform.E_Art.changedField || p.Art==Perform.E_Art.subscribe) {
         var uri = p.src.GetField("MQTT.uri").Value as string;
         if(string.IsNullOrEmpty(uri)) {
           return;

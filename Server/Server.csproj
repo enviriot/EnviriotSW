@@ -63,9 +63,6 @@
     <ApplicationIcon>logo32.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="LiteDB, Version=5.0.17.0, Culture=neutral, PublicKeyToken=4ee40123013c9f27, processorArchitecture=MSIL">
-      <HintPath>..\packages\LiteDB.5.0.17\lib\net45\LiteDB.dll</HintPath>
-    </Reference>
     <Reference Include="NiL.JS, Version=2.5.1560.0, Culture=neutral, PublicKeyToken=fa941a7c2a4de689, processorArchitecture=MSIL">
       <HintPath>..\packages\NiL.JS.2.5.1560\lib\net48\NiL.JS.dll</HintPath>
     </Reference>
@@ -90,7 +87,6 @@
     <Compile Include="IPlugModul.cs" />
     <Compile Include="JsExtLib.cs" />
     <Compile Include="JsLib.cs" />
-    <Compile Include="PersistentStorage\PersistentStoragePl.cs" />
     <Compile Include="Repository\Perform.cs" />
     <Compile Include="Repository\Repo.cs" />
     <Compile Include="Repository\RPC.cs" />

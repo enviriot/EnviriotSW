@@ -155,7 +155,7 @@ namespace X13.WebUI {
     }
 
     private void SubChanged(Perform p, SubRec sr) {
-      if(p.art==Perform.Art.subAck || p.prim==_ses.owner) {
+      if(p.Art==Perform.E_Art.subAck || p.Prim==_ses.owner) {
         return;
       }
       var vj = JsLib.Stringify(p.src.GetState());
