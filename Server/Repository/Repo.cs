@@ -15,6 +15,7 @@ namespace X13.Repository {
   [System.ComponentModel.Composition.ExportMetadata("priority", 1)]
   [System.ComponentModel.Composition.ExportMetadata("name", "Repository")]
   public class Repo : IPlugModul {
+    internal static string configPath;
     #region internal Members
     private ConcurrentQueue<Perform> _tcQueue;
     private List<Perform> _prOp;
@@ -343,14 +344,10 @@ namespace X13.Repository {
     #region IPlugModul Members
 
     public void Init() {
-      if(!Directory.Exists("../data")) {
-        Directory.CreateDirectory("../data");
-      }
-
       Topic.I.Init(this);
       _busyFlag = 1;
-      if(File.Exists("../data/server.xst")) {
-        Import("../data/server.xst");
+      if(File.Exists(configPath)) {
+        Import(configPath);
       }
       this.Tick();
       this.Tick();
@@ -417,7 +414,7 @@ namespace X13.Repository {
 
       if(_saveConfigT!=null && _saveConfigT<DateTime.Now) {
         _saveConfigT=null;
-        Export("../data/server.xst", Topic.root, true);
+        Export(configPath, Topic.root, true);
       }
 
       //if(QC!=0 || PC!=0 || DB!=0) X13.Log.Debug("PLC.Tick QC="+QC.ToString()+", PC="+PC.ToString()+", DB="+ DB.ToString());
@@ -425,7 +422,7 @@ namespace X13.Repository {
     }
 
     public void Stop() {
-      Export("../data/server.xst", Topic.root, true);
+      Export(configPath, Topic.root, true);
     }
 
     public bool enabled { get { return true; } set { if(!value) throw new ApplicationException("Repository disabled"); } }

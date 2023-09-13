@@ -87,7 +87,6 @@ namespace X13 {
     }
     public static bool IsLinux { get { return _isLinux; } }
 
-    private string _cfgPath;
     private Mutex _singleInstance;
     private Thread _thread;
     private AutoResetEvent _tick;
@@ -95,7 +94,7 @@ namespace X13 {
     private Timer _tickTimer;
 
     internal Programm(string cfgPath) {
-      _cfgPath = cfgPath;
+      X13.Repository.Repo.configPath = cfgPath;
       Log.Info("Enviriot v.{0}", Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
     }
     internal bool Start() {
