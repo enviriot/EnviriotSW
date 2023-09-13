@@ -357,7 +357,12 @@ namespace X13.Repository {
     }
 
     public void Start() {
-      Repo.Import("../data/base.xst");
+      var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+      using(var rs = assembly.GetManifestResourceStream("X13.Repository.base.xst")) {
+        using(var reader = new StreamReader(rs)) {
+          Import(reader, null);
+        }
+      }
       this.Tick();
       this.Tick();
       SubscribeAll(PublishSaveConfig);

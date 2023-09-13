@@ -119,6 +119,7 @@
     <None Include="app.config" />
     <None Include="app.manifest" />
     <None Include="packages.config" />
+    <EmbeddedResource Include="Repository\base.xst" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="HAServer.resx">
