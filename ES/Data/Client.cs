@@ -9,6 +9,7 @@ using System.Text;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using NiL.JS.Extensions;
 
 namespace X13.Data {
   internal class Client : NPC_UI {
@@ -75,7 +76,7 @@ namespace X13.Data {
       arr[0] = cmd;
       arr[1] = mid;
       for(int i = 0; i < arg.Length; i++) {
-        arr[i + 2] = arg[i]??JSC.JSValue.Undefined;
+        arr[i + 2] = arg[i] ?? JSC.JSValue.Undefined;
       }
       this.Send(new ClRequest(mid, arr, req));
     }
@@ -108,7 +109,7 @@ namespace X13.Data {
     }
 
     public override string ToString() {
-      return "x13://" + ( ( userName == null ? string.Empty : ( userName + "@" ) ) + server + ( port != EsBroker.EsSocketTCP.portDefault ? ( ":" + port.ToString() ) : string.Empty ) );
+      return "x13://" + ((userName == null ? string.Empty : (userName + "@")) + server + (port != EsBroker.EsSocketTCP.portDefault ? (":" + port.ToString()) : string.Empty));
     }
 
     private void Send(INotMsg msg) {
@@ -125,7 +126,7 @@ namespace X13.Data {
           throw new ArgumentException("msg");
         }
       } else if(Status == ClientState.BadAuth) {
-        msg.Response(false, new JSL.Array{ this.ToString(), "Bad username or password"});
+        msg.Response(false, new JSL.Array { this.ToString(), "Bad username or password" });
         App.PostMsg(msg);
       } else {
         lock(_connEvnt) {
@@ -144,94 +145,118 @@ namespace X13.Data {
         return;
       }
       switch(cmd) {
-      case 1:   // [Hello, (<string> server name)]
-        if(msg.Count > 1 && msg[1].ValueType == JSC.JSValueType.String) {
-          if(alias == null) {
-            alias = msg[1].Value as string;
-          }
-          Log.Info("{0} connected as {1}", this.ToString(), alias);
-          Status = ClientState.Ready;
-          lock(_connEvnt) {
-            foreach(var ce in _connEvnt) {
-              ce.Response(true, null);
-              App.PostMsg(ce);
+        case 1:   // [Hello, (<string> server name)]
+          if(msg.Count > 1 && msg[1].ValueType == JSC.JSValueType.String) {
+            if(alias == null) {
+              alias = msg[1].Value as string;
             }
-            _connEvnt.Clear();
+            Log.Info("{0} connected as {1}", this.ToString(), alias);
+            Status = ClientState.Ready;
+            lock(_connEvnt) {
+              foreach(var ce in _connEvnt) {
+                ce.Response(true, null);
+                App.PostMsg(ce);
+              }
+              _connEvnt.Clear();
+            }
+            this.root.GetAsync("/$YS/TYPES/Ext/Manifest").ContinueWith(HelloComplete);
           }
-          this.root.GetAsync("/$YS/TYPES/Ext/Manifest").ContinueWith(HelloComplete);
-        }
-        break;
-      case 3:  // [Response, msgId, success, [parameter | error]]
-        msgId = (int)msg[1];
-        lock(_reqs) {
-          req = _reqs.FirstOrDefault(z => z.msgId == msgId);
+          break;
+        case 3:  // [Response, msgId, success, [parameter | error]]
+          msgId = (int)msg[1];
+          lock(_reqs) {
+            req = _reqs.FirstOrDefault(z => z.msgId == msgId);
+            if(req != null) {
+              _reqs.Remove(req);
+            }
+          }
           if(req != null) {
-            _reqs.Remove(req);
+            req.Response((bool)msg[2], msg.Count > 3 ? msg[3] : null);
+            App.PostMsg(req);
           }
-        }
-        if(req != null) {
-          req.Response((bool)msg[2], msg.Count > 3 ? msg[3] : null);
-          App.PostMsg(req);
-        }
-        break;
-      case 4:  // [SubscribeResp, path, state, manifest]
-      case 8:  // [CreateResp, path, state, manifest]
-        if(msg.Count < 2 || msg[1].ValueType != JSC.JSValueType.String) {
-          Log.Warning("Synax error {0}", msg);
           break;
-        }
-        if(msg.Count == 4) {
+        case 4:  // [SubscribeResp, path, state, manifest]
+        case 8:  // [CreateResp, path, state, manifest]
+          if(msg.Count < 2 || msg[1].ValueType != JSC.JSValueType.String) {
+            Log.Warning("Synax error {0}", msg);
+            break;
+          }
+          if(msg.Count == 4) {
+            App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg[2], msg[3]));
+          } else {
+            App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, null, null));
+          }
+          break;
+        case 5:  // [SubAck, msgId, state, manifest, [children]]
+          if(msg.Count < 4 || msg[1].ValueType != JSC.JSValueType.Integer) {
+            Log.Warning("Synax error {0}", msg);
+            break;
+          }
+          msgId = (int)msg[1];
+          lock(_reqs) {
+            req = _reqs.FirstOrDefault(z => z.msgId == msgId);
+            if(req != null) {
+              _reqs.Remove(req);
+            }
+          }
+          if(req != null) {
+            var rreq = req.Request as DTopic.TopicReq;
+            App.PostMsg(new DTopic.ClientEvent(this.root, rreq.Current.path, cmd, msg[2], msg[3]));
+            if(JSL.Array.isArray(new JSC.Arguments() { msg[4] }).As<bool>()) {
+              foreach(var it in msg[4]) {
+                App.PostMsg(new DTopic.ClientEvent(rreq.Current, it.Value.As<string>(), cmd, null, null));
+              }
+            }
+            req.Response(true, new JSL.Boolean(true));
+            App.PostMsg(req);
+          }
+          break;
+        case 6:  // [Publish, path, state]
+          if((msg.Count == 2 || msg.Count == 3) && msg[1].ValueType == JSC.JSValueType.String) {
+            App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg.Count == 3 ? msg[2] : JSC.JSObject.Null, null));
+          } else {
+            Log.Warning("Synax error {0}", msg);
+          }
+          break;
+        case 10:  // [Move, oldPath, newParent, newName]
+          if(msg.Count != 4 || msg[1].ValueType != JSC.JSValueType.String || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String) {
+            Log.Warning("Synax error {0}", msg);
+            break;
+          }
           App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg[2], msg[3]));
-        } else {
+          break;
+        case 12:  // [Remove, path]
+          if(msg.Count != 2 || msg[1].ValueType != JSC.JSValueType.String) {
+            Log.Warning("Synax error {0}", msg);
+            break;
+          }
           App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, null, null));
-        }
-        break;
-      case 6:  // [Publish, path, state]
-        if((msg.Count == 2 || msg.Count == 3) && msg[1].ValueType == JSC.JSValueType.String) {
-          App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg.Count == 3?msg[2]:JSC.JSObject.Null, null));
-        } else {
-          Log.Warning("Synax error {0}", msg);
-        }
-        break;
-      case 10:  // [Move, oldPath, newParent, newName]
-        if(msg.Count!=4  || msg[1].ValueType != JSC.JSValueType.String || msg[2].ValueType != JSC.JSValueType.String || msg[3].ValueType != JSC.JSValueType.String) {
-          Log.Warning("Synax error {0}", msg);
           break;
-        }
-        App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, msg[2], msg[3]));
-        break;
-      case 12:  // [Remove, path]
-        if(msg.Count != 2 || msg[1].ValueType != JSC.JSValueType.String) {
-          Log.Warning("Synax error {0}", msg);
+        case 14:  // [ManifestChanged, path, manifest]
+          if(msg.Count != 3 || msg[1].ValueType != JSC.JSValueType.String) {
+            Log.Warning("Synax error {0}", msg);
+            break;
+          }
+          App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, null, msg[2]));
           break;
-        }
-        App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, null, null));
-        break;
-      case 14:  // [ManifestChanged, path, manifest]
-        if(msg.Count != 3 || msg[1].ValueType != JSC.JSValueType.String) {
-          Log.Warning("Synax error {0}", msg);
+        case 90:  // [Log, DateTime, level, message]
+          if(msg.Count != 4 || msg[1].ValueType != JSC.JSValueType.Date || !msg[2].IsNumber || msg[3].ValueType != JSC.JSValueType.String) {
+            Log.Warning("Synax error {0}", msg);
+            break;
+          }
+          Log.AddEntry((LogLevel)(int)msg[2], (msg[1].Value as JSL.Date).ToDateTime(), msg[3].Value as string);
           break;
-        }
-        App.PostMsg(new DTopic.ClientEvent(this.root, msg[1].Value as string, cmd, null, msg[2]));
-        break;
-      case 90:  // [Log, DateTime, level, message]
-        if(msg.Count != 4 || msg[1].ValueType != JSC.JSValueType.Date || !msg[2].IsNumber || msg[3].ValueType != JSC.JSValueType.String) {
-          Log.Warning("Synax error {0}", msg);
+        case 99:  // EsSocket Closed
+          _connEvnt.Clear();
+          _reqs.Clear();
+          root.Clear();
+          Status = ClientState.Offline;
           break;
-        }
-        Log.AddEntry((LogLevel)(int)msg[2], (msg[1].Value as JSL.Date).ToDateTime(), msg[3].Value as string);
-        break;
-      case 99:  // EsSocket Closed
-        _connEvnt.Clear();
-        _reqs.Clear();
-        root.Clear();
-        Status = ClientState.Offline;
-        break;
       }
     }
 
     private void HelloComplete(Task<DTopic> dt) {
-      if(!dt.IsFaulted && dt.IsCompleted && dt.Result!=null) {
+      if(!dt.IsFaulted && dt.IsCompleted && dt.Result != null) {
         this.TypeManifest = dt.Result;
       }
       this.root.GetAsync("/$YS/TYPES/Core").ContinueWith(LoadCoreTypes);
@@ -268,6 +293,7 @@ namespace X13.Data {
         _resp = value;
         _success = success;
       }
+      public INotMsg Request { get { return _req; } }
       public override string ToString() {
         return "ClRequest: " + data.ToString() + _resp == null ? string.Empty : (" >> " + _success.ToString());
       }

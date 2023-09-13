@@ -327,7 +327,7 @@ namespace X13.Data {
       return this.fullPath;
     }
 
-    private class TopicReq : INotMsg {
+    internal class TopicReq : INotMsg {
       private DTopic _cur;
       private string _path;
       private bool _create;
@@ -351,59 +351,12 @@ namespace X13.Data {
         this._tcs = new TaskCompletionSource<DTopic>();
       }
       public Task<DTopic> Task { get { return _tcs.Task; } }
-
+      public DTopic Current { get { return _cur; } }
       public void Process() {
         int idx1 = _cur.path.Length;
         if(idx1 > 1) {
           idx1++;
         }
-        if(_path == null || _path.Length <= _cur.path.Length) {
-          if(_cur._disposed) {
-            _tcs.SetResult(null);
-            lock(_cur) {
-              _cur._req = null;
-              if(this._reqs != null) {
-                foreach(var r in _reqs) {
-                  App.PostMsg(r);
-                }
-              }
-            }
-          } else if(_cur._state != null) {
-            if(_cur._typeLoading) {
-              _cur.changed+=TypeLoaded;
-            } else {
-              _tcs.SetResult(_cur);
-            }
-            lock(_cur) {
-              _cur._req = null;
-              if(this._reqs != null) {
-                foreach(var r in _reqs) {
-                  App.PostMsg(r);
-                }
-              }
-            }
-          } else {
-            lock(_cur) {
-              if(_cur._req != null && _cur._req != this) { //-V3054
-                if(_cur._req._reqs == null) {
-                  _cur._req._reqs = new List<TopicReq>();
-                }
-                _cur._req._reqs.Add(this);
-                return;
-              } else {
-                _cur._req = this;
-              }
-            }
-            _cur.Connection.SendReq(4, this, _cur.path, 3);
-          }
-          return;
-        }
-        DTopic next = null;
-        int idx2 = _path.IndexOf('/', idx1);
-        if(idx2 < 0) {
-          idx2 = _path.Length;
-        }
-        string name = _path.Substring(idx1, idx2 - idx1);
 
         if(_cur._children == null && _cur._state == null) {
           lock(_cur) {
@@ -417,9 +370,43 @@ namespace X13.Data {
               _cur._req = this;
             }
           }
-          _cur.Connection.SendReq(4, this, _cur.path, 3);
+          _cur.Connection.SendReq(5, this, _cur.path, 3);
           return;
         }
+        if(_path == null || _path.Length <= _cur.path.Length) {
+          if(_cur._disposed) {
+            _tcs.SetResult(null);
+            lock(_cur) {
+              _cur._req = null;
+              if(this._reqs != null) {
+                foreach(var r in _reqs) {
+                  App.PostMsg(r);
+                }
+              }
+            }
+          } else {
+            if(_cur._typeLoading) {
+              _cur.changed+=TypeLoaded;
+            } else {
+              _tcs.SetResult(_cur);
+            }
+            lock(_cur) {
+              _cur._req = null;
+              if(this._reqs != null) {
+                foreach(var r in _reqs) {
+                  App.PostMsg(r);
+                }
+              }
+            }
+          }
+          return;
+        }
+        DTopic next = null;
+        int idx2 = _path.IndexOf('/', idx1);
+        if(idx2 < 0) {
+          idx2 = _path.Length;
+        }
+        string name = _path.Substring(idx1, idx2 - idx1);
         next = _cur.GetChild(name, false);
         if(next == null) {
           if(_create) {
