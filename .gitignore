@@ -9,6 +9,7 @@
 /plugins/Logram/obj
 /plugins/MQTT/obj
 /plugins/MQTT_SN/obj
+/plugins/PersistentStorage/obj
 /plugins/WebUI/obj
 /Server/obj
 /Output/binUI
@@ -16,4 +17,5 @@
 /Output/bin_d
 /Output/data
 /Output/log
-/plugins/PersistentStorage/obj
+/Output/ES.cfg
+/Output/server.xst
