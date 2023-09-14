@@ -19,9 +19,8 @@ namespace X13.PersistentStorage {
     #region internal Members
     private const string DB_PATH = "../data/persist.ldb";
     private const string DBA_PATH = "../data/archive.ldb";
-    private const string DBH_PATH = "../data/history.ldb";
 
-    private LiteDatabase _db, _dba, _dbHist;
+    private LiteDatabase _db, _dba;
     private ILiteCollection<BsonDocument> _objects, _states, _archive, _history;
     private Topic _owner;
     private SortedDictionary<Topic, Stash> _base;
@@ -223,12 +222,6 @@ namespace X13.PersistentStorage {
           catch(Exception ex) {
             Log.Warning("ShrinkArch failed - " + ex.ToString());
           }
-          try {
-            ShrinkHistory();
-          }
-          catch(Exception ex) {
-            Log.Warning("ShrinkHistory failed - " + ex.ToString());
-          }
         }
       } while(!_terminate);
     }
@@ -236,11 +229,19 @@ namespace X13.PersistentStorage {
       bool exist = File.Exists(DB_PATH);
       _base = new SortedDictionary<Topic, Stash>();
       _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH });
-      if(exist && !_db.GetCollectionNames().Any(z => z == "objects")) {
-        exist = false;
+
+      bool exist_h = exist && _db.CollectionExists("history");
+      _history = _db.GetCollection<BsonDocument>("history");
+      if(!exist_h) {
+        _history.EnsureIndex("t");
       }
+      Log.History = History;
+      Log.Write += Log_Write;
+
+      exist = exist && _db.CollectionExists("objects");
       _objects = _db.GetCollection<BsonDocument>("objects");
       _states = _db.GetCollection<BsonDocument>("states");
+
       if(!exist) {
         _objects.EnsureIndex("p", true);
       } else {
@@ -299,15 +300,15 @@ namespace X13.PersistentStorage {
         }
         oldId.Clear();
       }
+
       exist = File.Exists(DBA_PATH);
       _dba = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DBA_PATH });
-      if(exist && !_dba.GetCollectionNames().Any(z => z == "archive")) {
+      if(exist && !_dba.CollectionExists("archive")) {
         exist = false;
       }
       _archive = _dba.GetCollection<BsonDocument>("archive");
       if(!exist) {
         _archive.EnsureIndex("t", false);
-        _archive.EnsureIndex("p", false);
       }
     }
     private void Save(Perform p) {
@@ -385,10 +386,13 @@ namespace X13.PersistentStorage {
       }
     }
     private void Backup() {
+      _history.DeleteMany(Query.LT("t", DateTime.Now.AddDays(-36)));
       var db = Interlocked.Exchange(ref _db, null);
       if(db != null) {
+        _history = null;
         _objects = null;
         _states = null;
+        db.Checkpoint();
         db.Dispose();
       }
       string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
@@ -398,6 +402,7 @@ namespace X13.PersistentStorage {
       _db.Rebuild();
       _objects = _db.GetCollection<BsonDocument>("objects");
       _states = _db.GetCollection<BsonDocument>("states");
+      _history = _db.GetCollection<BsonDocument>("history");
 
       try {
         DateTime now = DateTime.Now, fdt;
@@ -433,11 +438,8 @@ namespace X13.PersistentStorage {
           _archive.DeleteMany(Query.And(Query.EQ("p", t.path), Query.LT("t", DateTime.Now.AddDays(-k_d))));
         }
       }
+      _dba.Checkpoint();
       _dba.Rebuild();
-    }
-    private void ShrinkHistory() {
-      _history.DeleteMany(Query.LT("t", DateTime.Now.AddDays(-36)));
-      _dbHist.Rebuild();
     }
     private void SubFunc(Perform p) {
       if(p.Art == Perform.E_Art.subscribe || p.Art == Perform.E_Art.subAck || p.Art == Perform.E_Art.setField || p.Art == Perform.E_Art.setState || p.Art == Perform.E_Art.unsubscribe || p.Prim == _owner) {
@@ -459,18 +461,21 @@ namespace X13.PersistentStorage {
       var tba = topics.Select(z => new BsonValue(z)).ToArray();
 
       var rez = new JSL.Array();
+      var p1 = new BsonValue(begin);
+      var p2 = new BsonArray(tba);
+      var p3 = new BsonValue(end);
 
       if(end <= begin || count == 0) {  // end == MinValue
-        var p1 = new BsonValue(begin);
-        var p3 = new BsonValue(end);
-        var resp1 = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1);
+        ILiteQueryable<BsonDocument> resp1;
         if(end > begin) {
-          resp1 = resp1.Where(z => z["t"] < p3);
+          resp1 = _archive.Query().Where("$.t BETWEEN @0 AND @2 AND $.p IN @1", p1, p2, p3);
+        } else {
+          resp1 = _archive.Query().Where("$.t < @0 AND $.p IN @1", p1, p2);
         }
         if(count < 0) {
-          resp1 = resp1.OrderByDescending(z => z["t"]);
+          resp1 = resp1.OrderByDescending("$.t");
         } else if(count >= 0) {
-          resp1 = resp1.OrderBy(z => z["t"]);
+          resp1 = resp1.OrderBy("$.t");
         }
         var resp2 = count != 0 ? resp1.Limit(Math.Abs(count)).ToEnumerable() : resp1.ToEnumerable();
         JSL.Array lo = null;
@@ -494,8 +499,6 @@ namespace X13.PersistentStorage {
         }
       } else {
         var step = (end - begin).TotalSeconds / Math.Abs(count);
-        var p1 = new BsonValue(begin);
-        var p3 = new BsonValue(end);
 
         DateTime cursor = begin.AddSeconds(step);
         var f_cnt = new int[tba.Length];
@@ -511,10 +514,10 @@ namespace X13.PersistentStorage {
           f_cnt[i] = 0;
           l_delta[i] = -step;
           var p_i = tba[i];
-          var r = _archive.Query().Where(z => z["p"] == p_i && z["t"] < p1).OrderByDescending(z => z["t"]).Limit(1).ToArray();
-          l_val[i] = r.Length == 1 ? r[0]["v"].AsDouble : double.NaN;
+          var r = _archive.Query().Where("$.t < @1 and $.p = @2", p1, p_i).OrderByDescending("$.t").FirstOrDefault();
+          l_val[i] = r != null ? r["v"].AsDouble : double.NaN;
         }
-        var resp = _archive.Query().Where(z => tba.Contains(z["p"]) && z["t"] >= p1 && z["t"] < p3).OrderBy(z => z["t"]).ToEnumerable();
+        var resp = _archive.Query().Where("$.t BETWEEN @0 AND @2 AND $.p IN @1", p1, p2, p3).OrderBy("$.t").ToEnumerable();
         foreach(var li in resp) {
           var t_cur = li["t"].AsDateTime;
           if(t_cur >= cursor) {
@@ -596,15 +599,6 @@ namespace X13.PersistentStorage {
     }
     public void Start() {
       _terminate = false;
-      bool exist = File.Exists(DBH_PATH);
-      _dbHist = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DBH_PATH });
-      _history = _dbHist.GetCollection<BsonDocument>("history");
-      if(!exist) {
-        _history.EnsureIndex("t");
-      }
-      Log.History = History;
-      Log.Write += Log_Write;
-
       _tr = new Thread(new ThreadStart(ThreadM)) {
         IsBackground = true,
         Name = "PersistentStorage",
@@ -626,7 +620,6 @@ namespace X13.PersistentStorage {
         _tr.Abort();
       }
       Interlocked.Exchange(ref _db, null)?.Dispose();
-      Interlocked.Exchange(ref _dbHist, null)?.Dispose();
       _tick.Dispose();
     }
 
