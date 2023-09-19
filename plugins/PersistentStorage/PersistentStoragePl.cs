@@ -74,61 +74,61 @@ namespace X13.PersistentStorage {
         return BsonValue.Null;
       }
       switch(val.ValueType) {
-        case JSC.JSValueType.NotExists:
-        case JSC.JSValueType.NotExistsInObject:
-        case JSC.JSValueType.Undefined:
+      case JSC.JSValueType.NotExists:
+      case JSC.JSValueType.NotExistsInObject:
+      case JSC.JSValueType.Undefined:
+        return BsonValue.Null;
+      case JSC.JSValueType.Boolean:
+        return new BsonValue((bool)val);
+      case JSC.JSValueType.Date: {
+          if(val.Value is JSL.Date jsd) {
+            return new BsonValue(jsd.ToDateTime().ToUniversalTime());
+          }
           return BsonValue.Null;
-        case JSC.JSValueType.Boolean:
-          return new BsonValue((bool)val);
-        case JSC.JSValueType.Date: {
-            if(val.Value is JSL.Date jsd) {
-              return new BsonValue(jsd.ToDateTime().ToUniversalTime());
-            }
-            return BsonValue.Null;
-          }
-        case JSC.JSValueType.Double:
-          return new BsonValue((double)val);
-        case JSC.JSValueType.Integer:
-          return new BsonValue((int)val);
-        case JSC.JSValueType.String: {
-            var s = val.Value as string;
-            if(s != null && s.StartsWith("¤TR")) {
-              var t = Topic.I.Get(Topic.root, s.Substring(3), false, null, false, false);
-              if(t != null) {
-                if(_base.TryGetValue(t, out Stash tu)) {
-                  return tu.bm["_id"];
-                }
-              }
-              throw new ArgumentException("TopicRefernce(" + s.Substring(3) + ") NOT FOUND");
-            }
-            return new BsonValue(s);
-          }
-        case JSC.JSValueType.Object:
-          if(val.IsNull) {
-            return BsonValue.Null;
-          }
-          if(val is JSL.Array arr) {
-            var r = new BsonArray();
-            foreach(var f in arr) {
-              if(int.TryParse(f.Key, out int i)) {
-                while(i >= r.Count()) { r.Add(BsonValue.Null); }
-                r[i] = Js2Bs(f.Value);
+        }
+      case JSC.JSValueType.Double:
+        return new BsonValue((double)val);
+      case JSC.JSValueType.Integer:
+        return new BsonValue((int)val);
+      case JSC.JSValueType.String: {
+          var s = val.Value as string;
+          if(s != null && s.StartsWith("¤TR")) {
+            var t = Topic.I.Get(Topic.root, s.Substring(3), false, null, false, false);
+            if(t != null) {
+              if(_base.TryGetValue(t, out Stash tu)) {
+                return tu.bm["_id"];
               }
             }
-            return r;
+            throw new ArgumentException("TopicRefernce(" + s.Substring(3) + ") NOT FOUND");
           }
-          ByteArray ba = val as ByteArray;
-          if(ba != null || (ba = val.Value as ByteArray) != null) {
-            return new BsonValue(ba.GetBytes());
-          } {
-            var r = new BsonDocument();
-            foreach(var f in val) {
-              r[EscapFieldName(f.Key)] = Js2Bs(f.Value);
+          return new BsonValue(s);
+        }
+      case JSC.JSValueType.Object:
+        if(val.IsNull) {
+          return BsonValue.Null;
+        }
+        if(val is JSL.Array arr) {
+          var r = new BsonArray();
+          foreach(var f in arr) {
+            if(int.TryParse(f.Key, out int i)) {
+              while(i >= r.Count()) { r.Add(BsonValue.Null); }
+              r[i] = Js2Bs(f.Value);
             }
-            return r;
           }
-        default:
-          throw new NotImplementedException("js2Bs(" + val.ValueType.ToString() + ")");
+          return r;
+        }
+        ByteArray ba = val as ByteArray;
+        if(ba != null || (ba = val.Value as ByteArray) != null) {
+          return new BsonValue(ba.GetBytes());
+        } {
+          var r = new BsonDocument();
+          foreach(var f in val) {
+            r[EscapFieldName(f.Key)] = Js2Bs(f.Value);
+          }
+          return r;
+        }
+      default:
+        throw new NotImplementedException("js2Bs(" + val.ValueType.ToString() + ")");
       }
     }
     private string Id2Topic(ObjectId id) {
@@ -144,49 +144,49 @@ namespace X13.PersistentStorage {
         return JSC.JSValue.Undefined;
       }
       switch(val.Type) { //-V3002
-        case BsonType.ObjectId: {
-            var p = Id2Topic(val.AsObjectId);
-            if(p != null) {
-              return new JSL.String("¤TR" + p);
-            } else {
-              throw new ArgumentException("Unknown ObjectId: " + val.AsObjectId.ToString());
+      case BsonType.ObjectId: {
+          var p = Id2Topic(val.AsObjectId);
+          if(p != null) {
+            return new JSL.String("¤TR" + p);
+          } else {
+            throw new ArgumentException("Unknown ObjectId: " + val.AsObjectId.ToString());
+          }
+        }
+      case BsonType.Array: {
+          var arr = val.AsArray;
+          var r = new JSL.Array(arr.Count);
+          for(int i = 0; i < arr.Count; i++) {
+            if(!arr[i].IsNull) {
+              r[i] = Bs2Js(arr[i]);
             }
           }
-        case BsonType.Array: {
-            var arr = val.AsArray;
-            var r = new JSL.Array(arr.Count);
-            for(int i = 0; i < arr.Count; i++) {
-              if(!arr[i].IsNull) {
-                r[i] = Bs2Js(arr[i]);
-              }
-            }
-            return r;
+          return r;
+        }
+      case BsonType.Boolean:
+        return new JSL.Boolean(val.AsBoolean);
+      case BsonType.DateTime:
+        return JSC.JSValue.Marshal(val.AsDateTime.ToLocalTime());
+      case BsonType.Binary:
+        return new ByteArray(val.AsBinary);
+      case BsonType.Document: {
+          var r = JSC.JSObject.CreateObject();
+          var o = val.AsDocument;
+          foreach(var i in o) {
+            r[UnescapFieldName(i.Key)] = Bs2Js(i.Value);
           }
-        case BsonType.Boolean:
-          return new JSL.Boolean(val.AsBoolean);
-        case BsonType.DateTime:
-          return JSC.JSValue.Marshal(val.AsDateTime.ToLocalTime());
-        case BsonType.Binary:
-          return new ByteArray(val.AsBinary);
-        case BsonType.Document: {
-            var r = JSC.JSObject.CreateObject();
-            var o = val.AsDocument;
-            foreach(var i in o) {
-              r[UnescapFieldName(i.Key)] = Bs2Js(i.Value);
-            }
-            return r;
-          }
-        case BsonType.Double: {
-            return new JSL.Number(val.AsDouble);
-          }
-        case BsonType.Int32:
-          return new JSL.Number(val.AsInt32);
-        case BsonType.Int64:
-          return new JSL.Number(val.AsInt64);
-        case BsonType.Null:
-          return JSC.JSValue.Null;
-        case BsonType.String:
-          return new JSL.String(val.AsString);
+          return r;
+        }
+      case BsonType.Double: {
+          return new JSL.Number(val.AsDouble);
+        }
+      case BsonType.Int32:
+        return new JSL.Number(val.AsInt32);
+      case BsonType.Int64:
+        return new JSL.Number(val.AsInt64);
+      case BsonType.Null:
+        return JSC.JSValue.Null;
+      case BsonType.String:
+        return new JSL.String(val.AsString);
       }
       throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
     }
@@ -247,7 +247,8 @@ namespace X13.PersistentStorage {
         try {
           dba.Commit();
           dba.Checkpoint();
-        }catch(Exception ex) {
+        }
+        catch(Exception ex) {
           Log.Warning("PersistenStorage.Arch.Terminate - {0}", ex);
         }
         dba.Dispose();
@@ -257,7 +258,8 @@ namespace X13.PersistentStorage {
         try {
           db.Commit();
           db.Checkpoint();
-        }catch(Exception ex) {
+        }
+        catch(Exception ex) {
           Log.Warning("PersistenStorage.DB.Terminate - {0}", ex);
         }
         db.Dispose();
@@ -488,7 +490,7 @@ namespace X13.PersistentStorage {
         al = _archLog.FindOne("$.p=@0", t.path);
         if(al == null) {
           var min = _archive.Query().Where("$.p=@0", t.path).OrderBy("$.t").FirstOrDefault();
-          al = new ArchLog(t, DateTime.Now, min == null ? DateTime.Now : min["t"].AsDateTime);
+          al = new ArchLog(t, DateTime.Now.AddDays(-1.5*ArchLog.ARCH_JITTER), min == null ? DateTime.Now : min["t"].AsDateTime);
           _archLog.Insert(al);
         }
         _archLst.Add(al);
@@ -640,53 +642,48 @@ namespace X13.PersistentStorage {
         say+=Math.Abs(y);
         n++;
       }
-      var nt = t0.AddMinutes(interval);
-      var r = _archive.Query().Where("$.t>=@0 AND $.p=@1", t0, path).OrderBy("$.t").ExecuteReader();
-      if(!r.Read()) {
-        return DateTime.Now;
-      }
-      t0 = r.Current["t"].AsDateTime.ToLocalTime();
-      if(t0 > nt) {
-        r.Dispose();
-        return t0;
-      }
-      Summs(0, r.Current["v"].AsDouble);
-      //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), r.Current["v"].AsDouble);
-      if(!r.Read()) {
-        r.Dispose();
-        return DateTime.Now;
-      }
-      var t1 = r.Current["t"].AsDateTime.ToLocalTime();
-      if(t1 > nt) {
-        r.Dispose();
-        return t1;
-      }
-      Summs((t1 - t0).TotalSeconds, r.Current["v"].AsDouble);
-      var o1 = r.Current;
-      DateTime t2;
-      double v2;
-      while(r.Read()) {
-        t2 = r.Current["t"].AsDateTime.ToLocalTime();
-        if(t2 > nt) {
-          break;
+      DateTime t1 = DateTime.Now, t2, nt = t0.AddMinutes(interval);
+
+      using(var r = _archive.Query().Where("$.t>=@0 AND $.p=@1", t0, path).OrderBy("$.t").ExecuteReader()) {
+        if(!r.Read()) {
+          return DateTime.Now;
         }
-        v2 = r.Current["v"].AsDouble;
-        Summs((t2 - t0).TotalSeconds, v2);
-        var det = sxx*n-sx*sx;                      // Линейная регрессия, Метод наименьших квадратов
-        var k = (sxy*n-sx*sy)/det;
-        var y0 = (sy-k*sx)/n;
-        var ve = y0 + k*(t2 - t0).TotalSeconds;
-        var err = (v2 - ve)*100*n/say;
-        if(Math.Abs(err) > 5) {
-          break;
+        t0 = r.Current["t"].AsDateTime.ToLocalTime();
+        if(t0 > nt) {
+          return t0;
         }
-        //Log.Debug(" | {1}, {2}, {3:0.00}%", path, t1.ToLongTimeString(), o1["v"].AsDouble, err);
-        _archive.Delete(o1["_id"]);
-        o1 = r.Current;
-        t1 = t2;
+        Summs(0, r.Current["v"].AsDouble);
+        //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), r.Current["v"].AsDouble);
+        BsonValue o1 = null;
+        double v2;
+
+        while(r.Read()) {
+          t2 = r.Current["t"].AsDateTime.ToLocalTime();
+          if(t2 > nt) {
+            if(o1==null) {
+              t1 = t2;
+            }
+            break;
+          }
+          v2 = r.Current["v"].AsDouble;
+          Summs((t2 - t0).TotalSeconds, v2);
+          if(o1!=null) {
+            var det = sxx*n-sx*sx;                      // Линейная регрессия, Метод наименьших квадратов
+            var k = (sxy*n-sx*sy)/det;
+            var y0 = (sy-k*sx)/n;
+            var ve = y0 + k*(t2 - t0).TotalSeconds;
+            var err = (v2 - ve)*100*n/say;
+            if(Math.Abs(err) > 5) {
+              break;
+            }
+            //Log.Debug(" | {1}, {2}, {3:0.00}%", path, t1.ToLongTimeString(), o1["v"].AsDouble, err);
+            _archive.Delete(o1["_id"]);
+          }
+          o1 = r.Current;
+          t1 = t2;
+        }
+        //Log.Debug(" v {1}, {2}", path, t1.ToLongTimeString(), o1==null ? double.NaN : o1["v"].AsDouble);
       }
-      //Log.Debug(" v {1}, {2}", path, t1.ToLongTimeString(), o1["v"].AsDouble);
-      r.Dispose();
       return t1;
     }
     private DateTime ArchCompact2(string path, DateTime bt, double interval) {
@@ -828,7 +825,7 @@ namespace X13.PersistentStorage {
     }
     private class ArchLog {
       public const double ARCH_JITTER = 0.1; // 2:24
-      public const double ARCH_JITTER2 = 10;
+      public const double ARCH_JITTER2 = 10; // days
 
       public ArchLog(Topic t, DateTime ct, DateTime at) {
         Id = ObjectId.NewObjectId();
