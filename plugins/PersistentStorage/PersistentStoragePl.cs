@@ -630,6 +630,16 @@ namespace X13.PersistentStorage {
     }
     private DateTime ArchCompact1(string path, DateTime t0, double interval) {
       //Log.Debug("OptimizeArch({0}, {1}, {2})", path, t0.ToString(), interval);
+      double sx=0, sy=0, sxy=0, sxx=0, say=0;
+      int n = 0;
+      void Summs(double x, double y) {
+        sx+=x;
+        sy+=y;
+        sxy+=x*y;
+        sxx+=x*x;
+        say+=Math.Abs(y);
+        n++;
+      }
       var nt = t0.AddMinutes(interval);
       var r = _archive.Query().Where("$.t>=@0 AND $.p=@1", t0, path).OrderBy("$.t").ExecuteReader();
       if(!r.Read()) {
@@ -640,8 +650,8 @@ namespace X13.PersistentStorage {
         r.Dispose();
         return t0;
       }
-      var v0 = r.Current["v"].AsDouble;
-      //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), v0);
+      Summs(0, r.Current["v"].AsDouble);
+      //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), r.Current["v"].AsDouble);
       if(!r.Read()) {
         r.Dispose();
         return DateTime.Now;
@@ -651,18 +661,26 @@ namespace X13.PersistentStorage {
         r.Dispose();
         return t1;
       }
+      Summs((t1 - t0).TotalSeconds, r.Current["v"].AsDouble);
       var o1 = r.Current;
       DateTime t2;
+      double v2;
       while(r.Read()) {
         t2 = r.Current["t"].AsDateTime.ToLocalTime();
         if(t2 > nt) {
           break;
         }
-        var ve = v0 + ((o1["v"].AsDouble - v0) / (t1 - t0).TotalSeconds) * (t2 - t0).TotalSeconds;
-        if(Math.Abs(r.Current["v"].AsDouble - ve) > Math.Abs(ve * 0.05)) {
+        v2 = r.Current["v"].AsDouble;
+        Summs((t2 - t0).TotalSeconds, v2);
+        var det = sxx*n-sx*sx;                      // Линейная регрессия, Метод наименьших квадратов
+        var k = (sxy*n-sx*sy)/det;
+        var y0 = (sy-k*sx)/n;
+        var ve = y0 + k*(t2 - t0).TotalSeconds;
+        var err = (v2 - ve)*100*n/say;
+        if(Math.Abs(err) > 5) {
           break;
         }
-        //Log.Debug(" | {1}, {2}", path, t1.ToLongTimeString(), o1["v"].AsDouble);
+        //Log.Debug(" | {1}, {2}, {3:0.00}%", path, t1.ToLongTimeString(), o1["v"].AsDouble, err);
         _archive.Delete(o1["_id"]);
         o1 = r.Current;
         t1 = t2;
@@ -809,8 +827,8 @@ namespace X13.PersistentStorage {
       public JSC.JSValue js;
     }
     private class ArchLog {
-      public const double ARCH_JITTER = 0.07; // 100.8 min
-      public const double ARCH_JITTER2 = 7;
+      public const double ARCH_JITTER = 0.1; // 2:24
+      public const double ARCH_JITTER2 = 10;
 
       public ArchLog(Topic t, DateTime ct, DateTime at) {
         Id = ObjectId.NewObjectId();
