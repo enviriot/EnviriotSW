@@ -615,7 +615,7 @@ namespace X13.PersistentStorage {
         double k_d = al.Keep;
         if(k_d > ArchLog.ARCH_JITTER) {
           if(al.Ct < DateTime.Now.AddDays(-ArchLog.ARCH_JITTER)) {
-            al.Ct = ArchCompact1(al.Path, al.Ct, 5.01);
+            al.Ct = ArchCompact0(al.Path, al.Ct, 5.01);
             _archLog.Update(al);
           } else if(al.At < DateTime.Now.AddDays(-ArchLog.ARCH_JITTER2)) {
             al.At = ArchCompact2(al.Path, al.At.AddMinutes(-al.At.Minute).AddSeconds(-al.At.Second), 60);
@@ -630,6 +630,51 @@ namespace X13.PersistentStorage {
         }
       }
     }
+    /// <summary>наивный вариант</summary>
+    private DateTime ArchCompact0(string path, DateTime t0, double interval) {
+      //Log.Debug("OptimizeArch({0}, {1}, {2})", path, t0.ToString(), interval);
+      var nt = t0.AddMinutes(interval);
+      var r = _archive.Query().Where("$.t>=@0 AND $.p=@1", t0, path).OrderBy("$.t").ExecuteReader();
+      if(!r.Read()) {
+        return DateTime.Now;
+      }
+      t0 = r.Current["t"].AsDateTime.ToLocalTime();
+      if(t0 > nt) {
+        r.Dispose();
+        return t0;
+      }
+      var v0 = r.Current["v"].AsDouble;
+      //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), v0);
+      if(!r.Read()) {
+        r.Dispose();
+        return DateTime.Now;
+      }
+      var t1 = r.Current["t"].AsDateTime.ToLocalTime();
+      if(t1 > nt) {
+        r.Dispose();
+        return t1;
+      }
+      var o1 = r.Current;
+      DateTime t2;
+      while(r.Read()) {
+        t2 = r.Current["t"].AsDateTime.ToLocalTime();
+        if(t2 > nt) {
+          break;
+        }
+        var ve = v0 + ((o1["v"].AsDouble - v0) / (t1 - t0).TotalSeconds) * (t2 - t0).TotalSeconds;
+        if(Math.Abs(r.Current["v"].AsDouble - ve) > Math.Abs(ve * 0.05)) {
+          break;
+        }
+        //Log.Debug(" | {1}, {2}", path, t1.ToLongTimeString(), o1["v"].AsDouble);
+        _archive.Delete(o1["_id"]);
+        o1 = r.Current;
+        t1 = t2;
+      }
+      //Log.Debug(" v {1}, {2}", path, t1.ToLongTimeString(), o1["v"].AsDouble);
+      r.Dispose();
+      return t1;
+    }
+    /// <summary>Линейная регрессия</summary>
     private DateTime ArchCompact1(string path, DateTime t0, double interval) {
       //Log.Debug("OptimizeArch({0}, {1}, {2})", path, t0.ToString(), interval);
       double sx=0, sy=0, sxy=0, sxx=0, say=0;
@@ -686,6 +731,7 @@ namespace X13.PersistentStorage {
       }
       return t1;
     }
+    /// <summary>средневзвешенное за период</summary>
     private DateTime ArchCompact2(string path, DateTime bt, double interval) {
       var et = bt.AddMinutes(interval);
       var l_d = _archive.Query().Where("$.t < @1 and $.p = @2", bt, path).OrderByDescending("$.t").FirstOrDefault();
