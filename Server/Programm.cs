@@ -107,15 +107,17 @@ namespace X13 {
         _singleInstance = null;
         return false;
       }
-      if(!LoadPlugins()) {
-        return false;
-      }
       _tick = new AutoResetEvent(false);
       _terminate = false;
       _thread = new Thread(new ThreadStart(PrThread));
       _thread.Priority = ThreadPriority.Highest;
       _thread.Name = "MainTick";
       _thread.IsBackground = false;
+
+      if(!LoadPlugins()) {
+        return false;
+      }
+
       _thread.Start();
 
       return true;

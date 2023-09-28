@@ -1,206 +1,33 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
-using JSC = NiL.JS.Core;
-using JSL = NiL.JS.BaseLibrary;
-using LiteDB;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
-using X13.Repository;
 using System.Threading;
-using System.IO;
+using JSL = NiL.JS.BaseLibrary;
+using JSC = NiL.JS.Core;
 using NiL.JS.Extensions;
-using System.Runtime.CompilerServices;
-using static X13.Repository.Topic;
+using X13.Repository;
+using MySqlConnector;
 
 namespace X13.PersistentStorage {
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 2)]
-  [System.ComponentModel.Composition.ExportMetadata("name", "PersistentStorage")]
-  internal class PersistentStoragePl : IPlugModul {
-    #region internal Members
-    private const string DB_PATH = "../data/persist.ldb";
-    private const string DBA_PATH = "../data/archive.ldb";
-
-    private LiteDatabase _db, _dba;
-    private ILiteCollection<BsonDocument> _objects, _states, _history;
-    private ILiteCollection<BsonDocument> _archive;
-    private ILiteCollection<ArchLog> _archLog;
-    private List<ArchLog> _archLst;
-    private int _archIdx;
-    private Topic _owner;
-    private SortedDictionary<Topic, Stash> _base;
-    private readonly System.Collections.Concurrent.ConcurrentQueue<Perform> _q;
-    private Thread _tr;
-    private bool _terminate;
-    private readonly AutoResetEvent _tick;
-
-    private static string EscapFieldName(string fn) {
-      if(string.IsNullOrEmpty(fn)) {
-        throw new ArgumentNullException("PersistentStorage.EscapFieldName()");
-      }
-      StringBuilder sb = new StringBuilder();
-
-      for(var i = 0; i < fn.Length; i++) {
-        var c = fn[i];
-
-        if(char.IsLetterOrDigit(c) || (c == '$' && i == 0) || (c == '-' && i > 0)) {
-          sb.Append(c);
-        } else {
-          sb.Append("_");
-          sb.Append(((ushort)c).ToString("X4"));
-        }
-      }
-      return sb.ToString();
-    }
-    private static string UnescapFieldName(string fn) {
-      if(string.IsNullOrEmpty(fn)) {
-        throw new ArgumentNullException("PersistentStorage.UnescapFieldName()");
-      }
-      StringBuilder sb = new StringBuilder();
-      for(var i = 0; i < fn.Length; i++) {
-        var c = fn[i];
-        if(c == '_' && i + 4 < fn.Length && ushort.TryParse(fn.Substring(i + 1, 4), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out ushort cc)) {
-          i += 4;
-          sb.Append((char)cc);
-        } else {
-          sb.Append(c);
-        }
-      }
-      return sb.ToString();
-    }
-    private BsonValue Js2Bs(JSC.JSValue val) {
-      if(val == null) {
-        return BsonValue.Null;
-      }
-      switch(val.ValueType) {
-      case JSC.JSValueType.NotExists:
-      case JSC.JSValueType.NotExistsInObject:
-      case JSC.JSValueType.Undefined:
-        return BsonValue.Null;
-      case JSC.JSValueType.Boolean:
-        return new BsonValue((bool)val);
-      case JSC.JSValueType.Date: {
-          if(val.Value is JSL.Date jsd) {
-            return new BsonValue(jsd.ToDateTime().ToUniversalTime());
-          }
-          return BsonValue.Null;
-        }
-      case JSC.JSValueType.Double:
-        return new BsonValue((double)val);
-      case JSC.JSValueType.Integer:
-        return new BsonValue((int)val);
-      case JSC.JSValueType.String: {
-          var s = val.Value as string;
-          if(s != null && s.StartsWith("¤TR")) {
-            var t = Topic.I.Get(Topic.root, s.Substring(3), false, null, false, false);
-            if(t != null) {
-              if(_base.TryGetValue(t, out Stash tu)) {
-                return tu.bm["_id"];
-              }
-            }
-            throw new ArgumentException("TopicRefernce(" + s.Substring(3) + ") NOT FOUND");
-          }
-          return new BsonValue(s);
-        }
-      case JSC.JSValueType.Object:
-        if(val.IsNull) {
-          return BsonValue.Null;
-        }
-        if(val is JSL.Array arr) {
-          var r = new BsonArray();
-          foreach(var f in arr) {
-            if(int.TryParse(f.Key, out int i)) {
-              while(i >= r.Count()) { r.Add(BsonValue.Null); }
-              r[i] = Js2Bs(f.Value);
-            }
-          }
-          return r;
-        }
-        ByteArray ba = val as ByteArray;
-        if(ba != null || (ba = val.Value as ByteArray) != null) {
-          return new BsonValue(ba.GetBytes());
-        } {
-          var r = new BsonDocument();
-          foreach(var f in val) {
-            r[EscapFieldName(f.Key)] = Js2Bs(f.Value);
-          }
-          return r;
-        }
-      default:
-        throw new NotImplementedException("js2Bs(" + val.ValueType.ToString() + ")");
-      }
-    }
-    private string Id2Topic(ObjectId id) {
-      var d = _objects.FindById(id);
-      BsonValue p;
-      if(d != null && (p = d["p"]) != null && p.IsString) {
-        return p.AsString;
-      }
-      return null;
-    }
-    private JSC.JSValue Bs2Js(BsonValue val) {
-      if(val == null) {
-        return JSC.JSValue.Undefined;
-      }
-      switch(val.Type) { //-V3002
-      case BsonType.ObjectId: {
-          var p = Id2Topic(val.AsObjectId);
-          if(p != null) {
-            return new JSL.String("¤TR" + p);
-          } else {
-            throw new ArgumentException("Unknown ObjectId: " + val.AsObjectId.ToString());
-          }
-        }
-      case BsonType.Array: {
-          var arr = val.AsArray;
-          var r = new JSL.Array(arr.Count);
-          for(int i = 0; i < arr.Count; i++) {
-            if(!arr[i].IsNull) {
-              r[i] = Bs2Js(arr[i]);
-            }
-          }
-          return r;
-        }
-      case BsonType.Boolean:
-        return new JSL.Boolean(val.AsBoolean);
-      case BsonType.DateTime:
-        return JSC.JSValue.Marshal(val.AsDateTime.ToLocalTime());
-      case BsonType.Binary:
-        return new ByteArray(val.AsBinary);
-      case BsonType.Document: {
-          var r = JSC.JSObject.CreateObject();
-          var o = val.AsDocument;
-          foreach(var i in o) {
-            r[UnescapFieldName(i.Key)] = Bs2Js(i.Value);
-          }
-          return r;
-        }
-      case BsonType.Double: {
-          return new JSL.Number(val.AsDouble);
-        }
-      case BsonType.Int32:
-        return new JSL.Number(val.AsInt32);
-      case BsonType.Int64:
-        return new JSL.Number(val.AsInt64);
-      case BsonType.Null:
-        return JSC.JSValue.Null;
-      case BsonType.String:
-        return new JSL.String(val.AsString);
-      }
-      throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
+  [System.ComponentModel.Composition.ExportMetadata("name", "MariaDB")]
+  internal class MariaDB_Pl : PersistentStorageBase, IPlugModul {
+    private const string DB_NAME = "Enviriot";
+    public MariaDB_Pl() : base("MariaDB") {
+      //_archLst = new List<ArchLog>();
+      //JsExtLib.AQuery = this.AQuery;
     }
 
-    private void ThreadM() {
-      DateTime backupDT;
-      DateTime backupDT_Arch;
-      if(File.Exists(DB_PATH)) {
-        string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
-        File.Copy(DB_PATH, fb);
-        Log.Info("backup {0} created", fb);
-      }
-      Load();
-      _tick.Set();
+    //#region Persisten Storage Members
+
+    private MySqlConnection _db;
+
+    protected override void ThreadM() {
+      /*
       backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.25);
       backupDT_Arch = DateTime.Now.AddDays(1).Date.AddHours(3.5);
       do {
@@ -263,9 +90,60 @@ namespace X13.PersistentStorage {
           Log.Warning("PersistenStorage.DB.Terminate - {0}", ex);
         }
         db.Dispose();
-      }
+      }*/
     }
-    private void Load() {
+    protected override void Load() {
+      string sUrl = "tcp://user:pa$w0rd@localhost/";
+      var tUrl = _owner.Get("url", true, _owner);
+      if(tUrl.GetState().ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(tUrl.GetState().As<string>())) {
+        tUrl.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+        tUrl.SetState(sUrl);
+      } else {
+        sUrl = tUrl.GetState().As<string>();
+      }
+      var uri = new Uri(sUrl);
+      var builder = new MySqlConnectionStringBuilder { Server = uri.DnsSafeHost };
+      if(!string.IsNullOrEmpty(uri.UserInfo)) {
+        var items = uri.UserInfo.Split(new[] { ':' });
+        if(items.Length > 1 ) {
+          builder.UserID = items[0];
+          builder.Password = items[1];
+        } else {
+          builder.UserID = uri.UserInfo;
+        }
+      }
+      if(uri.Port>0) {
+        builder.Port = (uint)uri.Port;
+      }
+      _db = new MySqlConnection(builder.ConnectionString);
+      _db.Open();
+      bool exist;
+      using(var cmd =  _db.CreateCommand()) {
+        cmd.CommandText = "SELECT count(*) FROM INFORMATION_SCHEMA.SCHEMATA where SCHEMA_NAME = @name;";
+        cmd.Parameters.AddWithValue("name", DB_NAME);
+        exist = 1 == (long)cmd.ExecuteScalar();
+      }
+      if(!exist) {
+        using(var cmd = _db.CreateCommand()) {
+          cmd.CommandText = "CREATE DATABASE "+ DB_NAME + ";";
+          cmd.ExecuteNonQuery();
+        }
+      }
+      _db.Close();
+      builder.Database = DB_NAME;
+      _db = new MySqlConnection(builder.ConnectionString);
+      _db.Open();
+      if(!exist) {
+        using(var batch = _db.CreateBatch()) {
+          batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TABLE PS(id INT AUTO_INCREMENT PRIMARY KEY, p TEXT NOT NULL, m TEXT, s TEXT);"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TABLE ARCH (id int NOT NULL AUTO_INCREMENT, p int NOT NULL, dt datetime NOT NULL, v double NOT NULL, PRIMARY KEY (id), KEY ARCH_FK (p), KEY ARCH_dt_IDX (dt) USING BTREE, CONSTRAINT ARCH_FK FOREIGN KEY (p) REFERENCES PS(id) ON DELETE CASCADE)"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TABLE ARCH_W(p INT PRIMARY KEY, dt1 DATETIME, dt2 DATETIME, CONSTRAINT ARCH_W_FK FOREIGN KEY (p) REFERENCES PS(id) ON DELETE CASCADE ON UPDATE RESTRICT);"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TRIGGER ARCH_DATA AFTER UPDATE ON PS FOR EACH ROW BEGIN IF (NEW.s != OLD.s AND JSON_VALUE(NEW.m, '$.Arch.enable') AND (JSON_TYPE(NEW.s) = 'INTEGER' OR JSON_TYPE(NEW.s) = 'DOUBLE')) THEN INSERT INTO ARCH (p, dt, v) VALUES (NEW.id, NOW(), JSON_VALUE(NEW.s, '$')); END IF; END"));
+          batch.ExecuteNonQuery();
+        }
+      }
+
+      /*
       bool exist = File.Exists(DB_PATH);
       _base = new SortedDictionary<Topic, Stash>();
       _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH }) { CheckpointSize = 50 };
@@ -356,8 +234,9 @@ namespace X13.PersistentStorage {
       _archLog = _dba.GetCollection<ArchLog>("archLog");
       if(!exist) {
         _archLog.EnsureIndex("p", false);
-      }
+      }*/
     }
+    /*
     private void Save(Perform p) {
       Topic t = p.src;
       Stash a;
@@ -468,29 +347,93 @@ namespace X13.PersistentStorage {
       catch(System.IO.IOException) {
       }
     }
-    private void SubFunc(Perform p) {
-      if(p.Art == Perform.E_Art.subscribe || p.Art == Perform.E_Art.subAck || p.Art == Perform.E_Art.setField || p.Art == Perform.E_Art.setState || p.Art == Perform.E_Art.unsubscribe || p.Prim == _owner) {
-        return;
-      }
-      _q.Enqueue(p);
-    }
-    #endregion internal Members
+    #endregion Persisten Storage Members
 
-    public PersistentStoragePl() {
-      _tick = new AutoResetEvent(false);
-      _q = new System.Collections.Concurrent.ConcurrentQueue<Perform>();
-      _archLst = new List<ArchLog>();
-      JsExtLib.AQuery = this.AQuery;
+    #region History
+    private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
+      if(_history != null && ll != LogLevel.Debug) {
+        var d = new BsonDocument {
+          ["_id"] = ObjectId.NewObjectId(),
+          ["t"] = new BsonValue(dt.ToUniversalTime()),
+          ["l"] = new BsonValue((int)ll),
+          ["m"] = new BsonValue(msg)
+        };
+        _history.Insert(d);
+      }
     }
+    private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
+      var t = new BsonValue(dt);
+      return _history.Query().Where(z => z["t"] < t).OrderByDescending(z => z["t"]).Limit(cnt).ToEnumerable()
+        //Find(Query.And(Query.All("t", Query.Descending), Query.LT("t", t)), 0, cnt)
+        .Select(z => new Log.LogRecord {
+          dt = z["t"].AsDateTime,
+          ll = (LogLevel)z["l"].AsInt32,
+          format = z["m"].AsString,
+          args = null
+        });
+      return null;
+    }
+    #endregion History
 
     #region Archivist
+    private const string DBA_PATH = "../data/archive.ldb";
+    private LiteDatabase _dba;
+    private ILiteCollection<BsonDocument> _archive;
+    private ILiteCollection<ArchLog> _archLog;
+    private readonly List<ArchLog> _archLst;
+    private int _archIdx;
+
+    private class ArchLog {
+      public const double ARCH_JITTER = 0.1; // 2:24
+      public const double ARCH_JITTER2 = 10; // days
+
+      public ArchLog(Topic t, DateTime ct, DateTime at) {
+        Id = ObjectId.NewObjectId();
+        Path = t.path;
+        Ct = ct;
+        At = at;
+        topic = t;
+      }
+      [BsonCtor]
+      public ArchLog(ObjectId _id, string p, DateTime ct, DateTime at) {
+        Id = _id;
+        Path = p;
+        Ct = ct;
+        At = at;
+        topic = Topic.root.Get(Path, false);
+      }
+      public ObjectId Id { get; private set; }
+      [BsonField("p")]
+      public string Path { get; private set; }
+      [BsonField("ct")]
+      public DateTime Ct { get; set; }
+      [BsonField("at")]
+      public DateTime At { get; set; }
+      [BsonIgnore]
+      public readonly Topic topic;
+      [BsonIgnore]
+      public double Keep {
+        get {
+          if(topic == null) {
+            return double.NaN;
+          }
+          var keep = topic.GetField("Arch.keep");
+          double k_d;
+          if((keep.ValueType != JSC.JSValueType.Double && keep.ValueType != JSC.JSValueType.Integer) || (k_d = keep.As<double>()) <= 0) {
+            return ARCH_JITTER2;
+          }
+          return k_d;
+        }
+      }
+    }
+
     private ArchLog ExistOrCreate(Topic t) {
       ArchLog al;
       if((al = _archLst.Find(z => z.topic == t)) == null) {
         al = _archLog.FindOne("$.p=@0", t.path);
         if(al == null) {
           var min = _archive.Query().Where("$.p=@0", t.path).OrderBy("$.t").FirstOrDefault();
-          al = new ArchLog(t, DateTime.Now.AddDays(-1.5*ArchLog.ARCH_JITTER), min == null ? DateTime.Now : min["t"].AsDateTime);
+          al = new ArchLog(t, DateTime.Now.AddDays(-1.5 * ArchLog.ARCH_JITTER), min == null ? DateTime.Now : min["t"].AsDateTime);
           _archLog.Insert(al);
         }
         _archLst.Add(al);
@@ -677,14 +620,14 @@ namespace X13.PersistentStorage {
     /// <summary>Линейная регрессия</summary>
     private DateTime ArchCompact1(string path, DateTime t0, double interval) {
       //Log.Debug("OptimizeArch({0}, {1}, {2})", path, t0.ToString(), interval);
-      double sx=0, sy=0, sxy=0, sxx=0, say=0;
+      double sx = 0, sy = 0, sxy = 0, sxx = 0, say = 0;
       int n = 0;
       void Summs(double x, double y) {
-        sx+=x;
-        sy+=y;
-        sxy+=x*y;
-        sxx+=x*x;
-        say+=Math.Abs(y);
+        sx += x;
+        sy += y;
+        sxy += x * y;
+        sxx += x * x;
+        say += Math.Abs(y);
         n++;
       }
       DateTime t1 = DateTime.Now, t2, nt = t0.AddMinutes(interval);
@@ -705,19 +648,19 @@ namespace X13.PersistentStorage {
         while(r.Read()) {
           t2 = r.Current["t"].AsDateTime.ToLocalTime();
           if(t2 > nt) {
-            if(o1==null) {
+            if(o1 == null) {
               t1 = t2;
             }
             break;
           }
           v2 = r.Current["v"].AsDouble;
           Summs((t2 - t0).TotalSeconds, v2);
-          if(o1!=null) {
-            var det = sxx*n-sx*sx;                      // Линейная регрессия, Метод наименьших квадратов
-            var k = (sxy*n-sx*sy)/det;
-            var y0 = (sy-k*sx)/n;
-            var ve = y0 + k*(t2 - t0).TotalSeconds;
-            var err = (v2 - ve)*100*n/say;
+          if(o1 != null) {
+            var det = sxx * n - sx * sx;                      // Линейная регрессия, Метод наименьших квадратов
+            var k = (sxy * n - sx * sy) / det;
+            var y0 = (sy - k * sx) / n;
+            var ve = y0 + k * (t2 - t0).TotalSeconds;
+            var err = (v2 - ve) * 100 * n / say;
             if(Math.Abs(err) > 5) {
               break;
             }
@@ -788,130 +731,6 @@ namespace X13.PersistentStorage {
       _dba.Rebuild();
     }
     #endregion Archivist
-
-    #region History
-    private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
-      if(_history != null && ll != LogLevel.Debug) {
-        var d = new BsonDocument {
-          ["_id"] = ObjectId.NewObjectId(),
-          ["t"] = new BsonValue(dt.ToUniversalTime()),
-          ["l"] = new BsonValue((int)ll),
-          ["m"] = new BsonValue(msg)
-        };
-        _history.Insert(d);
-      }
-    }
-    private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
-      var t = new BsonValue(dt);
-      return _history.Query().Where(z => z["t"] < t).OrderByDescending(z => z["t"]).Limit(cnt).ToEnumerable()
-        //Find(Query.And(Query.All("t", Query.Descending), Query.LT("t", t)), 0, cnt)
-        .Select(z => new Log.LogRecord {
-          dt = z["t"].AsDateTime,
-          ll = (LogLevel)z["l"].AsInt32,
-          format = z["m"].AsString,
-          args = null
-        });
-    }
-    #endregion History
-
-    #region IPlugModul Members
-    public void Init() {
-      _owner = Topic.root.Get("/$YS/PersistentStorage", true);
-    }
-    public void Start() {
-      _terminate = false;
-      _tr = new Thread(new ThreadStart(ThreadM)) {
-        IsBackground = true,
-        Name = "PersistentStorage",
-        Priority = ThreadPriority.BelowNormal
-      };
-      _tr.Start();
-      _tick.WaitOne();  // wait load
-      Topic.Subscribe(SubFunc);
-    }
-    public void Tick() {
-      if(_q.Any()) {
-        _tick.Set();
-      }
-    }
-    public void Stop() {
-      _terminate = true;
-      _tick.Set();
-      if(!_tr.Join(5000)) {
-        _tr.Abort();
-      }
-      Interlocked.Exchange(ref _db, null)?.Dispose();
-      _tick.Dispose();
-    }
-
-    public bool enabled {
-      get {
-        var en = Topic.root.Get("/$YS/PersistentStorage", true);
-        if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
-          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-          en.SetState(true);
-          return true;
-        }
-        return (bool)en.GetState();
-      }
-      set {
-        var en = Topic.root.Get("/$YS/PersistentStorage", true);
-        en.SetState(value);
-      }
-    }
-    #endregion IPlugModul Members
-
-    #region Nested types
-    private class Stash {
-      public ObjectId id;
-      public BsonDocument bm;
-      public JSC.JSValue jm;
-      public BsonDocument bs;
-      public JSC.JSValue js;
-    }
-    private class ArchLog {
-      public const double ARCH_JITTER = 0.1; // 2:24
-      public const double ARCH_JITTER2 = 10; // days
-
-      public ArchLog(Topic t, DateTime ct, DateTime at) {
-        Id = ObjectId.NewObjectId();
-        Path = t.path;
-        Ct = ct;
-        At = at;
-        topic = t;
-      }
-      [BsonCtor]
-      public ArchLog(ObjectId _id, string p, DateTime ct, DateTime at) {
-        Id = _id;
-        Path = p;
-        Ct = ct;
-        At = at;
-        topic = Topic.root.Get(Path, false);
-      }
-      public ObjectId Id { get; private set; }
-      [BsonField("p")]
-      public string Path { get; private set; }
-      [BsonField("ct")]
-      public DateTime Ct { get; set; }
-      [BsonField("at")]
-      public DateTime At { get; set; }
-      [BsonIgnore]
-      public readonly Topic topic;
-      [BsonIgnore]
-      public double Keep {
-        get {
-          if(topic == null) {
-            return double.NaN;
-          }
-          var keep = topic.GetField("Arch.keep");
-          double k_d;
-          if((keep.ValueType != JSC.JSValueType.Double && keep.ValueType != JSC.JSValueType.Integer) || (k_d = keep.As<double>()) <= 0) {
-            return ARCH_JITTER2;
-          }
-          return k_d;
-        }
-      }
-    }
-    #endregion Nested types
+    */
   }
 }
