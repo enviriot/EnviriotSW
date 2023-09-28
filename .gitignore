@@ -10,6 +10,7 @@
 /plugins/MQTT/obj
 /plugins/MQTT_SN/obj
 /plugins/PersistentStorage/obj
+/plugins/PersistentStorageMDB/obj
 /plugins/WebUI/obj
 /Server/obj
 /Output/binUI

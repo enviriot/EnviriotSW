@@ -193,6 +193,9 @@ namespace X13.PersistentStorage {
       throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
     }
     protected override void ThreadM() {
+      Load();
+      _tick.Set();
+
       DateTime backupDT;
       DateTime backupDT_Arch;
       backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.25);
@@ -260,7 +263,7 @@ namespace X13.PersistentStorage {
       }
     }
 
-    protected override void Load() {
+    private void Load() {
       bool exist = File.Exists(DB_PATH);
       if(exist) {
         string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";

@@ -18,6 +18,8 @@ namespace X13.PersistentStorage {
   internal class MariaDB_Pl : PersistentStorageBase, IPlugModul {
     private const string DB_NAME = "Enviriot";
     public MariaDB_Pl() : base("MariaDB") {
+      _idCache = new Dictionary<string, long>();
+      
       //_archLst = new List<ArchLog>();
       //JsExtLib.AQuery = this.AQuery;
     }
@@ -25,14 +27,14 @@ namespace X13.PersistentStorage {
     //#region Persisten Storage Members
 
     private MySqlConnection _db;
+    private Dictionary<string, long> _idCache;
 
     protected override void ThreadM() {
-      /*
-      backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.25);
-      backupDT_Arch = DateTime.Now.AddDays(1).Date.AddHours(3.5);
+      Load();
+      _tick.Set();
+      
       do {
         if(_tick.WaitOne(15)) {
-          _db.BeginTrans();
           while(_q.TryDequeue(out Perform p)) {
             try {
               Save(p);
@@ -41,58 +43,26 @@ namespace X13.PersistentStorage {
               Log.Warning("PersistentStorage(" + (p == null ? "null" : p.ToString()) + ") - " + ex.ToString());
             }
           }
-          _db.Commit();
-        } else if(backupDT < DateTime.Now) {
-          backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.3);
-          Log.Info("Backup started");
-          try {
-            Backup();
-            Log.Info("Backup finished");
-          }
-          catch(Exception ex) {
-            Log.Warning("Backup failed - " + ex.ToString());
-          }
-        } else if(backupDT_Arch < DateTime.Now) {
-          backupDT_Arch = DateTime.Now.AddDays(1).Date.AddHours(3.5);
-          try {
-            CompressArch();
-          }
-          catch(Exception ex) {
-            Log.Warning("ShrinkArch failed - " + ex.ToString());
-          }
-        } else {
+        }/* else {
           try {
             OptimizeArch();
           }
           catch(Exception ex) {
             Log.Warning("OptimizeArch() - " + ex.ToString());
           }
-        }
+        }*/
       } while(!_terminate);
-      var dba = Interlocked.Exchange(ref _dba, null);
-      if(dba != null) {
-        try {
-          dba.Commit();
-          dba.Checkpoint();
-        }
-        catch(Exception ex) {
-          Log.Warning("PersistenStorage.Arch.Terminate - {0}", ex);
-        }
-        dba.Dispose();
-      }
       var db = Interlocked.Exchange(ref _db, null);
       if(db != null) {
         try {
-          db.Commit();
-          db.Checkpoint();
+          db.Close();
         }
         catch(Exception ex) {
           Log.Warning("PersistenStorage.DB.Terminate - {0}", ex);
         }
-        db.Dispose();
-      }*/
+      }
     }
-    protected override void Load() {
+    private void Load() {
       string sUrl = "tcp://user:pa$w0rd@localhost/";
       var tUrl = _owner.Get("url", true, _owner);
       if(tUrl.GetState().ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(tUrl.GetState().As<string>())) {
@@ -141,178 +111,114 @@ namespace X13.PersistentStorage {
           batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TRIGGER ARCH_DATA AFTER UPDATE ON PS FOR EACH ROW BEGIN IF (NEW.s != OLD.s AND JSON_VALUE(NEW.m, '$.Arch.enable') AND (JSON_TYPE(NEW.s) = 'INTEGER' OR JSON_TYPE(NEW.s) = 'DOUBLE')) THEN INSERT INTO ARCH (p, dt, v) VALUES (NEW.id, NOW(), JSON_VALUE(NEW.s, '$')); END IF; END"));
           batch.ExecuteNonQuery();
         }
-      }
-
-      /*
-      bool exist = File.Exists(DB_PATH);
-      _base = new SortedDictionary<Topic, Stash>();
-      _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH }) { CheckpointSize = 50 };
-      bool exist_h = exist && _db.CollectionExists("history");
-      _history = _db.GetCollection<BsonDocument>("history");
-      if(!exist_h) {
-        _history.EnsureIndex("t");
-      }
-      Log.History = History;
-      Log.Write += Log_Write;
-
-      exist = exist && _db.CollectionExists("objects");
-      _objects = _db.GetCollection<BsonDocument>("objects");
-      _states = _db.GetCollection<BsonDocument>("states");
-
-      if(!exist) {
-        _objects.EnsureIndex("p", true);
       } else {
-        Topic t;
-        Stash a;
-        JSC.JSValue jTmp;
-        bool saved;
-        string sTmp;
-        List<string> oldT = new List<string>();
-        List<ObjectId> oldId = new List<ObjectId>();
+        using(var cmd = new MySqlCommand("SELECT * FROM PS ORDER BY p", _db)) {
+          using(var r = cmd.ExecuteReader()) {
+            while (r.Read()) {
+              long id = r.GetInt64(0);
+              string path = r.GetString(1);
+              var manifest = JsLib.ParseJson(r.GetString(2));
+              _idCache[path] = id;
 
-        foreach(var obj in _objects.FindAll().OrderBy(z => z["p"])) {
-          sTmp = obj["p"].AsString;
-          if(oldT.Any(z => sTmp.StartsWith(z))) {
-            oldId.Add(obj["_id"]);
-            continue;  // skip load, old version
-          }
-          t = Topic.I.Get(Topic.root, sTmp, true, _owner, false, false);
-          a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
-          // check version
-          {
-            jTmp = t.GetField("version");
+              var t = Topic.I.Get(Topic.root, path, true, _owner, false, false);
+              // check version
+              {
+                var jTmp = t.GetField("version");
+                string sTmp;
 
-            if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out Version vRepo)) {
-              jTmp = a.jm["version"];
-              if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out Version vDB) || vRepo > vDB) {
-                oldT.Add(t.path + "/");
-                oldId.Add(a.id);
-                continue; // skip load, old version
+                if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out Version vRepo)) {
+                  jTmp = manifest["version"];
+                  if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out Version vDB) || vRepo > vDB) {
+                    continue; // skip load, old version
+                  }
+                }
               }
+              // check attribute
+              JSC.JSValue attr;
+              bool saved;
+              if(manifest == null || manifest.ValueType != JSC.JSValueType.Object || manifest.Value == null || !(attr = manifest["attr"]).IsNumber) {
+                saved = false;
+              } else {
+                saved = ((int)attr & (int)Topic.Attribute.Saved) == (int)Topic.Attribute.DB;
+              }
+
+              var state = saved?JsLib.ParseJson(r.GetString(3)):null;
+              Topic.I.Fill(t, state, manifest, _owner);
             }
           }
-          // check attribute
-          JSC.JSValue attr;
-          if(a.jm == null || a.jm.ValueType != JSC.JSValueType.Object || a.jm.Value == null || !(attr = a.jm["attr"]).IsNumber) {
-            saved = false;
-          } else {
-            saved = ((int)attr & (int)Topic.Attribute.Saved) == (int)Topic.Attribute.DB;
-          }
-
-          if(a.bs != null) {
-            if(saved) {
-              a.js = Bs2Js(a.bs["v"]);
-            } else {
-              _states.Delete(obj["_id"]);
-              a.bs = null;
-            }
-          }
-          _base.Add(t, a);
-          Topic.I.Fill(t, a.js, a.jm, _owner);
         }
-        oldT.Clear();
-        foreach(var id in oldId) {
-          _states.Delete(id);
-          _objects.Delete(id);
-        }
-        oldId.Clear();
       }
-
-      exist = File.Exists(DBA_PATH);
-      _dba = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DBA_PATH }) { CheckpointSize = 100 };
-      if(exist && !_dba.CollectionExists("archive")) {
-        exist = false;
-      }
-      _archive = _dba.GetCollection<BsonDocument>("archive");
-      if(!exist) {
-        _archive.EnsureIndex("t", false);
-        _archive.EnsureIndex("p", false);
-      }
-      if(exist && !_dba.CollectionExists("archLog")) {
-        exist = false;
-      }
-      _archLog = _dba.GetCollection<ArchLog>("archLog");
-      if(!exist) {
-        _archLog.EnsureIndex("p", false);
-      }*/
     }
-    /*
+    
     private void Save(Perform p) {
       Topic t = p.src;
-      Stash a;
-      JSC.JSValue jTmp;
-      bool saveM = false, saveS = false, saveA;
-      if(!_base.TryGetValue(t, out a)) {
+      long id;
+      bool saveM = false, saveS = false;
+      if(!_idCache.TryGetValue(t.path, out id)) {
         if(p.Art == Perform.E_Art.remove) {
           return;
         }
-        var obj = _objects.FindOne(Query.EQ("p", t.path));
-        a = obj != null ? new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null } : new Stash { id = ObjectId.NewObjectId() };
-        _base[t] = a;
-      }
-
-      if(p.Art == Perform.E_Art.remove) {
-        _states.Delete(a.id);
-        _objects.Delete(a.id);
-        _base.Remove(t);
-      } else {   //create, changedField, changedState, move
-        // Manifest
-        jTmp = t.GetField(null);
-        if(!object.ReferenceEquals(jTmp, a.jm)) {
-          if(a.bm == null) {
-            a.bm = new BsonDocument {
-              ["_id"] = a.id,
-              ["p"] = t.path
-            };
-          }
-          a.bm["v"] = Js2Bs(jTmp);
-          a.jm = jTmp;
-          saveM = true;
-        }
-        // State
-        saveA = p.Art == Perform.E_Art.changedState && t.GetField("Arch.enable").As<bool>();
-
-        if(t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
-          saveS = true;
-        } else if(a.bs != null) {
-          _states.Delete(a.id);
-          a.bs = null;
-          saveS = false;
-        }
-        if(saveS || saveA) {
-          jTmp = t.GetState();
-          if(!object.ReferenceEquals(jTmp, a.js)) {
-            if(a.bs == null) {
-              a.bs = new BsonDocument {
-                ["_id"] = a.id
-              };
-            }
-            a.bs["v"] = Js2Bs(jTmp);
-            a.js = jTmp;
+        using(var cmd = new MySqlCommand("SELECT id FROM PS WHERE p=@path", _db)) {
+          cmd.Parameters.AddWithValue("path", t.path);
+          var oid = cmd.ExecuteScalar();
+          if(oid is long nid) {
+            id = nid;
           } else {
-            saveS = false;
-            saveA = false;
+            id = 0;
           }
         }
+      }
+      if(p.Art == Perform.E_Art.remove) {
+        _idCache.Remove(t.path);
+        using(var cmd = new MySqlCommand("DELETE FROM PS WHERE id=@id", _db)) {
+          cmd.Parameters.AddWithValue("id", id);
+          cmd.ExecuteNonQuery();
+        }
+      } else if(p.Art == Perform.E_Art.move) {
+        using(var cmd = new MySqlCommand("UPDATE PS SET p=@path WHERE id=@id", _db)) {
+          cmd.Parameters.AddWithValue("path", t.path);
+          cmd.Parameters.AddWithValue("id", id);
+          cmd.ExecuteNonQuery();
+        }
+      } else {   //create, changedField, changedState
+        saveM = p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedField;
+        saveS = t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB) && (p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedState);
 
-        if(p.Art == Perform.E_Art.move) {
-          a.bm["p"] = t.path;
-          saveM = true;
-        }
-        if(saveM) {
-          _objects.Upsert(a.bm);
-        }
-        if(saveS && a.bs != null) {
-          _states.Upsert(a.bs);
-        }
-        if(saveA && ((a.js.ValueType == JSC.JSValueType.Double && !double.IsNaN(a.js.As<double>())) || a.js.ValueType == JSC.JSValueType.Integer)) {
-          _dba.BeginTrans();
-          ExistOrCreate(t);
-          _archive.Insert(new BsonDocument { ["_id"] = ObjectId.NewObjectId(), ["t"] = new BsonValue(DateTime.Now), ["p"] = t.path, ["v"] = a.bs["v"] });
-          _dba.Commit();
+        if(id == 0) {
+          using(var cmd = _db.CreateCommand()) {
+            if(saveS) {
+              cmd.CommandText = "INSERT INTO PS (p, m, s) VALUES (@path, @manifest, @state);";
+              cmd.Parameters.AddWithValue("state", JsLib.Stringify(t.GetState()));
+            } else {
+              cmd.CommandText = "INSERT INTO PS (p, m) VALUES (@path, @manifest);";
+            }
+            cmd.Parameters.AddWithValue("path", t.path);
+            cmd.Parameters.AddWithValue("manifest", JsLib.Stringify(t.GetField(null)));
+            cmd.ExecuteNonQuery();
+            _idCache[t.path] = cmd.LastInsertedId;
+          }
+        } else if(saveM || saveS) {
+          using(var cmd = _db.CreateCommand()) {
+            if(saveM && saveS) {
+              cmd.CommandText = "UPDATE PS SET m = @manifest, s= @state WHERE id=@id;";
+            } else if(saveS) {
+              cmd.CommandText = "UPDATE PS SET s= @state WHERE id=@id;";
+            } else {
+              cmd.CommandText = "UPDATE PS SET m = @manifest WHERE id=@id;";
+            }
+            if(saveM) {
+              cmd.Parameters.AddWithValue("manifest", JsLib.Stringify(t.GetField(null)));
+            }
+            if(saveS) {
+              cmd.Parameters.AddWithValue("state", JsLib.Stringify(t.GetState()));
+            }
+            cmd.Parameters.AddWithValue("id", id);
+            cmd.ExecuteNonQuery();
+          }
         }
       }
     }
+    /*
     private void Backup() {
       _history.DeleteMany(Query.LT("t", DateTime.Now.AddDays(-36)));
       var db = Interlocked.Exchange(ref _db, null);

@@ -28,7 +28,6 @@ namespace X13.PersistentStorage {
     }
 
     protected abstract void ThreadM();
-    protected abstract void Load();
     private void SubFunc(Perform p) {
       if(p.Art == Perform.E_Art.subscribe || p.Art == Perform.E_Art.subAck || p.Art == Perform.E_Art.setField || p.Art == Perform.E_Art.setState || p.Art == Perform.E_Art.unsubscribe || p.Prim == _owner) {
         return;
@@ -47,8 +46,8 @@ namespace X13.PersistentStorage {
         Name = "PersistentStorage",
         Priority = ThreadPriority.BelowNormal
       };
-      Load();
       _tr.Start();
+      _tick.WaitOne();  // wait load
       Topic.Subscribe(SubFunc);
     }
     public void Tick() {
