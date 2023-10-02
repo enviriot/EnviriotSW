@@ -10,6 +10,8 @@ using JSC = NiL.JS.Core;
 using NiL.JS.Extensions;
 using X13.Repository;
 using MySqlConnector;
+using System.Security.Cryptography;
+using System.Xml.Serialization;
 
 namespace X13.PersistentStorage {
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
@@ -17,22 +19,71 @@ namespace X13.PersistentStorage {
   [System.ComponentModel.Composition.ExportMetadata("name", "MariaDB")]
   internal class MariaDB_Pl : PersistentStorageBase, IPlugModul {
     private const string DB_NAME = "Enviriot";
+    private bool _showError;
+    private DateTime _lastConnect;
+    private string _connStr;
+    private MySqlConnection _db;
+    private readonly Dictionary<string, long> _idCache;
+
     public MariaDB_Pl() : base("MariaDB") {
       _idCache = new Dictionary<string, long>();
-      
-      //_archLst = new List<ArchLog>();
-      //JsExtLib.AQuery = this.AQuery;
+      _showError = true;
+      _lastConnect = DateTime.MinValue;
+      JsExtLib.AQuery = this.AQuery;
+    }
+    private void CheckConnection() {
+      if(_db == null && (_showError || (DateTime.Now - _lastConnect).TotalSeconds > 7)) {
+        try {
+          if(_db == null) {
+            _lastConnect = DateTime.Now;
+            var db = new MySqlConnection(_connStr);
+            db.Open();
+            _db = db;
+            _showError = true;
+            X13.Log.Debug("DB connection opened");
+          }
+        }
+        catch(Exception ex) {
+          X13.Log.Error("DB.CheckConnection - {0}", ex.Message);
+          _showError = false;
+        }
+      }
+    }
+    private void ExecuteNonQuery(string command, params object[] args) {
+      CheckConnection();
+      try {
+        lock(_db) {
+          using(MySqlCommand cmd = new MySqlCommand(command, _db)) {
+            for(int i = 0; i< args.Length; i++) {
+              cmd.Parameters.AddWithValue("P"+i.ToString(), args[i]);
+            }
+            cmd.ExecuteNonQuery();
+          }
+        }
+      }
+      catch(Exception ex) {
+        Log.Error("PS.ExecuteNonQuery({0}) - {1}", command, ex);
+        CloseDB();
+      }
+
+    }
+    private void CloseDB() {
+      var db = Interlocked.Exchange(ref _db, null);
+      if(db != null) {
+        try {
+          db.Close();
+        }
+        catch(Exception ex) {
+          Log.Warning("PS.CloseDB - {0}", ex);
+        }
+      }
     }
 
-    //#region Persisten Storage Members
-
-    private MySqlConnection _db;
-    private Dictionary<string, long> _idCache;
-
+    #region Persisten Storage Members
     protected override void ThreadM() {
-      Load();
+      LoadOrCreateDB();
       _tick.Set();
-      
+
       do {
         if(_tick.WaitOne(15)) {
           while(_q.TryDequeue(out Perform p)) {
@@ -52,17 +103,9 @@ namespace X13.PersistentStorage {
           }
         }*/
       } while(!_terminate);
-      var db = Interlocked.Exchange(ref _db, null);
-      if(db != null) {
-        try {
-          db.Close();
-        }
-        catch(Exception ex) {
-          Log.Warning("PersistenStorage.DB.Terminate - {0}", ex);
-        }
-      }
+      CloseDB();
     }
-    private void Load() {
+    private void LoadOrCreateDB() {
       string sUrl = "tcp://user:pa$w0rd@localhost/";
       var tUrl = _owner.Get("url", true, _owner);
       if(tUrl.GetState().ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(tUrl.GetState().As<string>())) {
@@ -75,27 +118,27 @@ namespace X13.PersistentStorage {
       var builder = new MySqlConnectionStringBuilder { Server = uri.DnsSafeHost };
       if(!string.IsNullOrEmpty(uri.UserInfo)) {
         var items = uri.UserInfo.Split(new[] { ':' });
-        if(items.Length > 1 ) {
+        if(items.Length > 1) {
           builder.UserID = items[0];
           builder.Password = items[1];
         } else {
           builder.UserID = uri.UserInfo;
         }
       }
-      if(uri.Port>0) {
+      if(uri.Port > 0) {
         builder.Port = (uint)uri.Port;
       }
-      _db = new MySqlConnection(builder.ConnectionString);
-      _db.Open();
+      _connStr = builder.ToString();
+      CheckConnection();
       bool exist;
-      using(var cmd =  _db.CreateCommand()) {
-        cmd.CommandText = "SELECT count(*) FROM INFORMATION_SCHEMA.SCHEMATA where SCHEMA_NAME = @name;";
+      using(var cmd = _db.CreateCommand()) {
+        cmd.CommandText = "select count(*) from INFORMATION_SCHEMA.SCHEMATA where SCHEMA_NAME = @name;";
         cmd.Parameters.AddWithValue("name", DB_NAME);
         exist = 1 == (long)cmd.ExecuteScalar();
       }
       if(!exist) {
         using(var cmd = _db.CreateCommand()) {
-          cmd.CommandText = "CREATE DATABASE "+ DB_NAME + ";";
+          cmd.CommandText = "create database " + DB_NAME + ";";
           cmd.ExecuteNonQuery();
         }
       }
@@ -105,16 +148,17 @@ namespace X13.PersistentStorage {
       _db.Open();
       if(!exist) {
         using(var batch = _db.CreateBatch()) {
-          batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TABLE PS(id INT AUTO_INCREMENT PRIMARY KEY, p TEXT NOT NULL, m TEXT, s TEXT);"));
-          batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TABLE ARCH (id int NOT NULL AUTO_INCREMENT, p int NOT NULL, dt datetime NOT NULL, v double NOT NULL, PRIMARY KEY (id), KEY ARCH_FK (p), KEY ARCH_dt_IDX (dt) USING BTREE, CONSTRAINT ARCH_FK FOREIGN KEY (p) REFERENCES PS(id) ON DELETE CASCADE)"));
-          batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TABLE ARCH_W(p INT PRIMARY KEY, dt1 DATETIME, dt2 DATETIME, CONSTRAINT ARCH_W_FK FOREIGN KEY (p) REFERENCES PS(id) ON DELETE CASCADE ON UPDATE RESTRICT);"));
-          batch.BatchCommands.Add(new MySqlBatchCommand("CREATE TRIGGER ARCH_DATA AFTER UPDATE ON PS FOR EACH ROW BEGIN IF (NEW.s != OLD.s AND JSON_VALUE(NEW.m, '$.Arch.enable') AND (JSON_TYPE(NEW.s) = 'INTEGER' OR JSON_TYPE(NEW.s) = 'DOUBLE')) THEN INSERT INTO ARCH (p, dt, v) VALUES (NEW.id, NOW(), JSON_VALUE(NEW.s, '$')); END IF; END"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create table PS(ID int auto_increment primary key, P text not null, M text, S text);"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create table LOGS(ID int auto_increment primary key, DT datetime(3) not null, L tinyint not null, M text not null, key `LOGS_DT_IDX` (`DT`) using btree);"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create table ARCH(ID int not null auto_increment, P int not null, DT datetime(3) not null, V double not null, primary key (ID), key ARCH_FK (p), key ARCH_DT_IDX (DT) using btree, constraint ARCH_FK foreign key (P) references PS(ID) on delete cascade)"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create table ARCH_W(P int primary key, DT1 datetime(3), DT2 datetime(3), constraint ARCH_W_FK foreign key (P) references PS(ID) on delete cascade);"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create trigger ARCH_DATA after update on PS for each row begin if (new.S != old.S and json_value(new.M, '$.Arch.enable') and (json_type(new.S) = 'INTEGER' or json_type(new.S) = 'DOUBLE')) then insert into ARCH (P, DT, V) values (new.ID, now(), json_value(new.S, '$')); end if; end"));
           batch.ExecuteNonQuery();
         }
       } else {
-        using(var cmd = new MySqlCommand("SELECT * FROM PS ORDER BY p", _db)) {
+        using(var cmd = new MySqlCommand("select * from PS order by P", _db)) {
           using(var r = cmd.ExecuteReader()) {
-            while (r.Read()) {
+            while(r.Read()) {
               long id = r.GetInt64(0);
               string path = r.GetString(1);
               var manifest = JsLib.ParseJson(r.GetString(2));
@@ -142,501 +186,276 @@ namespace X13.PersistentStorage {
                 saved = ((int)attr & (int)Topic.Attribute.Saved) == (int)Topic.Attribute.DB;
               }
 
-              var state = saved?JsLib.ParseJson(r.GetString(3)):null;
+              var state = saved ? JsLib.ParseJson(r.GetString(3)) : null;
               Topic.I.Fill(t, state, manifest, _owner);
             }
           }
         }
       }
+      Log.History = History;
+      Log.Write += Log_Write;
+
     }
-    
     private void Save(Perform p) {
       Topic t = p.src;
       long id;
-      bool saveM = false, saveS = false;
       if(!_idCache.TryGetValue(t.path, out id)) {
         if(p.Art == Perform.E_Art.remove) {
           return;
         }
-        using(var cmd = new MySqlCommand("SELECT id FROM PS WHERE p=@path", _db)) {
-          cmd.Parameters.AddWithValue("path", t.path);
-          var oid = cmd.ExecuteScalar();
-          if(oid is long nid) {
-            id = nid;
-          } else {
-            id = 0;
+        CheckConnection();
+        try {
+          lock(_db) {
+            using(var cmd = new MySqlCommand("SELECT id FROM PS WHERE p=@path", _db)) {
+              cmd.Parameters.AddWithValue("path", t.path);
+              var oid = cmd.ExecuteScalar();
+              if(oid is long nid) {
+                id = nid;
+              } else {
+                id = 0;
+              }
+            }
           }
         }
+        catch(Exception ex) {
+          Log.Error("PS.Save1() - {0}", ex);
+          CloseDB();
+        }
       }
+
       if(p.Art == Perform.E_Art.remove) {
         _idCache.Remove(t.path);
-        using(var cmd = new MySqlCommand("DELETE FROM PS WHERE id=@id", _db)) {
-          cmd.Parameters.AddWithValue("id", id);
-          cmd.ExecuteNonQuery();
-        }
+        ExecuteNonQuery("delete from PS where ID=@P0", id);
       } else if(p.Art == Perform.E_Art.move) {
-        using(var cmd = new MySqlCommand("UPDATE PS SET p=@path WHERE id=@id", _db)) {
-          cmd.Parameters.AddWithValue("path", t.path);
-          cmd.Parameters.AddWithValue("id", id);
-          cmd.ExecuteNonQuery();
-        }
+        ExecuteNonQuery("update PS set P=@P1 where ID=@P0", id, t.path);
       } else {   //create, changedField, changedState
-        saveM = p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedField;
-        saveS = t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB) && (p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedState);
+        bool saveM = p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedField;
+        bool saveS = (t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB) || t.GetField("Arch.enable").As<bool>())
+          && (p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedState);
 
         if(id == 0) {
-          using(var cmd = _db.CreateCommand()) {
-            if(saveS) {
-              cmd.CommandText = "INSERT INTO PS (p, m, s) VALUES (@path, @manifest, @state);";
-              cmd.Parameters.AddWithValue("state", JsLib.Stringify(t.GetState()));
-            } else {
-              cmd.CommandText = "INSERT INTO PS (p, m) VALUES (@path, @manifest);";
+          CheckConnection();
+          try {
+            lock(_db) {
+              using(MySqlCommand cmd = _db.CreateCommand()) {
+                if(saveS) {
+                  cmd.CommandText = "insert into PS (P, M, S) values (@path, @manifest, @state);";
+                  cmd.Parameters.AddWithValue("state", JsLib.Stringify(t.GetState()));
+                } else {
+                  cmd.CommandText = "insert into PS (P, M) values (@path, @manifest);";
+                }
+                cmd.Parameters.AddWithValue("path", t.path);
+                cmd.Parameters.AddWithValue("manifest", JsLib.Stringify(t.GetField(null)));
+                cmd.ExecuteNonQuery();
+                _idCache[t.path] = cmd.LastInsertedId;
+              }
             }
-            cmd.Parameters.AddWithValue("path", t.path);
-            cmd.Parameters.AddWithValue("manifest", JsLib.Stringify(t.GetField(null)));
-            cmd.ExecuteNonQuery();
-            _idCache[t.path] = cmd.LastInsertedId;
           }
-        } else if(saveM || saveS) {
-          using(var cmd = _db.CreateCommand()) {
-            if(saveM && saveS) {
-              cmd.CommandText = "UPDATE PS SET m = @manifest, s= @state WHERE id=@id;";
-            } else if(saveS) {
-              cmd.CommandText = "UPDATE PS SET s= @state WHERE id=@id;";
-            } else {
-              cmd.CommandText = "UPDATE PS SET m = @manifest WHERE id=@id;";
-            }
-            if(saveM) {
-              cmd.Parameters.AddWithValue("manifest", JsLib.Stringify(t.GetField(null)));
-            }
-            if(saveS) {
-              cmd.Parameters.AddWithValue("state", JsLib.Stringify(t.GetState()));
-            }
-            cmd.Parameters.AddWithValue("id", id);
-            cmd.ExecuteNonQuery();
+          catch(Exception ex) {
+            Log.Error("PS.Save4() - {0}", ex);
+            CloseDB();
+          }
+        } else {
+          if(saveM && saveS) {
+            ExecuteNonQuery("update PS set M = @P1, S= @P2 where ID=@P0", id, JsLib.Stringify(t.GetField(null)), JsLib.Stringify(t.GetState()));
+          } else if(saveS) {
+            ExecuteNonQuery("update PS set S= @P1 where ID=@P0;", id, JsLib.Stringify(t.GetState()));
+          } else if(saveM){
+            ExecuteNonQuery("update PS set M = @P1 where ID=@P0", id, JsLib.Stringify(t.GetField(null)));
           }
         }
-      }
-    }
-    /*
-    private void Backup() {
-      _history.DeleteMany(Query.LT("t", DateTime.Now.AddDays(-36)));
-      var db = Interlocked.Exchange(ref _db, null);
-      if(db != null) {
-        db.Commit();
-        _history = null;
-        _objects = null;
-        _states = null;
-        db.Checkpoint();
-        db.Dispose();
-      }
-      string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
-      File.Copy(DB_PATH, fb);
-      Log.Info("backup {0} created", fb);
-      _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH }) { CheckpointSize = 50 };
-      _db.Rebuild();
-      _objects = _db.GetCollection<BsonDocument>("objects");
-      _states = _db.GetCollection<BsonDocument>("states");
-      _history = _db.GetCollection<BsonDocument>("history");
-
-      try {
-        DateTime now = DateTime.Now, fdt;
-        foreach(string f in Directory.GetFiles(Path.GetDirectoryName(DB_PATH), "??????_??????.bak", SearchOption.TopDirectoryOnly)) {
-          fdt = File.GetLastWriteTime(f);
-          if(fdt.AddDays(7) > now || (fdt.DayOfWeek == DayOfWeek.Thursday && fdt.Hour == 3 && (fdt.AddMonths(1) > now || (fdt.AddMonths(6) > now && fdt.Day < 8)))) {
-            continue;
-          }
-          File.Delete(f);
-          Log.Info("backup {0} deleted", Path.GetFileName(f));
-        }
-      }
-      catch(System.IO.IOException) {
       }
     }
     #endregion Persisten Storage Members
 
     #region History
     private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
-      if(_history != null && ll != LogLevel.Debug) {
-        var d = new BsonDocument {
-          ["_id"] = ObjectId.NewObjectId(),
-          ["t"] = new BsonValue(dt.ToUniversalTime()),
-          ["l"] = new BsonValue((int)ll),
-          ["m"] = new BsonValue(msg)
-        };
-        _history.Insert(d);
+      if(ll != LogLevel.Debug) {
+        CheckConnection();
+        try {
+          lock(_db) {
+            using(var cmd = new MySqlCommand("insert into LOGS(DT, L, M) values(@dt, @level, @message);", _db)) {
+              cmd.Parameters.AddWithValue("dt", dt);
+              cmd.Parameters.AddWithValue("level", (int)ll);
+              cmd.Parameters.AddWithValue("message", msg);
+              cmd.ExecuteNonQuery();
+            }
+          }
+
+        }
+        catch(Exception ex) {
+          Log.Error("PS.Log_Write() - {0}", ex);
+          CloseDB();
+        }
       }
     }
     private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
-      var t = new BsonValue(dt);
-      return _history.Query().Where(z => z["t"] < t).OrderByDescending(z => z["t"]).Limit(cnt).ToEnumerable()
-        //Find(Query.And(Query.All("t", Query.Descending), Query.LT("t", t)), 0, cnt)
-        .Select(z => new Log.LogRecord {
-          dt = z["t"].AsDateTime,
-          ll = (LogLevel)z["l"].AsInt32,
-          format = z["m"].AsString,
-          args = null
-        });
-      return null;
+      var lst = new List<Log.LogRecord>();
+      CheckConnection();
+      try {
+        lock(_db) {
+          using(var cmd = new MySqlCommand("select DT, L, M from LOGS where DT < @dt order by DT desc LIMIT @count;", _db)) {
+            cmd.Parameters.AddWithValue("dt", dt);
+            cmd.Parameters.AddWithValue("count", cnt);
+            using(var reader = cmd.ExecuteReader()) {
+              while(reader.Read()) {
+                lst.Add(new Log.LogRecord() { dt = reader.GetDateTime(0), ll = (LogLevel)reader.GetInt32(1), format = reader.GetString(2) });
+              }
+            }
+          }
+        }
+      }
+      catch(Exception ex) {
+        Log.Error("PS.History() - {0}", ex);
+        CloseDB();
+      }
+
+      return lst;
     }
     #endregion History
 
     #region Archivist
-    private const string DBA_PATH = "../data/archive.ldb";
-    private LiteDatabase _dba;
-    private ILiteCollection<BsonDocument> _archive;
-    private ILiteCollection<ArchLog> _archLog;
-    private readonly List<ArchLog> _archLst;
-    private int _archIdx;
 
-    private class ArchLog {
-      public const double ARCH_JITTER = 0.1; // 2:24
-      public const double ARCH_JITTER2 = 10; // days
-
-      public ArchLog(Topic t, DateTime ct, DateTime at) {
-        Id = ObjectId.NewObjectId();
-        Path = t.path;
-        Ct = ct;
-        At = at;
-        topic = t;
-      }
-      [BsonCtor]
-      public ArchLog(ObjectId _id, string p, DateTime ct, DateTime at) {
-        Id = _id;
-        Path = p;
-        Ct = ct;
-        At = at;
-        topic = Topic.root.Get(Path, false);
-      }
-      public ObjectId Id { get; private set; }
-      [BsonField("p")]
-      public string Path { get; private set; }
-      [BsonField("ct")]
-      public DateTime Ct { get; set; }
-      [BsonField("at")]
-      public DateTime At { get; set; }
-      [BsonIgnore]
-      public readonly Topic topic;
-      [BsonIgnore]
-      public double Keep {
-        get {
-          if(topic == null) {
-            return double.NaN;
-          }
-          var keep = topic.GetField("Arch.keep");
-          double k_d;
-          if((keep.ValueType != JSC.JSValueType.Double && keep.ValueType != JSC.JSValueType.Integer) || (k_d = keep.As<double>()) <= 0) {
-            return ARCH_JITTER2;
-          }
-          return k_d;
-        }
-      }
-    }
-
-    private ArchLog ExistOrCreate(Topic t) {
-      ArchLog al;
-      if((al = _archLst.Find(z => z.topic == t)) == null) {
-        al = _archLog.FindOne("$.p=@0", t.path);
-        if(al == null) {
-          var min = _archive.Query().Where("$.p=@0", t.path).OrderBy("$.t").FirstOrDefault();
-          al = new ArchLog(t, DateTime.Now.AddDays(-1.5 * ArchLog.ARCH_JITTER), min == null ? DateTime.Now : min["t"].AsDateTime);
-          _archLog.Insert(al);
-        }
-        _archLst.Add(al);
-      }
-      return al;
-    }
     private JSL.Array AQuery(string[] topics, DateTime begin, int count, DateTime end) {
       //var sw = System.Diagnostics.Stopwatch.StartNew();
-      var tba = topics.Select(z => new BsonValue(z)).ToArray();
-
       var rez = new JSL.Array();
-      var p1 = new BsonValue(begin);
-      var p2 = new BsonArray(tba);
-      var p3 = new BsonValue(end);
-
-      if(end <= begin || count == 0) {  // end == MinValue
-        ILiteQueryable<BsonDocument> resp1;
-        if(end > begin) {
-          resp1 = _archive.Query().Where("$.t BETWEEN @0 AND @2 AND $.p IN @1", p1, p2, p3);
-        } else {
-          resp1 = _archive.Query().Where("$.t < @0 AND $.p IN @1", p1, p2);
-        }
-        if(count < 0) {
-          resp1 = resp1.OrderByDescending("$.t");
-        } else if(count >= 0) {
-          resp1 = resp1.OrderBy("$.t");
-        }
-        var resp2 = count != 0 ? resp1.Limit(Math.Abs(count)).ToEnumerable() : resp1.ToEnumerable();
-        JSL.Array lo = null;
-        foreach(var li in resp2) {
-          var p = li["p"];
-          int i;
-          for(i = 0; p != tba[i]; i++)
-            ;
-          i++;
-          if(lo != null && lo[i].ValueType == JSC.JSValueType.Object && (li["t"].AsDateTime - ((JSL.Date)lo[0].Value).ToDateTime()).TotalSeconds < 15) {  // Null.ValueType==Object
-            lo[i] = Bs2Js(li["v"]);
-          } else {
-            lo = new JSL.Array(tba.Length + 1) {
-              [0] = Bs2Js(li["t"])
-            };
-            for(var j = 1; j <= tba.Length; j++) {
-              lo[j] = (i == j) ? Bs2Js(li["v"]) : JSC.JSValue.Null;
+      var p_ids = topics.Select(z => _idCache[z]).ToArray();
+      CheckConnection();
+      try {
+        lock(_db) {
+          using(var cmd = _db.CreateCommand()) {
+            for(int i = 0; i < topics.Length; i++) {
+              var pn = "P" + i.ToString();
+              cmd.Parameters.AddWithValue(pn, p_ids[i]);
             }
-            rez.Add(lo);
-          }
-        }
-      } else {
-        var step = (end - begin).TotalSeconds / Math.Abs(count);
+            var pi = string.Join(" ,", Enumerable.Range(0, topics.Length).Select(p => "P" + p.ToString()));
 
-        DateTime cursor = begin.AddSeconds(step);
-        var f_cnt = new int[tba.Length];
-        var f_val = new double[tba.Length];
-        var l_val = new double[tba.Length];
-        var l_delta = new double[tba.Length];
-        var t_cnt = 0;
-        double t_sum = 0;
-        int i;
+            cmd.Parameters.AddWithValue("BEGIN", begin);
 
-        for(i = 0; i < tba.Length; i++) {
-          f_val[i] = 0;
-          f_cnt[i] = 0;
-          l_delta[i] = -step;
-          var p_i = tba[i];
-          var r = _archive.Query().Where("$.t < @1 and $.p = @2", p1, p_i).OrderByDescending("$.t").FirstOrDefault();
-          l_val[i] = r != null ? r["v"].AsDouble : double.NaN;
-        }
-        var resp = _archive.Query().Where("$.t BETWEEN @0 AND @2 AND $.p IN @1", p1, p2, p3).OrderBy("$.t").ToEnumerable();
-        foreach(var li in resp) {
-          var t_cur = li["t"].AsDateTime;
-          if(t_cur >= cursor) {
-            AddRecord();
-            do {
-              cursor = cursor.AddSeconds(step);
-            } while(t_cur >= cursor);
-          }
-          var p = li["p"];
-          for(i = 0; i < tba.Length; i++) {
-            if(p == tba[i]) {
-              var v = li["v"].AsDouble;
-              if(!double.IsNaN(v)) {
-                var td = (t_cur - cursor).TotalSeconds;
-                if(!double.IsNaN(l_val[i])) {
-                  f_val[i] += l_val[i] * (td - l_delta[i]) / step;
-                  l_delta[i] = td;
-                }
-                f_cnt[i]++;
-                l_val[i] = v;
-                t_cnt++;
-                t_sum += td;
+            if(end <= begin || count == 0) {  // end == MinValue
+              if(count < 0) {
+                cmd.CommandText = "select P, DT, V from ARCH where P in (" + pi + ") and DT<@BEGIN order by DT desc limit @COUNT";
+                cmd.Parameters.AddWithValue("COUNT", -count);
+              } else if(count == 0) {
+                cmd.CommandText = "select P, DT, V from ARCH where P in (" + pi + ") and DT between @BEGIN and @END order by DT";
+                cmd.Parameters.AddWithValue("END", end.ToUniversalTime());
+              } else {
+                cmd.CommandText = "select P, DT, V from ARCH where P in (" + pi + ") and DT>@BEGIN order by DT limit @COUNT";
+                cmd.Parameters.AddWithValue("COUNT", count);
               }
-              break;
+              using(var reader = cmd.ExecuteReader()) {
+                if(reader.HasRows) {
+                  JSL.Array lo = null;
+                  while(reader.Read()) {
+                    var p_id = reader.GetInt64(0);
+                    var dt = reader.GetDateTime(1);
+                    var v = new JSL.Number(reader.GetDouble(2));
+                    int i;
+                    for(i = 0; p_id != p_ids[i]; i++)
+                      ;
+                    i++;
+                    if(lo != null && lo[i].ValueType == JSC.JSValueType.Object && (dt - ((JSL.Date)lo[0].Value).ToDateTime()).TotalSeconds < 15) {  // Null.ValueType==Object
+                      lo[i] = v;
+                    } else {
+                      lo = new JSL.Array(topics.Length + 1) {
+                        [0] = JSC.JSValue.Marshal(dt)
+                      };
+                      for(var j = 1; j <= topics.Length; j++) {
+                        lo[j] = (i == j) ? v : JSC.JSValue.Null;
+                      }
+                      rez.Add(lo);
+                    }
+                  }
+                }
+              }
+            } else {
+              var step = (end - begin).TotalSeconds / Math.Abs(count);
+
+              DateTime cursor = begin.AddSeconds(step);
+              var f_cnt = new int[topics.Length];
+              var f_val = new double[topics.Length];
+              var l_val = new double[topics.Length];
+              var l_delta = new double[topics.Length];
+              var t_cnt = 0;
+              double t_sum = 0;
+              int i;
+
+              for(i = 0; i < topics.Length; i++) {
+                f_val[i] = 0;
+                f_cnt[i] = 0;
+                l_delta[i] = -step;
+                using(var cmd2 = _db.CreateCommand()) {
+                  cmd2.CommandText = "select V from ARCH where P=@PATH and DT<@BEGIN order by DT desc limit 1";
+                  cmd2.Parameters.AddWithValue("@PATH", p_ids[i]);
+                  cmd2.Parameters.AddWithValue("@BEGIN", begin);
+                  var r = cmd2.ExecuteScalar();
+                  if(r is double v) {
+                    l_val[i] = v;
+                  } else {
+                    l_val[i] = double.NaN;
+                  }
+                }
+              }
+              cmd.CommandText = "select P, DT, V from ARCH where P in (" + pi + ") and DT between @BEGIN AND @END order by DT";
+              cmd.Parameters.AddWithValue("END", end.ToUniversalTime());
+              using(var reader = cmd.ExecuteReader()) {
+                if(reader.HasRows) {
+                  while(reader.Read()) {
+                    var p = reader.GetString(0);
+                    var t_cur = reader.GetDateTime(1).ToLocalTime();
+                    var v = new JSL.Number(reader.GetDouble(2));
+                    if(t_cur >= cursor) {
+                      AddRecord();
+                      do {
+                        cursor = cursor.AddSeconds(step);
+                      } while(t_cur >= cursor);
+                    }
+                    for(i = 0; i < topics.Length; i++) {
+                      if(p == topics[i]) {
+                        if(!double.IsNaN(v)) {
+                          var td = (t_cur - cursor).TotalSeconds;
+                          if(!double.IsNaN(l_val[i])) {
+                            f_val[i] += l_val[i] * (td - l_delta[i]) / step;
+                            l_delta[i] = td;
+                          }
+                          f_cnt[i]++;
+                          l_val[i] = v;
+                          t_cnt++;
+                          t_sum += td;
+                        }
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+              AddRecord();
+              void AddRecord() {
+                JSL.Array lo = new JSL.Array(topics.Length + 1) {
+                  [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt == 1 ? t_sum : (-step / 2)).ToLocalTime()),
+                };
+                t_cnt = 0;
+                t_sum = 0;
+                for(i = 0; i < topics.Length; i++) {
+                  lo[i + 1] = f_cnt[i] > 0 ? new JSL.Number(f_val[i] + l_val[i] * (-l_delta[i]) / step) : (double.IsNaN(l_val[i]) ? JSC.JSValue.Null : l_val[i]);
+                  f_val[i] = 0;
+                  f_cnt[i] = 0;
+                  l_delta[i] = -step;
+                }
+                rez.Add(lo);
+              }
             }
           }
         }
-        AddRecord();
-        void AddRecord() {
-          JSL.Array lo = new JSL.Array(tba.Length + 1) {
-            [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt == 1 ? t_sum : (-step / 2)).ToLocalTime()),
-          };
-          t_cnt = 0;
-          t_sum = 0;
-          for(i = 0; i < tba.Length; i++) {
-            lo[i + 1] = f_cnt[i] > 0 ? new JSL.Number(f_cnt[i] == 1 ? l_val[i] : (f_val[i] + l_val[i] * (-l_delta[i]) / step)) : JSC.JSValue.Null;
-            f_val[i] = 0;
-            f_cnt[i] = 0;
-            l_delta[i] = -step;
-          }
-          rez.Add(lo);
-        }
+      }
+      catch(Exception ex) {
+        Log.Error("PS.AQuery() - {0}", ex);
+        CloseDB();
       }
       //sw.Stop();
       //Log.Debug("AQuery([{0}], {1:yyMMdd'T'HHmmss}, {2}, {3:yyMMdd'T'HHmmss}) {4:0.0} mS", string.Join(", ", topics), begin, count, end, sw.Elapsed.TotalMilliseconds);
       return rez;
-
-    }
-    private void OptimizeArch() {
-      if(_archIdx >= _archLst.Count) {
-        _archIdx = 0;
-      } else {
-        var al = _archLst[_archIdx++];
-        double k_d = al.Keep;
-        if(k_d > ArchLog.ARCH_JITTER) {
-          if(al.Ct < DateTime.Now.AddDays(-ArchLog.ARCH_JITTER)) {
-            al.Ct = ArchCompact0(al.Path, al.Ct, 5.01);
-            _archLog.Update(al);
-          } else if(al.At < DateTime.Now.AddDays(-ArchLog.ARCH_JITTER2)) {
-            al.At = ArchCompact2(al.Path, al.At.AddMinutes(-al.At.Minute).AddSeconds(-al.At.Second), 60);
-            _archLog.Update(al);
-          }
-        } else {
-          var k_gr = DateTime.Now.AddDays(-k_d);
-          if(al.Ct < k_gr) {
-            al.Ct = k_gr;
-            _archive.DeleteMany("$.t < @0 AND $.p=@1", k_gr, al.Path);
-          }
-        }
-      }
-    }
-    /// <summary>наивный вариант</summary>
-    private DateTime ArchCompact0(string path, DateTime t0, double interval) {
-      //Log.Debug("OptimizeArch({0}, {1}, {2})", path, t0.ToString(), interval);
-      var nt = t0.AddMinutes(interval);
-      var r = _archive.Query().Where("$.t>=@0 AND $.p=@1", t0, path).OrderBy("$.t").ExecuteReader();
-      if(!r.Read()) {
-        return DateTime.Now;
-      }
-      t0 = r.Current["t"].AsDateTime.ToLocalTime();
-      if(t0 > nt) {
-        r.Dispose();
-        return t0;
-      }
-      var v0 = r.Current["v"].AsDouble;
-      //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), v0);
-      if(!r.Read()) {
-        r.Dispose();
-        return DateTime.Now;
-      }
-      var t1 = r.Current["t"].AsDateTime.ToLocalTime();
-      if(t1 > nt) {
-        r.Dispose();
-        return t1;
-      }
-      var o1 = r.Current;
-      DateTime t2;
-      while(r.Read()) {
-        t2 = r.Current["t"].AsDateTime.ToLocalTime();
-        if(t2 > nt) {
-          break;
-        }
-        var ve = v0 + ((o1["v"].AsDouble - v0) / (t1 - t0).TotalSeconds) * (t2 - t0).TotalSeconds;
-        if(Math.Abs(r.Current["v"].AsDouble - ve) > Math.Abs(ve * 0.05)) {
-          break;
-        }
-        //Log.Debug(" | {1}, {2}", path, t1.ToLongTimeString(), o1["v"].AsDouble);
-        _archive.Delete(o1["_id"]);
-        o1 = r.Current;
-        t1 = t2;
-      }
-      //Log.Debug(" v {1}, {2}", path, t1.ToLongTimeString(), o1["v"].AsDouble);
-      r.Dispose();
-      return t1;
-    }
-    /// <summary>Линейная регрессия</summary>
-    private DateTime ArchCompact1(string path, DateTime t0, double interval) {
-      //Log.Debug("OptimizeArch({0}, {1}, {2})", path, t0.ToString(), interval);
-      double sx = 0, sy = 0, sxy = 0, sxx = 0, say = 0;
-      int n = 0;
-      void Summs(double x, double y) {
-        sx += x;
-        sy += y;
-        sxy += x * y;
-        sxx += x * x;
-        say += Math.Abs(y);
-        n++;
-      }
-      DateTime t1 = DateTime.Now, t2, nt = t0.AddMinutes(interval);
-
-      using(var r = _archive.Query().Where("$.t>=@0 AND $.p=@1", t0, path).OrderBy("$.t").ExecuteReader()) {
-        if(!r.Read()) {
-          return DateTime.Now;
-        }
-        t0 = r.Current["t"].AsDateTime.ToLocalTime();
-        if(t0 > nt) {
-          return t0;
-        }
-        Summs(0, r.Current["v"].AsDouble);
-        //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), r.Current["v"].AsDouble);
-        BsonValue o1 = null;
-        double v2;
-
-        while(r.Read()) {
-          t2 = r.Current["t"].AsDateTime.ToLocalTime();
-          if(t2 > nt) {
-            if(o1 == null) {
-              t1 = t2;
-            }
-            break;
-          }
-          v2 = r.Current["v"].AsDouble;
-          Summs((t2 - t0).TotalSeconds, v2);
-          if(o1 != null) {
-            var det = sxx * n - sx * sx;                      // Линейная регрессия, Метод наименьших квадратов
-            var k = (sxy * n - sx * sy) / det;
-            var y0 = (sy - k * sx) / n;
-            var ve = y0 + k * (t2 - t0).TotalSeconds;
-            var err = (v2 - ve) * 100 * n / say;
-            if(Math.Abs(err) > 5) {
-              break;
-            }
-            //Log.Debug(" | {1}, {2}, {3:0.00}%", path, t1.ToLongTimeString(), o1["v"].AsDouble, err);
-            _archive.Delete(o1["_id"]);
-          }
-          o1 = r.Current;
-          t1 = t2;
-        }
-        //Log.Debug(" v {1}, {2}", path, t1.ToLongTimeString(), o1==null ? double.NaN : o1["v"].AsDouble);
-      }
-      return t1;
-    }
-    /// <summary>средневзвешенное за период</summary>
-    private DateTime ArchCompact2(string path, DateTime bt, double interval) {
-      var et = bt.AddMinutes(interval);
-      var l_d = _archive.Query().Where("$.t < @1 and $.p = @2", bt, path).OrderByDescending("$.t").FirstOrDefault();
-      var l_val = l_d != null ? l_d["v"].AsDouble : double.NaN;
-
-      int f_cnt = 0;
-      double f_val = 0;
-      double l_delta = 0;
-
-      var r_d = _archive.Query().Where("$.t BETWEEN @0 AND @2 AND $.p IN @1", bt, path, et).OrderBy("$.t").ToEnumerable();
-      foreach(var li in r_d) {
-        var t_cur = li["t"].AsDateTime;
-        var v = li["v"].AsDouble;
-        if(!double.IsNaN(v)) {
-          var td = (t_cur - bt).TotalMinutes;
-          if(!double.IsNaN(l_val)) {
-            f_val += l_val * (td - l_delta) / interval;
-            l_delta = td;
-          }
-          f_cnt++;
-          l_val = v;
-        }
-        _archive.Delete(li["_id"]);
-      }
-      if(f_cnt > 0) {
-        var val = f_cnt == 1 ? l_val : (f_val + l_val * (interval - l_delta) / interval);
-        _archive.Insert(new BsonDocument {
-          ["_id"] = ObjectId.NewObjectId(),
-          ["t"] = new BsonValue(bt.AddMinutes(interval / 2)),
-          ["p"] = path,
-          ["v"] = val
-        });
-      }
-      return et;
-    }
-
-    private void CompressArch() {
-      _archLst.Clear();
-      _archIdx = 0;
-      DateTime dte = DateTime.Now.AddDays(1 - ArchLog.ARCH_JITTER2);
-      foreach(var p in _archive.Query().GroupBy("p").Select("@key").ToArray().Select(z => z["expr"].AsString)) {
-        if(!Topic.root.Exist(p, out var t) || t.disposed || !t.GetField("Arch.enable").As<bool>()) {
-          _archive.DeleteMany("$.p=@0", p);
-        } else {
-          var al = ExistOrCreate(t);
-          var k_d = al.Keep;
-          if(k_d > ArchLog.ARCH_JITTER) {
-            _archive.DeleteMany("$.t < @0 AND $.p=@1", DateTime.Now.AddDays(-k_d), t.path);
-          }
-        }
-      }
-      _dba.Commit();
-      _dba.Checkpoint();
-      _dba.Rebuild();
     }
     #endregion Archivist
-    */
   }
 }
