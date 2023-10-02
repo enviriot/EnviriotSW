@@ -128,31 +128,31 @@ namespace X13.PersistentStorage {
       if(uri.Port > 0) {
         builder.Port = (uint)uri.Port;
       }
-      _connStr = builder.ToString();
-      CheckConnection();
+      var db = new MySqlConnection(builder.ConnectionString);
+      db.Open();
       bool exist;
-      using(var cmd = _db.CreateCommand()) {
+      using(var cmd = db.CreateCommand()) {
         cmd.CommandText = "select count(*) from INFORMATION_SCHEMA.SCHEMATA where SCHEMA_NAME = @name;";
         cmd.Parameters.AddWithValue("name", DB_NAME);
         exist = 1 == (long)cmd.ExecuteScalar();
       }
       if(!exist) {
-        using(var cmd = _db.CreateCommand()) {
+        using(var cmd = db.CreateCommand()) {
           cmd.CommandText = "create database " + DB_NAME + ";";
           cmd.ExecuteNonQuery();
         }
       }
-      _db.Close();
+      db.Close();
       builder.Database = DB_NAME;
-      _db = new MySqlConnection(builder.ConnectionString);
-      _db.Open();
+      _connStr = builder.ToString();
+      CheckConnection();
       if(!exist) {
         using(var batch = _db.CreateBatch()) {
           batch.BatchCommands.Add(new MySqlBatchCommand("create table PS(ID int auto_increment primary key, P text not null, M text, S text);"));
           batch.BatchCommands.Add(new MySqlBatchCommand("create table LOGS(ID int auto_increment primary key, DT datetime(3) not null, L tinyint not null, M text not null, key `LOGS_DT_IDX` (`DT`) using btree);"));
           batch.BatchCommands.Add(new MySqlBatchCommand("create table ARCH(ID int not null auto_increment, P int not null, DT datetime(3) not null, V double not null, primary key (ID), key ARCH_FK (p), key ARCH_DT_IDX (DT) using btree, constraint ARCH_FK foreign key (P) references PS(ID) on delete cascade)"));
           batch.BatchCommands.Add(new MySqlBatchCommand("create table ARCH_W(P int primary key, DT1 datetime(3), DT2 datetime(3), constraint ARCH_W_FK foreign key (P) references PS(ID) on delete cascade);"));
-          batch.BatchCommands.Add(new MySqlBatchCommand("create trigger ARCH_DATA after update on PS for each row begin if (new.S != old.S and json_value(new.M, '$.Arch.enable') and (json_type(new.S) = 'INTEGER' or json_type(new.S) = 'DOUBLE')) then insert into ARCH (P, DT, V) values (new.ID, now(), json_value(new.S, '$')); end if; end"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create trigger ARCH_DATA after update on PS for each row begin if (new.S != old.S and json_value(new.M, '$.Arch.enable') and (json_type(new.S) = 'INTEGER' or json_type(new.S) = 'DOUBLE')) then insert into ARCH (P, DT, V) values (new.ID, now(3), json_value(new.S, '$')); end if; end"));
           batch.ExecuteNonQuery();
         }
       } else {
@@ -271,22 +271,7 @@ namespace X13.PersistentStorage {
     #region History
     private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
       if(ll != LogLevel.Debug) {
-        CheckConnection();
-        try {
-          lock(_db) {
-            using(var cmd = new MySqlCommand("insert into LOGS(DT, L, M) values(@dt, @level, @message);", _db)) {
-              cmd.Parameters.AddWithValue("dt", dt);
-              cmd.Parameters.AddWithValue("level", (int)ll);
-              cmd.Parameters.AddWithValue("message", msg);
-              cmd.ExecuteNonQuery();
-            }
-          }
-
-        }
-        catch(Exception ex) {
-          Log.Error("PS.Log_Write() - {0}", ex);
-          CloseDB();
-        }
+        ExecuteNonQuery("insert into LOGS(DT, L, M) values(@P0, @P1, @P2);", dt, (int)ll, msg);
       }
     }
     private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
@@ -328,7 +313,7 @@ namespace X13.PersistentStorage {
               var pn = "P" + i.ToString();
               cmd.Parameters.AddWithValue(pn, p_ids[i]);
             }
-            var pi = string.Join(" ,", Enumerable.Range(0, topics.Length).Select(p => "P" + p.ToString()));
+            var pi = string.Join(" ,", Enumerable.Range(0, topics.Length).Select(p => "@P" + p.ToString()));
 
             cmd.Parameters.AddWithValue("BEGIN", begin);
 
@@ -338,7 +323,7 @@ namespace X13.PersistentStorage {
                 cmd.Parameters.AddWithValue("COUNT", -count);
               } else if(count == 0) {
                 cmd.CommandText = "select P, DT, V from ARCH where P in (" + pi + ") and DT between @BEGIN and @END order by DT";
-                cmd.Parameters.AddWithValue("END", end.ToUniversalTime());
+                cmd.Parameters.AddWithValue("END", end);
               } else {
                 cmd.CommandText = "select P, DT, V from ARCH where P in (" + pi + ") and DT>@BEGIN order by DT limit @COUNT";
                 cmd.Parameters.AddWithValue("COUNT", count);
@@ -397,12 +382,12 @@ namespace X13.PersistentStorage {
                 }
               }
               cmd.CommandText = "select P, DT, V from ARCH where P in (" + pi + ") and DT between @BEGIN AND @END order by DT";
-              cmd.Parameters.AddWithValue("END", end.ToUniversalTime());
+              cmd.Parameters.AddWithValue("END", end);
               using(var reader = cmd.ExecuteReader()) {
                 if(reader.HasRows) {
                   while(reader.Read()) {
-                    var p = reader.GetString(0);
-                    var t_cur = reader.GetDateTime(1).ToLocalTime();
+                    var p_id = reader.GetInt64(0);
+                    var t_cur = reader.GetDateTime(1);
                     var v = new JSL.Number(reader.GetDouble(2));
                     if(t_cur >= cursor) {
                       AddRecord();
@@ -411,7 +396,7 @@ namespace X13.PersistentStorage {
                       } while(t_cur >= cursor);
                     }
                     for(i = 0; i < topics.Length; i++) {
-                      if(p == topics[i]) {
+                      if(p_id == p_ids[i]) {
                         if(!double.IsNaN(v)) {
                           var td = (t_cur - cursor).TotalSeconds;
                           if(!double.IsNaN(l_val[i])) {
