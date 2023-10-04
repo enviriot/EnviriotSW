@@ -283,9 +283,12 @@ namespace X13 {
           i.Value.Start();
           Log.Debug("plugin {0} Started", pName);
         }
+        //catch(ThreadAbortException) {
+        //  Log.Error("Start plugin {0} aborted", pName);
+        //}
         catch(Exception ex) {
           Log.Error("Start plugin {0} failure - {1}", pName, ex.ToString());
-          i.Value.enabled = false;
+          //i.Value.enabled = false;
         }
       }
       _modules = _impModules.Where(z => z.Value.enabled).Select(z => z.Value).ToArray();

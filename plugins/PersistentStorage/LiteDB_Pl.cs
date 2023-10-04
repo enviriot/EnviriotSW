@@ -660,7 +660,7 @@ namespace X13.PersistentStorage {
           t_cnt = 0;
           t_sum = 0;
           for(i = 0; i < tba.Length; i++) {
-            lo[i + 1] = f_cnt[i] > 0 ? new JSL.Number(f_cnt[i] == 1 ? l_val[i] : (f_val[i] + l_val[i] * (-l_delta[i]) / step)) : JSC.JSValue.Null;
+            lo[i + 1] = f_cnt[i] > 1 ? new JSL.Number(f_cnt[i] == 1 ? l_val[i] : (f_val[i] + l_val[i] * (-l_delta[i]) / step)) : JSC.JSValue.Null;
             f_val[i] = 0;
             f_cnt[i] = 0;
             l_delta[i] = -step;

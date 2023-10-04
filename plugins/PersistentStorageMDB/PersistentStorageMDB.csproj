@@ -75,7 +75,7 @@
     <Compile Include="..\PersistentStorage\PersistentStorageBase.cs">
       <Link>PersistentStorageBase.cs</Link>
     </Compile>
-    <Compile Include="MariaDB_Pl.cs" />
+    <Compile Include="MySQL_Pl.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

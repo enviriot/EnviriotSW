@@ -16,8 +16,8 @@ using System.Xml.Serialization;
 namespace X13.PersistentStorage {
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 2)]
-  [System.ComponentModel.Composition.ExportMetadata("name", "MariaDB")]
-  internal class MariaDB_Pl : PersistentStorageBase, IPlugModul {
+  [System.ComponentModel.Composition.ExportMetadata("name", "MySQL")]
+  internal class MySQL_Pl : PersistentStorageBase, IPlugModul {
     private const string DB_NAME = "Enviriot";
     private bool _showError;
     private DateTime _lastConnect;
@@ -25,7 +25,7 @@ namespace X13.PersistentStorage {
     private MySqlConnection _db;
     private readonly Dictionary<string, long> _idCache;
 
-    public MariaDB_Pl() : base("MariaDB") {
+    public MySQL_Pl() : base("MySQL") {
       _idCache = new Dictionary<string, long>();
       _showError = true;
       _lastConnect = DateTime.MinValue;
@@ -40,11 +40,11 @@ namespace X13.PersistentStorage {
             db.Open();
             _db = db;
             _showError = true;
-            X13.Log.Debug("DB connection opened");
+            X13.Log.Debug("MySQL connection opened");
           }
         }
         catch(Exception ex) {
-          X13.Log.Error("DB.CheckConnection - {0}", ex.Message);
+          X13.Log.Error("MySQL.CheckConnection - {0}", ex.Message);
           _showError = false;
         }
       }
@@ -54,15 +54,15 @@ namespace X13.PersistentStorage {
       try {
         lock(_db) {
           using(MySqlCommand cmd = new MySqlCommand(command, _db)) {
-            for(int i = 0; i< args.Length; i++) {
-              cmd.Parameters.AddWithValue("P"+i.ToString(), args[i]);
+            for(int i = 0; i < args.Length; i++) {
+              cmd.Parameters.AddWithValue("P" + i.ToString(), args[i]);
             }
             cmd.ExecuteNonQuery();
           }
         }
       }
       catch(Exception ex) {
-        Log.Error("PS.ExecuteNonQuery({0}) - {1}", command, ex);
+        Log.Error("MySQL.ExecuteNonQuery({0}) - {1}", command, ex);
         CloseDB();
       }
 
@@ -74,14 +74,18 @@ namespace X13.PersistentStorage {
           db.Close();
         }
         catch(Exception ex) {
-          Log.Warning("PS.CloseDB - {0}", ex);
+          Log.Warning("MySQL.CloseDB - {0}", ex);
         }
       }
     }
 
     #region Persisten Storage Members
     protected override void ThreadM() {
-      LoadOrCreateDB();
+      if(OpenOrCreate()) {
+        Load();
+      }
+      Log.History = History;
+      Log.Write += Log_Write;
       _tick.Set();
 
       do {
@@ -91,7 +95,7 @@ namespace X13.PersistentStorage {
               Save(p);
             }
             catch(Exception ex) {
-              Log.Warning("PersistentStorage(" + (p == null ? "null" : p.ToString()) + ") - " + ex.ToString());
+              Log.Warning("MySQL(" + (p == null ? "null" : p.ToString()) + ") - " + ex.ToString());
             }
           }
         }/* else {
@@ -105,7 +109,7 @@ namespace X13.PersistentStorage {
       } while(!_terminate);
       CloseDB();
     }
-    private void LoadOrCreateDB() {
+    private bool OpenOrCreate() {
       string sUrl = "tcp://user:pa$w0rd@localhost/";
       var tUrl = _owner.Get("url", true, _owner);
       if(tUrl.GetState().ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(tUrl.GetState().As<string>())) {
@@ -129,7 +133,25 @@ namespace X13.PersistentStorage {
         builder.Port = (uint)uri.Port;
       }
       var db = new MySqlConnection(builder.ConnectionString);
-      db.Open();
+      while(true) {
+        try {
+          db.Open();
+          break;
+        }
+        catch(MySqlException ex) {
+          if(ex.ErrorCode == MySqlErrorCode.UnableToConnectToHost) {
+            if(_showError || (DateTime.Now - _lastConnect).TotalSeconds > 300) {
+              X13.Log.Error("MDB.OpenOrCreate - {0}", ex.Message);
+              _lastConnect = DateTime.Now;
+            }
+            _showError = false;
+            Thread.Sleep(30000);
+          } else {
+            throw;
+          }
+        }
+      }
+
       bool exist;
       using(var cmd = db.CreateCommand()) {
         cmd.CommandText = "select count(*) from INFORMATION_SCHEMA.SCHEMATA where SCHEMA_NAME = @name;";
@@ -151,51 +173,55 @@ namespace X13.PersistentStorage {
           batch.BatchCommands.Add(new MySqlBatchCommand("create table PS(ID int auto_increment primary key, P text not null, M text, S text);"));
           batch.BatchCommands.Add(new MySqlBatchCommand("create table LOGS(ID int auto_increment primary key, DT datetime(3) not null, L tinyint not null, M text not null, key `LOGS_DT_IDX` (`DT`) using btree);"));
           batch.BatchCommands.Add(new MySqlBatchCommand("create table ARCH(ID int not null auto_increment, P int not null, DT datetime(3) not null, V double not null, primary key (ID), key ARCH_FK (p), key ARCH_DT_IDX (DT) using btree, constraint ARCH_FK foreign key (P) references PS(ID) on delete cascade)"));
-          batch.BatchCommands.Add(new MySqlBatchCommand("create table ARCH_W(P int primary key, DT1 datetime(3), DT2 datetime(3), constraint ARCH_W_FK foreign key (P) references PS(ID) on delete cascade);"));
-          batch.BatchCommands.Add(new MySqlBatchCommand("create trigger ARCH_DATA after update on PS for each row begin if (new.S != old.S and json_value(new.M, '$.Arch.enable') and (json_type(new.S) = 'INTEGER' or json_type(new.S) = 'DOUBLE')) then insert into ARCH (P, DT, V) values (new.ID, now(3), json_value(new.S, '$')); end if; end"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create table ARCH_W(P int primary key, DT1 datetime(3), constraint ARCH_W_FK foreign key (P) references PS(ID) on delete cascade);"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create trigger ARCH_DATA after update on PS for each row begin if (new.S != old.S and json_value(new.M, '$.Arch.enable') and (json_type(new.S) = 'INTEGER' or json_type(new.S) = 'DOUBLE')) then insert into ARCH (P, DT, V) values (new.ID, now(3), json_value(new.S, '$')); insert ignore into ARCH_W(P) values(new.ID); end if; end"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("set global event_scheduler = on;"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create event PurgeLogs on schedule every 1 day starts current_date + interval 1 day + interval 3 hour + interval 45 minute do delete from LOGS where DT + interval 60 day < now();"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create event PurgeArch on schedule every 10 second do call PurgeArchProc();"));
+          batch.BatchCommands.Add(new MySqlBatchCommand("create procedure PurgeArchProc() begin declare v_id int(11); declare v_keep double; select aw.P, ifnull(cast(json_value(ps.M, '$.Arch.keep') as double), 7)*60*60*24 as KEEP into v_id, v_keep from ARCH_W aw join PS ps on aw.P = ps.ID where DT1 < now() or DT1 is null limit 1; if v_id is not null then delete from ARCH where p = v_id AND DT < timestampadd(second, -v_keep, now(3)); update ARCH_W set dt1 = timestampadd(second, least(2*v_keep, 60*60*(12+12*rand())), now(3)) where p = v_id; end if; end"));
           batch.ExecuteNonQuery();
         }
-      } else {
-        using(var cmd = new MySqlCommand("select * from PS order by P", _db)) {
-          using(var r = cmd.ExecuteReader()) {
-            while(r.Read()) {
-              long id = r.GetInt64(0);
-              string path = r.GetString(1);
-              var manifest = JsLib.ParseJson(r.GetString(2));
-              _idCache[path] = id;
+      }
+      return exist;
+    }
+    private void Load() {
+      using(var cmd = new MySqlCommand("select * from PS order by P", _db)) {
+        using(var r = cmd.ExecuteReader()) {
+          while(r.Read()) {
+            long id = r.GetInt64(0);
+            string path = r.GetString(1);
+            var manifest = JsLib.ParseJson(r.GetString(2));
+            _idCache[path] = id;
 
-              var t = Topic.I.Get(Topic.root, path, true, _owner, false, false);
-              // check version
-              {
-                var jTmp = t.GetField("version");
-                string sTmp;
+            var t = Topic.I.Get(Topic.root, path, true, _owner, false, false);
+            // check version
+            {
+              var jTmp = t.GetField("version");
+              string sTmp;
 
-                if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out Version vRepo)) {
-                  jTmp = manifest["version"];
-                  if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out Version vDB) || vRepo > vDB) {
-                    continue; // skip load, old version
-                  }
+              if(jTmp.ValueType == JSC.JSValueType.String && (sTmp = jTmp.Value as string) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out Version vRepo)) {
+                jTmp = manifest["version"];
+                if(jTmp.ValueType != JSC.JSValueType.String || (sTmp = jTmp.Value as string) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out Version vDB) || vRepo > vDB) {
+                  continue; // skip load, old version
                 }
               }
-              // check attribute
-              JSC.JSValue attr;
-              bool saved;
-              if(manifest == null || manifest.ValueType != JSC.JSValueType.Object || manifest.Value == null || !(attr = manifest["attr"]).IsNumber) {
-                saved = false;
-              } else {
-                saved = ((int)attr & (int)Topic.Attribute.Saved) == (int)Topic.Attribute.DB;
-              }
-
-              var state = saved ? JsLib.ParseJson(r.GetString(3)) : null;
-              Topic.I.Fill(t, state, manifest, _owner);
             }
+            // check attribute
+            JSC.JSValue attr;
+            bool saved;
+            if(manifest == null || manifest.ValueType != JSC.JSValueType.Object || manifest.Value == null || !(attr = manifest["attr"]).IsNumber) {
+              saved = false;
+            } else {
+              saved = ((int)attr & (int)Topic.Attribute.Saved) == (int)Topic.Attribute.DB;
+            }
+
+            var state = saved ? JsLib.ParseJson(r.GetString(3)) : null;
+            Topic.I.Fill(t, state, manifest, _owner);
           }
         }
       }
-      Log.History = History;
-      Log.Write += Log_Write;
-
     }
+
     private void Save(Perform p) {
       Topic t = p.src;
       long id;
@@ -218,7 +244,7 @@ namespace X13.PersistentStorage {
           }
         }
         catch(Exception ex) {
-          Log.Error("PS.Save1() - {0}", ex);
+          Log.Error("MySQL.Save1() - {0}", ex);
           CloseDB();
         }
       }
@@ -252,7 +278,7 @@ namespace X13.PersistentStorage {
             }
           }
           catch(Exception ex) {
-            Log.Error("PS.Save4() - {0}", ex);
+            Log.Error("MySQL.Save2() - {0}", ex);
             CloseDB();
           }
         } else {
@@ -260,7 +286,7 @@ namespace X13.PersistentStorage {
             ExecuteNonQuery("update PS set M = @P1, S= @P2 where ID=@P0", id, JsLib.Stringify(t.GetField(null)), JsLib.Stringify(t.GetState()));
           } else if(saveS) {
             ExecuteNonQuery("update PS set S= @P1 where ID=@P0;", id, JsLib.Stringify(t.GetState()));
-          } else if(saveM){
+          } else if(saveM) {
             ExecuteNonQuery("update PS set M = @P1 where ID=@P0", id, JsLib.Stringify(t.GetField(null)));
           }
         }
@@ -291,7 +317,7 @@ namespace X13.PersistentStorage {
         }
       }
       catch(Exception ex) {
-        Log.Error("PS.History() - {0}", ex);
+        Log.Error("MySQL.History() - {0}", ex);
         CloseDB();
       }
 
@@ -422,7 +448,7 @@ namespace X13.PersistentStorage {
                 t_cnt = 0;
                 t_sum = 0;
                 for(i = 0; i < topics.Length; i++) {
-                  lo[i + 1] = f_cnt[i] > 0 ? new JSL.Number(f_val[i] + l_val[i] * (-l_delta[i]) / step) : (double.IsNaN(l_val[i]) ? JSC.JSValue.Null : l_val[i]);
+                  lo[i + 1] = f_cnt[i] > 1 ? new JSL.Number(f_val[i] + l_val[i] * (-l_delta[i]) / step) : (double.IsNaN(l_val[i]) ? JSC.JSValue.Null : l_val[i]);
                   f_val[i] = 0;
                   f_cnt[i] = 0;
                   l_delta[i] = -step;
@@ -434,7 +460,7 @@ namespace X13.PersistentStorage {
         }
       }
       catch(Exception ex) {
-        Log.Error("PS.AQuery() - {0}", ex);
+        Log.Error("MySQL.AQuery() - {0}", ex);
         CloseDB();
       }
       //sw.Stop();
