@@ -182,6 +182,22 @@ x13-graph {
   margin: 1em 1% 1em 1%;
   /*outline: thin inset gray;*/
 }
+  x13-graph > div.gr_top {
+    gap: 0;
+    margin: 0 0 5px 0;
+    height: 20px;
+    display: flex;
+    width: 98%;
+  }
+
+  x13-graph div.gr_top > div {
+    width: 33%;
+    text-align: center;
+  }
+  x13-graph div.gr_top > div > :last-child {
+    width: 65%;
+    text-align: center;
+  }
 
 .dygraph-legend {
   position: absolute;

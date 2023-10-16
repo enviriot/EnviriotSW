@@ -47,11 +47,11 @@ class X13_graph extends BaseComponent {
     let options = {
       width: this.clientWidth - 10,
       height: this.clientHeight - 10,
-      title: this.$.title,
       dateWindow: this.range,
       connectSeparatedPoints: true,
-      legend: 'follow',
+      legend: 'always',
       series: series,
+      labelsDiv: this.ref.gr_ri,
       labelsSeparateLines: false,
       labels: this.labels,
       ylabel: this.$.ylabel,
@@ -203,6 +203,6 @@ function scrollV3(event, g, context) {
   event.preventDefault();
 }
 
-X13_graph.template = /*html*/ `<div ref="gr_hl"></div>`;
+X13_graph.template = /*html*/ `<div class="gr_top"><div ref="gr_title">{{title}}</div><div ref="gr_ri"></div></div><div ref="gr_hl"></div>`;
 X13_graph.bindAttributes({ "period": "period", title: "title", ylabel: "ylabel", y2label: "y2label" });
 X13_graph.reg("x13-graph");
