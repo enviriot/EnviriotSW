@@ -125,7 +125,7 @@ class X13_graph extends BaseComponent {
       corr = true;
     }
     if (Math.abs(this.range[0] - range[0]) > 60000 || Math.abs(this.range[1] - range[1]) > 60000) {
-      this.range = range;
+      this.range = [range[0], range[1]];
       this.reqQuery();
     }
     let grl = document.querySelectorAll('x13-graph');
@@ -134,6 +134,7 @@ class X13_graph extends BaseComponent {
       let gro = grl[idx].g.xAxisRange();
       if (corr || Math.abs(gro[0] - range[0]) > 60000 || Math.abs(gro[1] - range[1]) > 60000) {
         grl[idx].g.updateOptions({ dateWindow: range });
+        grl[idx].reqQuery();
       }
     }
     blockRedraw = false;
