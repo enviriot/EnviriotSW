@@ -17,7 +17,7 @@ namespace X13.Periphery {
     private const ushort LOG_I_ID = 0xFFE1;
     private const ushort LOG_W_ID = 0xFFE2;
     private const ushort LOG_E_ID = 0xFFE3;
-    private static Random _rand;
+    private static readonly Random _rand;
     private static Func<string, JSC.JSValue> _createConv;
     private static byte[] _baEmty = new byte[0];
     private static byte[] _baFalse = new byte[] { 0 };
@@ -49,7 +49,7 @@ namespace X13.Periphery {
           long v = vo;
           do {
             ret.Add((byte)v);
-            v = v >> 8;
+            v >>= 8;
           } while(vo < 0 ? (v < -1 || (ret[ret.Count - 1] & 0x80) == 0) : (v > 0 || (ret[ret.Count - 1] & 0x80) != 0));
           return ret.ToArray();
         }
@@ -81,10 +81,10 @@ namespace X13.Periphery {
     }
 
     private string _oldName;
-    private List<SubRec> _subsscriptions;
+    private readonly List<SubRec> _subsscriptions;
     private SubRec _srOwner;
-    private Queue<MsMessage> _sendQueue;
-    private List<TopicInfo> _topics;
+    private readonly Queue<MsMessage> _sendQueue;
+    private readonly List<TopicInfo> _topics;
     private MQTT_SNPl _pl;
     private State _state;
     private bool _waitAck;
@@ -97,7 +97,7 @@ namespace X13.Periphery {
     private MsPublish _lastInPub;
     private bool _has_RTC;
     private DateTime _last_RTC;
-    private JSC.JSObject _self;
+    private readonly JSC.JSObject _self;
     private byte[] _suppressedInputs;
 #if DEBUG
     private MsMessage _to_Msg;
