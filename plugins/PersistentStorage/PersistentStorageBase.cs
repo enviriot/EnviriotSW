@@ -62,6 +62,10 @@ namespace X13.PersistentStorage {
       _tr.Start();
       _tick.WaitOne();  // wait load
       Topic.Subscribe(SubFunc);
+      if(_db.UserVersion < 3) {
+        _db.UserVersion = 3;
+        ImportDefault();
+      }
     }
     public void Tick() {
       if(_q.Any()) {
@@ -384,15 +388,19 @@ namespace X13.PersistentStorage {
         oldId.Clear();
       } else {
         _objects.EnsureIndex("p", true);
-        var assembly = typeof(Repo).Assembly;
-        using (var rs = assembly.GetManifestResourceStream("X13.Repository.base.xst")) {
-          using (var reader = new StreamReader(rs)) {
-            Repo.Import(reader, null);
-          }
-        }
-
       }
     }
+
+    private static void ImportDefault() {
+      var assembly = typeof(Repo).Assembly;
+      using (var rs = assembly.GetManifestResourceStream("X13.Repository.base.xst")) {
+        using (var reader = new StreamReader(rs)) {
+          Log.Info("Import base.xst");
+          Repo.Import(reader, null);
+        }
+      }
+    }
+
     private void Save(Perform p) {
       Topic t = p.src;
       Stash a;

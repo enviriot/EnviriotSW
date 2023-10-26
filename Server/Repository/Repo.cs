@@ -218,7 +218,7 @@ namespace X13.Repository {
       if(string.IsNullOrEmpty(fileName) || !File.Exists(fileName)) {
         return false;
       }
-      X13.Log.Info("Import {0}", fileName);
+      X13.Log.Info("Import {0}", Path.GetFullPath(fileName));
       using(StreamReader reader = File.OpenText(fileName)) {
         Import(reader, path);
       }
