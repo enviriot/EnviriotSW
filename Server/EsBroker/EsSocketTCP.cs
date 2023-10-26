@@ -201,9 +201,13 @@ namespace X13.EsBroker {
       }
       buf[buf.Length - 1] = 0xFF;
       if (this._socket.Connected) {
-        this._stream.Write(buf, 0, buf.Length);
-        if (Verbose && rep) {
-          Log.Debug("{0}.Send({1})", this.ToString(), ms);
+        try {
+          this._stream.Write(buf, 0, buf.Length);
+          if (Verbose && rep) {
+            Log.Debug("{0}.Send({1})", this.ToString(), ms);
+          }
+        }catch(Exception ex) {
+          Log.Warning("EsSocketTCP.SendArr({0}, {1}) - {2}", ms, rep, ex.Message);
         }
       }
     }
