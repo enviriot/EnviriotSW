@@ -32,9 +32,13 @@ namespace X13.PersistentStorage {
     #region IPlugModul Members
     public void Init() {
       _owner = Topic.root.Get("/$YS/PersistentStorage", true);
+      var dir = Path.GetDirectoryName(DB_PATH);
+      if (!Directory.Exists(dir)) {
+        Directory.CreateDirectory(dir);
+      }
       bool exist = File.Exists(DB_PATH);
       if (exist) {
-        string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
+        string fb = dir + (new string(Path.DirectorySeparatorChar, 1)) + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
         File.Copy(DB_PATH, fb);
         Log.Info("backup {0} created", fb);
       }
