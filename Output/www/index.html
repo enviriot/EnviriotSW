@@ -5,10 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Enviriot WebUI</title>
   <link rel="stylesheet" href="./index.css">
+  <script src="./lib/stringformat.min.js"></script>
   <script src="./lib/wsBond.js" type="module"></script>
+  <script src="./components/button.js" type="module"></script>
+  <script src="./components/checkbox.js" type="module"></script>
+  <script src="./components/graph.js" type="module"></script>
   <script src="./components/range.js" type="module"></script>
+  <script src="./components/signal.js" type="module"></script>
+  <script src="./components/status.js" type="module"></script>
+  <script src="./components/stText.js" type="module"></script>
+  <script src="./components/text.js" type="module"></script>
+  <!--script src="./components/thermostat.js" type="module"></script-->
 </head>
 <body>
-  <x13-range data-value="/export/set" format="0.0 °C" min="20.5" max="28.5" data-actual="/export/value" style="width:70vw;"></x13-range>
+  <div style="display: flex;gap: 1em;width: 98%;margin: 0 1% 15px 1%;">
+    <x13-button data-value="/export/Test/Mute" data-fg_color="/export/Test/Muted" data-fg_color.color="false:#40808080;true:#000000;">&#128277;</x13-button>
+    <x13-checkbox data-value="/export/Test/Status">&#128161;</x13-checkbox>
+    <x13-status data-value="/export/Test/Status"></x13-status>
+    <!--x13-thermostat data-temperature="/export/Test/T" data-humidity="/export/Test/H" data-setting="/export/Test/Set" data-valve="/export/Test/Valve" data-status="/export/Test/Status" style="width:50px;"></x13-thermostat-->
+    <x13-text data-value="/export/Test/Valve" data-value.format="0.0 '%'" data-bg_color.color="-50:#8080FF;-10:#80FF88;0:#80FF80;10::#88FF80;50:#FF8080"></x13-text>
+    <x13-signal data-value="/export/Test/Mute" data-value.color="false:#FFFF00;true:#00FFFF00"></x13-signal>
+    <x13-st_text data-status="/export/Test/Status" data-value="/export/Test/T" data-value.format="0.00 '°C'"></x13-st_text>
+  </div>
+  <x13-range data-value="/export/Test/Set" format="0.0 °C" min="16" max="26" data-actual="/export/Test/T" style="width:99vw;"></x13-range>
+  <x13-graph title="Температура/Влажность" ylabel="°C" y2label="%" data-T="/export/Test/T" data-H.y2="/export/Test/H" style="height:40vh;"></x13-graph>
 </body>
 </html>

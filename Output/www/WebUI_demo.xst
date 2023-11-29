@@ -1,0 +1,55 @@
+﻿<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+<xst path='/'>
+  <i n='/export' m='{"attr":0}'>
+    <i n='Test' m='{"attr":0}'>
+      <i n='H' m='{"Arch":{"enable":true,"keep":7},"cctor":{"LoBind":"/Test/H"},"attr":0}' />
+      <i n='Mute' s='false' m='{"cctor":{"LoBind":"/Test/Mute"},"attr":65}' />
+      <i n='Muted' m='{"cctor":{"LoBind":"/Test/Muted"},"attr":0}' />
+      <i n='Set' s='22' m='{"cctor":{"LoBind":"/Test/Set"},"attr":65}' />
+      <i n='Status' s='true' m='{"attr":4}' />
+      <i n='T' m='{"cctor":{"LoBind":"/Test/T"},"attr":0,"Arch":{"enable":true,"keep":7}}' />
+      <i n='Valve' m='{"cctor":{"LoBind":"/Test/Valve"},"attr":0}' />
+    </i>
+  </i>
+  <i n='/Test' m='{"type":"Core/Logram","attr":0}'>
+    <i n='A01' m='{"attr":66,"type":"LoBlock/Binary/Trigger","Logram":{"top":1,"left":6}}'>
+      <i n='C' m='{"cctor":{"LoBind":"/Test/Mute"},"attr":65}' />
+      <i n='D' m='{"cctor":{"LoBind":"/Test/A01/NQ"},"attr":65}' />
+      <i n='NQ' m='{"attr":65}' />
+      <i n='Q' s='true' m='{"attr":65}' />
+      <i n='R' s='false' m='{"attr":69}' />
+      <i n='S' s='false' m='{"attr":69}' />
+    </i>
+    <i n='A02' m='{"attr":66,"type":"LoBlock/Common/Func","Logram":{"top":8,"left":8}}'>
+      <i n='A' m='{"cctor":{"LoBind":"/Test/Set"},"attr":65}' />
+      <i n='B' m='{"cctor":{"LoBind":"/Test/A03/Q"},"attr":64}' />
+      <i n='Q' s='20'  m='{"attr":65,"Logram":{"trace":true}}' />
+      <i n='src' s='"if(B){\r\n  let r = this.GetState(\"Q\");\r\n  r = r*(0.94 + Math.random()/50) + A*0.05;\r\n  return r;\r\n}"' m='{"attr":69,"editor":"JS"}' />
+    </i>
+    <i n='A03' m='{"attr":66,"type":"LoBlock/Timer/Oscillator","Logram":{"top":10,"left":2}}'>
+      <i n='En' s='true' m='{"attr":69}' />
+      <i n='NQ' m='{"attr":65}' />
+      <i n='OffDelay' s='100' m='{"attr":69}' />
+      <i n='Period' s='5000' m='{"attr":69}' />
+      <i n='Q' m='{"attr":65}' />
+    </i>
+    <i n='A04' m='{"attr":66,"type":"LoBlock/Common/Func","Logram":{"top":14,"left":9}}'>
+      <i n='A' s='50' m='{"attr":69}' />
+      <i n='B' m='{"cctor":{"LoBind":"/Test/A03/Q"},"attr":64}' />
+      <i n='Q' s='50' m='{"attr":65,"Logram":{"trace":true}}' />
+      <i n='src' s='"if(B){\r\n  let r = this.GetState(\"Q\");\r\n  r = r*(0.9 + Math.random()/10) + A*0.05;\r\n  return r;\r\n}"' m='{"attr":69,"editor":"JS"}' />
+    </i>
+    <i n='A05' m='{"attr":66,"type":"LoBlock/Common/Func","Logram":{"top":5,"left":14}}'>
+      <i n='A' m='{"cctor":{"LoBind":"/Test/Set"},"attr":65}' />
+      <i n='B' m='{"cctor":{"LoBind":"/Test/A02/Q"},"attr":64}' />
+      <i n='Q' m='{"attr":65}' />
+      <i n='src' s='"return Math.max(-100, Math.min(100, (A-B)*100));"' m='{"attr":69,"editor":"JS"}' />
+    </i>
+    <i n='H' m='{"Logram":{"top":15,"left":15},"attr":0,"cctor":{"LoBind":"/Test/A04/Q"}}' />
+    <i n='Mute' m='{"cctor":{"LoBind":"/export/Test/Mute"},"attr":0,"Logram":{"top":4,"left":1}}' />
+    <i n='Muted' m='{"attr":65,"cctor":{"LoBind":"/Test/A01/Q"},"Logram":{"top":2,"left":11}}' />
+    <i n='Set' m='{"cctor":{"LoBind":"/export/Test/Set"},"attr":65,"Logram":{"top":9,"left":2,"trace":true}}' />
+    <i n='T' m='{"attr":0,"cctor":{"LoBind":"/Test/A02/Q"},"Logram":{"top":9,"left":15}}' />
+    <i n='Valve' m='{"attr":0,"Logram":{"top":6,"left":21},"cctor":{"LoBind":"/Test/A05/Q"}}' />
+  </i>
+</xst>

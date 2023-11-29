@@ -121,7 +121,7 @@ class X13_calender extends BaseComponent {
           if (cur.getMonth() & 1) {
             cl += " odd";
           }
-          if (Math.abs(today - cur.getTime()) < 100000) {
+          if (Math.abs(today - cur.getTime()) < 3601000) {  // sommertime
             cl += " today";
             isToday = true;
           }
