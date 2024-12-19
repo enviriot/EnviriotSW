@@ -28,6 +28,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PersistentStorage", "plugin
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PersistentStorageMDB", "plugins\PersistentStorageMDB\PersistentStorageMDB.csproj", "{4EA412D1-B557-48A6-B7F7-547CA9651349}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PersistentStorageFDB", "plugins\PersistentStorageFDB\PersistentStorageFDB.csproj", "{810C71E4-BE32-4CC4-A63A-B49B1998BA10}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,12 +61,15 @@ Global
 		{31FE6D4F-2FB1-4B5C-99C3-AFFC20EED7F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{31FE6D4F-2FB1-4B5C-99C3-AFFC20EED7F8}.Release|Any CPU.Build.0 = Release|Any CPU
 		{2B9C8121-81CF-43A0-8EDE-7E15ACF6FB7B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2B9C8121-81CF-43A0-8EDE-7E15ACF6FB7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2B9C8121-81CF-43A0-8EDE-7E15ACF6FB7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2B9C8121-81CF-43A0-8EDE-7E15ACF6FB7B}.Release|Any CPU.Build.0 = Release|Any CPU
 		{4EA412D1-B557-48A6-B7F7-547CA9651349}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{4EA412D1-B557-48A6-B7F7-547CA9651349}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4EA412D1-B557-48A6-B7F7-547CA9651349}.Release|Any CPU.Build.0 = Release|Any CPU
+		{810C71E4-BE32-4CC4-A63A-B49B1998BA10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{810C71E4-BE32-4CC4-A63A-B49B1998BA10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{810C71E4-BE32-4CC4-A63A-B49B1998BA10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{810C71E4-BE32-4CC4-A63A-B49B1998BA10}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -77,6 +82,7 @@ Global
 		{31FE6D4F-2FB1-4B5C-99C3-AFFC20EED7F8} = {1DD8FCEB-A0FE-4455-AAE2-3980DEBC12E2}
 		{2B9C8121-81CF-43A0-8EDE-7E15ACF6FB7B} = {1DD8FCEB-A0FE-4455-AAE2-3980DEBC12E2}
 		{4EA412D1-B557-48A6-B7F7-547CA9651349} = {1DD8FCEB-A0FE-4455-AAE2-3980DEBC12E2}
+		{810C71E4-BE32-4CC4-A63A-B49B1998BA10} = {1DD8FCEB-A0FE-4455-AAE2-3980DEBC12E2}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D7927E4C-F2DE-413C-8C48-B0DF83C63140}
