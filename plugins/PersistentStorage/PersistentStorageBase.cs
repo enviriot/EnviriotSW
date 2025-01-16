@@ -11,6 +11,7 @@ using X13.Repository;
 using System.Threading;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Security.Policy;
 
 namespace X13.PersistentStorage {
   internal abstract class PersistentStorageBase : IPlugModul {
@@ -38,7 +39,20 @@ namespace X13.PersistentStorage {
       }
       bool exist = File.Exists(DB_PATH);
       if (exist) {
-        string fb = dir + (new string(Path.DirectorySeparatorChar, 1)) + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
+        Topic bakT;
+        string bak_dir;
+        if (_owner.Exist("bak", out bakT)) {
+          bak_dir = bakT.GetState().ToString();
+        } else { 
+          bakT = _owner.Get("bak", true, _owner);
+          bakT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          bakT.SetState(dir);
+          bak_dir = dir;
+        }
+        if (!Directory.Exists(bak_dir)) {
+          Directory.CreateDirectory(bak_dir);
+        }
+        string fb = bak_dir + (new string(Path.DirectorySeparatorChar, 1)) + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
         File.Copy(DB_PATH, fb);
         Log.Info("backup {0} created", fb);
       }
@@ -485,7 +499,8 @@ namespace X13.PersistentStorage {
         db.Checkpoint();
         db.Dispose();
       }
-      string fb = "../data/" + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
+      var bak_dir = _owner.Get("bak", true, _owner).GetState().ToString();
+      string fb = bak_dir + (new string(Path.DirectorySeparatorChar, 1)) + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
       File.Copy(DB_PATH, fb);
       Log.Info("backup {0} created", fb);
       _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH }) { CheckpointSize = 50 };
@@ -496,7 +511,7 @@ namespace X13.PersistentStorage {
 
       try {
         DateTime now = DateTime.Now, fdt;
-        foreach (string f in Directory.GetFiles(Path.GetDirectoryName(DB_PATH), "??????_??????.bak", SearchOption.TopDirectoryOnly)) {
+        foreach (string f in Directory.GetFiles(bak_dir, "??????_??????.bak", SearchOption.TopDirectoryOnly)) {
           fdt = File.GetLastWriteTime(f);
           if (fdt.AddDays(7) > now || (fdt.DayOfWeek == DayOfWeek.Thursday && fdt.Hour == 3 && (fdt.AddMonths(1) > now || (fdt.AddMonths(6) > now && fdt.Day < 8)))) {
             continue;

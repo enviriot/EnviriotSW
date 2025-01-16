@@ -11,21 +11,23 @@ using NiL.JS.Extensions;
 using X13.Repository;
 using FirebirdSql.Data.FirebirdClient;
 using LiteDB;
+using FirebirdSql.Data.Services;
 
 namespace X13.PersistentStorage {
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 2)]
   [System.ComponentModel.Composition.ExportMetadata("name", "FBSQL")]
   internal class FB_SQL_Pl : PersistentStorageBase, IPlugModul {
-    private const string DB_NAME = "../data/persist.fdb";
+    private const string DB_NAME = "../data/arch.fdb";
     private const string KEEP_FIELD = "Arch.keep";
     private FbConnection _db;
     private readonly Dictionary<Topic, ArchLog> _dict;
-
+    private DateTime _AbackupDT;
     //TODO: Lazy connect
 
     public FB_SQL_Pl() : base("Firebird") {
       _dict = new Dictionary<Topic, ArchLog>();
+      _AbackupDT = DateTime.Now.AddDays(1).Date.AddHours(3.5);
     }
     private void CheckConnection() {
     }
@@ -163,6 +165,36 @@ namespace X13.PersistentStorage {
       return ar;
     }
     protected override void IdleTaskArch() {
+      if (_AbackupDT < DateTime.Now) {
+        _AbackupDT = DateTime.Now.AddDays(1).Date.AddHours(3.5);
+        var bak_dir = _owner.Get("bak", true, _owner).GetState().ToString();
+        string fb = bak_dir + (new string(Path.DirectorySeparatorChar, 1)) + DateTime.Now.ToString("yyMMdd_HHmmss") + "_fbd.bak";
+        Log.Info("Arch Backup started: {0}", fb);
+        try {
+          var b = new FbBackup(_db.ConnectionString);
+          b.BackupFiles.Add(new FbBackupFile(fb));
+          b.ServiceOutput += (s, e) => Log.Debug("Arch Backup - {0}", e.Message);
+          b.Execute();
+          Log.Info("Arch Backup finished");
+        }
+        catch (Exception ex) {
+          Log.Warning("Arch Backup failed - " + ex.ToString());
+        }
+        try {
+          DateTime now = DateTime.Now, fdt;
+          foreach (string f in Directory.GetFiles(bak_dir, "??????_??????_fbd.bak", SearchOption.TopDirectoryOnly)) {
+            fdt = File.GetLastWriteTime(f);
+            if (fdt.AddDays(7) > now || (fdt.DayOfWeek == DayOfWeek.Thursday && fdt.Hour == 3 && (fdt.AddMonths(1) > now || (fdt.AddMonths(6) > now && fdt.Day < 8)))) {
+              continue;
+            }
+            File.Delete(f);
+            Log.Info("backup {0} deleted", Path.GetFileName(f));
+          }
+        }
+        catch (System.IO.IOException) {
+        }
+
+      }
     }
     protected override void CloseArch() {
       CloseDB();
