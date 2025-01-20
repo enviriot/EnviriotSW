@@ -102,20 +102,27 @@ namespace X13.PersistentStorage {
           cmd.CommandText = "CREATE INDEX ARCH_DT_IDX ON ARCH (DT);";
           cmd.ExecuteNonQuery();
         }
-        /*
-        using (var cmd = db.CreateCommand()) {
-          cmd.CommandText = "create procedure PurgeArchProc() begin declare v_id int(11); declare v_keep double; select ID, KEEP*24*60*60 into v_id, v_keep from ARCH_W where DT < now() or DT is null order by DT limit 1; if v_id is not null then delete from ARCH where p = v_id AND DT < timestampadd(second, -v_keep, now(3)); update ARCH_W set DT = timestampadd(second, least(2*v_keep, 60*60*(12+12*rand())), now(3)) where ID = v_id; end if; end;";
+        
+        using (var cmd = _db.CreateCommand()) {
+          cmd.CommandText = "CREATE FUNCTION PurgeArchFunc() RETURNS integer AS \r\n  DECLARE VARIABLE v_id integer;\r\n  DECLARE VARIABLE v_now timestamp;\r\n  DECLARE VARIABLE v_dt1 timestamp;\r\n  DECLARE VARIABLE v_dt2 timestamp;\r\nBEGIN\r\n  SELECT FIRST 1 ID, CURRENT_TIMESTAMP - KEEP, CURRENT_TIMESTAMP + MINVALUE(2*KEEP, 0.5 * (1+RAND())) FROM ARCH_W WHERE DT < CURRENT_TIMESTAMP OR DT IS NULL ORDER BY DT INTO :v_id, :v_dt1, :v_dt2;\r\n  IF (v_id IS NOT NULL) THEN\r\n    BEGIN \r\n      DELETE FROM ARCH WHERE p = :v_id AND DT < :v_dt1;\r\n      update ARCH_W set DT = :v_dt2 where ID = :v_id;\r\n    END\r\n  RETURN v_id;\r\nend;";
           cmd.ExecuteNonQuery();
         }
-        using (var cmd = db.CreateCommand()) {
-          cmd.CommandText = "set global event_scheduler = on;";
-          cmd.ExecuteNonQuery();
-        }
-        using (var cmd = db.CreateCommand()) {
-          cmd.CommandText = "create event PurgeArch on schedule every 10 second do call PurgeArchProc();";
-          cmd.ExecuteNonQuery();
-        }*/
       } else {
+        {
+          int cnt;
+          using (var cmd = _db.CreateCommand()) {
+            cmd.CommandText = "SELECT count(*) FROM RDB$FUNCTIONS WHERE RDB$FUNCTION_NAME = 'PURGEARCHFUNC'";
+
+            var rez = (long)cmd.ExecuteScalar();
+            cnt = (int)rez;
+          }
+          if (cnt == 0) {
+            using (var cmd = _db.CreateCommand()) {
+              cmd.CommandText = "CREATE FUNCTION PurgeArchFunc() RETURNS integer AS \r\n  DECLARE VARIABLE v_id integer;\r\n  DECLARE VARIABLE v_now timestamp;\r\n  DECLARE VARIABLE v_dt1 timestamp;\r\n  DECLARE VARIABLE v_dt2 timestamp;\r\nBEGIN\r\n  SELECT FIRST 1 ID, CURRENT_TIMESTAMP - KEEP, CURRENT_TIMESTAMP + MINVALUE(2*KEEP, 0.5 * (1+RAND())) FROM ARCH_W WHERE DT < CURRENT_TIMESTAMP OR DT IS NULL ORDER BY DT INTO :v_id, :v_dt1, :v_dt2;\r\n  IF (v_id IS NOT NULL) THEN\r\n    BEGIN \r\n      DELETE FROM ARCH WHERE p = :v_id AND DT < :v_dt1;\r\n      update ARCH_W set DT = :v_dt2 where ID = :v_id;\r\n    END\r\n  RETURN v_id;\r\nend;";
+              cmd.ExecuteNonQuery();
+            }
+          }
+        }
         using (var cmd = _db.CreateCommand()) {
           cmd.CommandText = "select ID, P, KEEP from ARCH_W order by P";
           using (var r = cmd.ExecuteReader()) {
@@ -193,7 +200,25 @@ namespace X13.PersistentStorage {
         }
         catch (System.IO.IOException) {
         }
-
+      } else {
+        FbCommand cmd = null;
+        try {
+          object rez;
+          lock (_db) {
+            cmd = _db.CreateCommand();
+            cmd.CommandText = "SELECT FIRST 1 PurgeArchFunc() FROM RDB$DATABASE";
+            rez = cmd.ExecuteScalar();
+          }
+          if (rez is int id) {
+            Log.Debug("PurgeArchFunc() - {0}", id);
+          }
+        }
+        catch (Exception ex) {
+          X13.Log.Warning("FB_SQL.PurgeArchFunc() - {0}", ex.Message);
+        }
+        finally {
+          cmd?.Dispose();
+        }
       }
     }
     protected override void CloseArch() {
