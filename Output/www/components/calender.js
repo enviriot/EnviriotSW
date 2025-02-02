@@ -96,7 +96,7 @@ class X13_calender extends BaseComponent {
     do {
       cur = new Date(start + (j * 7) * 24 * 60 * 60 * 1000);
       i = j + ((((new Date(cur.getFullYear(), cur.getMonth() + 1, 8, 12, 0, 0)).getTime() - cur.getTime()) / (24 * 60 * 60 * 1000) - 1) / 7) | 0;
-      if (i > 14) {
+      if (i > 14 || i==j) {
         for (; j < 15; j++) {
           lst.push({ text: "", left: j + 2, right: j + 3 });
         }
