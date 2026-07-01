@@ -116,8 +116,10 @@ namespace X13 {
           readyState = 4;
         }
         catch(WebException e) {
-          Log.Warning("XMLHttpRequest({0}) - [{1}] {2}", _req.RequestUri, e.Status, e.ToString());
+          Log.Debug("XMLHttpRequest({0}) - [{1}] {2}", _req.RequestUri, e.Status, e.ToString());
           readyState = 4;
+          status = 408;
+          statusText = e.Status.ToString();
         }
       }
       #region IDisposable Member

@@ -2,17 +2,7 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/.vs/
 /packages
-/ES/obj
-/plugins/AntSw/obj
-/plugins/Logram/obj
-/plugins/MQTT/obj
-/plugins/MQTT_SN/obj
-/plugins/PersistentStorage/obj
-/plugins/PersistentStorageMDB/obj
-/plugins/WebUI/obj
-/Server/obj
 /Output/binUI
 /Output/bin_r
 /Output/bin_d
@@ -20,3 +10,24 @@
 /Output/log
 /Output/ES.cfg
 /Output/enviriot.xst
+/plugins/AntSw/.vs
+/plugins/AntSw/obj
+/plugins/Logram/.vs
+/plugins/Logram/obj
+/ES/.vs
+/ES/obj
+/plugins/MQTT/.vs
+/plugins/MQTT/obj
+/plugins/MQTT_SN/.vs
+/plugins/MQTT_SN/obj
+/plugins/PersistentStorage/.vs
+/plugins/PersistentStorage/obj
+/plugins/PersistentStorageFDB/.vs
+/plugins/PersistentStorageFDB/obj
+/plugins/PersistentStorageMDB/.vs
+/plugins/PersistentStorageMDB/obj
+/plugins/WebUI/.vs
+/plugins/WebUI/obj
+/Server/.vs
+/Server/obj
+/.vs
