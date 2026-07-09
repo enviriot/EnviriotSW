@@ -117,8 +117,31 @@ namespace X13 {
         }
         catch(WebException e) {
           Log.Debug("XMLHttpRequest({0}) - [{1}] {2}", _req.RequestUri, e.Status, e.ToString());
+          // If server returned an HTTP error status, the real response is available
+          // in the WebException.Response. Extract status code/text and body when present
+          try {
+            if(e.Response is HttpWebResponse errResp) {
+              _resp = errResp;
+              status = (ushort)(int)errResp.StatusCode;
+              statusText = errResp.StatusDescription;
+              readyState = 2;
+              using(var responseStream = errResp.GetResponseStream()) {
+                if(responseStream != null) {
+                  using(var str = new StreamReader(responseStream, Encoding.UTF8)) {
+                    responseText = str.ReadToEnd();
+                  }
+                }
+              }
+              readyState = 4;
+              return;
+            }
+          }
+          catch(Exception ex2) {
+            Log.Debug("XMLHttpRequest({0}) - error reading error response: {1}", _req.RequestUri, ex2.Message);
+          }
+          // Fallback for non-HTTP errors
           readyState = 4;
-          status = 408;
+          status = 0;
           statusText = e.Status.ToString();
         }
       }
