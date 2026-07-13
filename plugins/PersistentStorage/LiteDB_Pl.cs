@@ -239,7 +239,7 @@ namespace X13.PersistentStorage {
         AddRecord();
         void AddRecord() {
           JSL.Array lo = new JSL.Array(tba.Length + 1) {
-            [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt == 1 ? t_sum : (-step / 2)).ToLocalTime()),
+            [0] = X13.JsExtLib.Context.ProxyValue(cursor.AddSeconds(t_cnt == 1 ? t_sum : (-step / 2)).ToLocalTime()),
           };
           t_cnt = 0;
           t_sum = 0;

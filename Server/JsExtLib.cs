@@ -21,18 +21,18 @@ namespace X13 {
       _timerCnt = 1;
       Context = new JSC.GlobalContext();
       Context.ActivateInCurrentThread();
-      Context.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
-      Context.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
-      Context.DefineVariable("setAlarm").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
-      Context.DefineVariable("clearTimeout").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimeout)));
-      Context.DefineVariable("clearInterval").Assign(JSC.JSValue.Marshal(new Action<JSC.JSValue>(ClearTimeout)));
+      Context.DefineVariable("setTimeout").Assign(Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
+      Context.DefineVariable("setInterval").Assign(Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
+      Context.DefineVariable("setAlarm").Assign(Context.ProxyValue(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
+      Context.DefineVariable("clearTimeout").Assign(Context.ProxyValue(new Action<JSC.JSValue>(ClearTimeout)));
+      Context.DefineVariable("clearInterval").Assign(Context.ProxyValue(new Action<JSC.JSValue>(ClearTimeout)));
       Context.DefineConstructor(typeof(XMLHttpRequest));
-      Context.DefineVariable("console").Assign(JSC.JSValue.Marshal(new X13.JsExtLib.Console()));
+      Context.DefineVariable("console").Assign(Context.ProxyValue(new X13.JsExtLib.Console()));
       var fs = JSC.JSObject.CreateObject();
-      fs["AppendText"] = JSC.JSValue.Marshal(new Action<string, string>(AppendFile));
+      fs["AppendText"] = Context.ProxyValue(new Action<string, string>(AppendFile));
       Context.DefineVariable("File").Assign(fs);
       var arch= JSC.JSObject.CreateObject();
-      arch["Query"] = JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, int, JSC.JSValue, Task<JSL.Array>>(AQueryJS));
+      arch["Query"] = Context.ProxyValue(new Func<JSC.JSValue, JSC.JSValue, int, JSC.JSValue, Task<JSL.Array>>(AQueryJS));
       Context.DefineVariable("Arch").Assign(arch);
     }
 

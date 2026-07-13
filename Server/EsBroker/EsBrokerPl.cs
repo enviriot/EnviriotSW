@@ -102,7 +102,7 @@ namespace X13.EsBroker {
     #endregion IPlugModul Members
 
     private static T GetOrDefault<T>(Topic t, T defaultValue = default) {
-      var j_v = JSC.JSValue.Marshal(defaultValue);
+      var j_v = X13.JsExtLib.Context.ProxyValue(defaultValue);
       if(j_v.ValueType == t.GetState().ValueType) {
         return t.GetState().As<T>();
       } else {

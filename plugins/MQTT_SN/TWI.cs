@@ -189,26 +189,21 @@ namespace X13.Periphery {
         }
         if(jSrc != null) {
           try {
-            _ctx = new JSC.Context(JsExtLib.Context);
-            _ctx.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
-            _ctx.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
-            _ctx.DefineVariable("setAlarm").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
+            _ctx  = new JSC.Context(JsExtLib.Context);
+            _ctx.DefineVariable("setTimeout").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
+            _ctx.DefineVariable("setInterval").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
+            _ctx.DefineVariable("setAlarm").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
 
             if(_ctx.Eval(jSrc.Value as string) is JSL.Function f) {
+              f.prototype["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));
+              f.prototype["SetState"] = X13.JsExtLib.Context.ProxyValue(new Action<string, JSC.JSValue>(SetState));
+              f.prototype["GetField"] = X13.JsExtLib.Context.ProxyValue(new Func<string, string, JSC.JSValue>(GetField));
+              f.prototype["TwiReq"] = X13.JsExtLib.Context.ProxyValue(new Func<int[], Task<JSC.JSValue>>(_twi.TwiReq));
               if(f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
-                this._self = JSC.JSObject.create(new JSC.Arguments { f.prototype });
+                _self = f.Construct(new JSC.Arguments());
               } else {
-                this._self = JSC.JSObject.CreateObject();
-              }
-              _self["GetState"] = JSC.JSValue.Marshal(new Func<string, JSC.JSValue>(GetState));
-              _self["SetState"] = JSC.JSValue.Marshal(new Action<string, JSC.JSValue>(SetState));
-              _self["GetField"] = JSC.JSValue.Marshal(new Func<string, string, JSC.JSValue>(GetField));
-              _self["TwiReq"] = JSC.JSValue.Marshal(new Func<int[], Task<JSC.JSValue>>(_twi.TwiReq));
-
-              if(f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
-                _self = f.Construct(_self, new JSC.Arguments());
-              } else {
-                f.Call(_self, new JSC.Arguments());  // Call constructor
+                Log.Error("{0} - class not found", owner.path);
+                return;
               }
             }
           }

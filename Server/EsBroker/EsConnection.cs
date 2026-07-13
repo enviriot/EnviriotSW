@@ -61,7 +61,7 @@ namespace X13.EsBroker {
     }
 
     private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
-      _socket.SendArr(new JSL.Array { 90, JSC.JSValue.Marshal(dt.ToUniversalTime()), (int)ll, msg }, false);
+      _socket.SendArr(new JSL.Array { 90, X13.JsExtLib.Context.ProxyValue(dt.ToUniversalTime()), (int)ll, msg }, false);
     }
     private void RcvMsg(EsMessage msg) {
       if(msg.Count == 0) {
@@ -293,7 +293,7 @@ namespace X13.EsBroker {
         if(Log.History != null) {
           var resp = Log.History((msg[1].Value as JSL.Date).ToDateTime(), (int)msg[2]);
           foreach(var e in resp) {
-            _socket.SendArr(new JSL.Array { 90, JSC.JSValue.Marshal(e.dt), (int)e.ll, e.format }, false);
+            _socket.SendArr(new JSL.Array { 90, X13.JsExtLib.Context.ProxyValue(e.dt), (int)e.ll, e.format }, false);
           }
         }
       }

@@ -26,7 +26,7 @@ namespace X13.Logram {
       this._owner = owner;
       _pins = new List<LoVariable>();
       ManifestChanged();
-      foreach(var ch in _owner.children) {
+      foreach (var ch in _owner.children) {
         GetPin(ch);
       }
       _pl.EnqueueIn(this);
@@ -35,48 +35,41 @@ namespace X13.Logram {
       JSC.JSValue jSrc;
       var jType = _owner.GetField("type");
       Topic tt;
-      if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out tt)
-        && _typeT!=tt && ( jSrc = JsLib.GetField(tt.GetState(), "src") ).ValueType == JSC.JSValueType.String) {
+      if (jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out tt)
+        && _typeT != tt && (jSrc = JsLib.GetField(tt.GetState(), "src")).ValueType == JSC.JSValueType.String) {
         _typeT = tt;
       } else {
         jSrc = null;
       }
-      if(jSrc != null) {
+      if (jSrc != null) {
 
         try {
           _ctx = new JSC.Context(JsExtLib.Context);
-          _ctx.DefineVariable("setTimeout").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
-          _ctx.DefineVariable("setInterval").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
-          _ctx.DefineVariable("setAlarm").Assign(JSC.JSValue.Marshal(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
+          _ctx.DefineVariable("setTimeout").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
+          _ctx.DefineVariable("setInterval").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
+          _ctx.DefineVariable("setAlarm").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
 
-          var f = _ctx.Eval(jSrc.Value as string) as JSL.Function;
-          if(f != null) {
-            if(f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
-              this._self = JSC.JSObject.create(new JSC.Arguments { f.prototype });
-            } else {
-              this._self = JSC.JSObject.CreateObject();
-            }
-            var cf = _self.GetProperty("Calculate");
-            _calcFunc = ( cf as JSL.Function ) ?? ( cf.Value as JSL.Function );
-
-            _self["GetState"] = JSC.JSValue.Marshal(new Func<string, JSC.JSValue>(GetState));
-            _self["SetState"] = JSC.JSValue.Marshal(new Action<string, JSC.JSValue>(SetState));
-            _self["GetField"] = JSC.JSValue.Marshal(new Func<string, string, JSC.JSValue>(GetField));
-            _self["SetField"] = JSC.JSValue.Marshal(new Action<string, string, JSC.JSValue>(SetField));  // <topic>#<path>
-            _self["path"] = _owner.path;
-
+          if (_ctx.Eval(jSrc.Value as string) is JSL.Function f) {
             if (f.RequireNewKeywordLevel == JSL.RequireNewKeywordLevel.WithNewOnly) {
-              _self = f.Construct(_self, new JSC.Arguments());
+              f.prototype["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));
+              f.prototype["SetState"] = X13.JsExtLib.Context.ProxyValue(new Action<string, JSC.JSValue>(SetState));
+              f.prototype["GetField"] = X13.JsExtLib.Context.ProxyValue(new Func<string, string, JSC.JSValue>(GetField));
+              f.prototype["SetField"] = X13.JsExtLib.Context.ProxyValue(new Action<string, string, JSC.JSValue>(SetField));  // <topic>#<path>
+              f.prototype["path"] = _owner.path;
+              _self = f.Construct(new JSC.Arguments());
+              var cf = _self.GetProperty("Calculate");
+              _calcFunc = (cf as JSL.Function) ?? (cf.Value as JSL.Function);
             } else {
-              f.Call(_self, new JSC.Arguments());  // Call constructor
+              Log.Error("{0} - class not found", _owner.path);
+              return;
             }
           }
         }
-        catch(Exception ex) {
+        catch (Exception ex) {
           Log.Warning("{0}.ctor() - {1}", _owner.path, ex.Message);
         }
       } else {
-        if(!_owner.disposed) {
+        if (!_owner.disposed) {
           Log.Warning("{0} constructor is not defined", _owner.path);
         }
       }
@@ -84,11 +77,11 @@ namespace X13.Logram {
 
     public LoVariable GetPin(Topic t) {
       LoVariable v;
-      v = _pins.FirstOrDefault(z => z.Owner==t);
-      if(v==null) {
+      v = _pins.FirstOrDefault(z => z.Owner == t);
+      if (v == null) {
         v = _pl.GetVariable(t);
-        var ddr = _typeT!=null?JsLib.OfInt(_typeT.GetState(), "Children."+t.name+".ddr", 0):0;
-        if(t.parent!=_owner || ddr<=0) {
+        var ddr = _typeT != null ? JsLib.OfInt(_typeT.GetState(), "Children." + t.name + ".ddr", 0) : 0;
+        if (t.parent != _owner || ddr <= 0) {
           v.AddLink(this);
         } else {
           v.Source = this;
@@ -114,52 +107,52 @@ namespace X13.Logram {
     }
     public ILoItem[] Route { get; set; }
     public void Tick1() {
-      if(_owner.disposed && !Disposed) {
+      if (_owner.disposed && !Disposed) {
         Disposed = true;
-        foreach(var p in _pins.Where(z => z.Owner.parent!=_owner)) {
+        foreach (var p in _pins.Where(z => z.Owner.parent != _owner)) {
           p.DeleteLink(this);
         }
         _pins.Clear();
-        if(_ctx!=null) {
+        if (_ctx != null) {
           JsExtLib.ClearTimeout(_ctx);
         }
         _ctx = null;
-        _self=null;
+        _self = null;
         _calcFunc = null;
         return;
       }
       var ln = 0;
-      foreach(var p in _pins.Where(z => z.Source!=this && z.Layer>0)) {
-        if(ln<p.Layer) {
+      foreach (var p in _pins.Where(z => z.Source != this && z.Layer > 0)) {
+        if (ln < p.Layer) {
           ln = p.Layer;
         }
       }
       ln++;
-      if(_layer!=ln) {
+      if (_layer != ln) {
         List<ILoItem> route = new List<ILoItem>();
-        foreach(var p in _pins.Where(z => z.Source!=this && z.Layer>0)) {
-          if(p.Route!=null) {
+        foreach (var p in _pins.Where(z => z.Source != this && z.Layer > 0)) {
+          if (p.Route != null) {
             route.AddRange(p.Route);
           }
         }
         route.Add(this);
         Route = route.ToArray();
         _layer = ln;
-        foreach(var p in _pins.Where(z => z.Source==this)) {
+        foreach (var p in _pins.Where(z => z.Source == this)) {
           _pl.EnqueueIn(p);
         }
         //Log.Debug(this.ToString());
       }
     }
     public void Tick2() {
-      if(_prim!=null) {
+      if (_prim != null) {
         string pr = _prim.parent == _owner ? _prim.name : _prim.path;
         _prim = null;
-        if(_calcFunc != null) {
+        if (_calcFunc != null) {
           try {
             _calcFunc.Call(_self, new JSC.Arguments { pr });
           }
-          catch(Exception ex) {
+          catch (Exception ex) {
             Log.Warning("{0}.Calculate({1}) - {2}", _owner.path, pr, ex.Message);
           }
         }
@@ -170,10 +163,10 @@ namespace X13.Logram {
 
     #region IComparable<ILoItem> Members
     public int CompareTo(ILoItem other) {
-      if(other == null) {
+      if (other == null) {
         return -1;
       }
-      if(this._layer!=other.Layer) {
+      if (this._layer != other.Layer) {
         return this._layer.CompareTo(other.Layer);
       }
       return this._owner.path.CompareTo(other.Owner.path);
@@ -189,7 +182,7 @@ namespace X13.Logram {
     }
     private JSC.JSValue SetAlarm(JSC.JSValue func, JSC.JSValue time) {
       var jd = time.Value as JSL.Date;
-      if(jd != null) {
+      if (jd != null) {
         return JsExtLib.SetTimer(func, jd.ToDateTime(), _ctx);
       } else {
         throw new ArgumentException("SetAlarm(, Date)");
@@ -199,24 +192,24 @@ namespace X13.Logram {
     private JSC.JSValue GetState(string path) {
       Topic t;
       LoVariable v;
-      if(_owner.Exist(path, out t)) {
-        v=GetPin(t);
+      if (_owner.Exist(path, out t)) {
+        v = GetPin(t);
         return v.GetValue();
       }
       return JSC.JSValue.NotExists;
     }
     private void SetState(string path, JSC.JSValue value) {
-      if(!_owner.disposed) {
+      if (!_owner.disposed) {
         Topic t = _owner.Get(path, true, _owner);
-        var v=GetPin(t);
-        if(t.parent == _owner) {
+        var v = GetPin(t);
+        if (t.parent == _owner) {
           v.SetValue(value, _owner);
         }
       }
     }
     private JSC.JSValue GetField(string path, string field) {
       Topic t;
-      if(_owner.Exist(path, out t)) {
+      if (_owner.Exist(path, out t)) {
         return t.GetField(field);
       }
       return JSC.JSValue.NotExists;
@@ -230,7 +223,7 @@ namespace X13.Logram {
     #endregion JsFunctions
 
     public override string ToString() {
-      return "["+_layer.ToString("000") + "] " + _owner.path;
+      return "[" + _layer.ToString("000") + "] " + _owner.path;
     }
   }
 }

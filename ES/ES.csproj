@@ -61,8 +61,8 @@
       <HintPath>..\packages\AvalonEdit.6.3.1.120\lib\net462\ICSharpCode.AvalonEdit.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.VisualBasic" />
-    <Reference Include="NiL.JS, Version=2.5.1560.0, Culture=neutral, PublicKeyToken=fa941a7c2a4de689, processorArchitecture=MSIL">
-      <HintPath>..\packages\NiL.JS.2.5.1560\lib\net48\NiL.JS.dll</HintPath>
+    <Reference Include="NiL.JS, Version=2.6.1722.0, Culture=neutral, PublicKeyToken=fa941a7c2a4de689, processorArchitecture=MSIL">
+      <HintPath>..\packages\NiL.JS.2.6.1722\lib\net48\NiL.JS.dll</HintPath>
     </Reference>
     <Reference Include="PresentationFramework.Aero">
       <Private>True</Private>
@@ -124,6 +124,7 @@
     <Compile Include="Data\DTopic.cs" />
     <Compile Include="Data\DWorkspace.cs" />
     <Compile Include="Data\NPC_UI.cs" />
+    <Compile Include="EsJsExtLib.cs" />
     <Compile Include="Inspector\InBase.cs" />
     <Compile Include="Inspector\InManifest.cs" />
     <Compile Include="Inspector\InspectorForm.xaml.cs">

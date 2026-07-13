@@ -55,7 +55,7 @@ namespace X13.UI {
       if(!_owner.IsReadonly) {
         if(base.Value.HasValue) {
           if(_oldValue != base.Value.Value) {
-            _owner.value = JSC.JSValue.Marshal(base.Value.Value);
+            _owner.value = JsExtLib.Context.ProxyValue(base.Value.Value);
           }
         } else {
           _owner.value = JSC.JSValue.Undefined;

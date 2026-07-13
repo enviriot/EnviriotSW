@@ -34,9 +34,9 @@ namespace X13 {
             DateTimeOffset dto;
             if(!DateTimeOffset.TryParseExact(s, "yyyy-MM-ddTH:mm:ss.fffK", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out dto) || 
                 Math.Abs(dto.Year-1001) < 1) {
-              return JSC.JSObject.Marshal(DateTime.Now);
+              return X13.JsExtLib.Context.ProxyValue(DateTime.Now);
             }
-            return JSC.JSValue.Marshal(dto.LocalDateTime);
+            return X13.JsExtLib.Context.ProxyValue(dto.LocalDateTime);
           }
         }
       }
@@ -112,7 +112,7 @@ namespace X13 {
         }
         return ret;
       }
-      return JSC.JSValue.Marshal(org.Value);
+      return X13.JsExtLib.Context.ProxyValue(org.Value);
     }
     public static bool Equal(JSC.JSValue v1, JSC.JSValue v2) {
       if(object.ReferenceEquals(v1, v2)) {

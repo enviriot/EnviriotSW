@@ -173,7 +173,7 @@ namespace X13 {
               perf_cpu = new Tuple<bool, DateTime, double>(true, now, cpu);
               perf.Get("Physical").SetState(Math.Round(proc.WorkingSet64 / 1048576.0, 2));  // MB
             }
-            perf.Get("Updated").SetState(NiL.JS.Core.JSValue.Marshal(now));
+            perf.Get("Updated").SetState(X13.JsExtLib.Context.ProxyValue(now));
           } else {
             perf_cpu = new Tuple<bool, DateTime, double>(false, now, 0);
           }

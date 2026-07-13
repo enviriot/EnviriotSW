@@ -261,7 +261,7 @@ namespace X13.PersistentStorage {
         case BsonType.Boolean:
           return new JSL.Boolean(val.AsBoolean);
         case BsonType.DateTime:
-          return JSC.JSValue.Marshal(val.AsDateTime.ToLocalTime());
+          return X13.JsExtLib.Context.ProxyValue(val.AsDateTime.ToLocalTime());
         case BsonType.Binary:
           return new ByteArray(val.AsBinary);
         case BsonType.Document: {

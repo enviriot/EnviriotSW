@@ -120,7 +120,7 @@ namespace X13.UI {
     private void buHistory_Click(object sender, RoutedEventArgs e) {
       var dt = LogCollection.Any()?LogCollection.First().dt:DateTime.Now;
       foreach(var c in App.Workspace.Clients) {
-        c.SendCmd(91, NiL.JS.Core.JSValue.Marshal(dt.ToUniversalTime()), 20);
+        c.SendCmd(91, X13.JsExtLib.Context.ProxyValue(dt.ToUniversalTime()), 20);
       }
     }
   }

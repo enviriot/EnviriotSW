@@ -520,14 +520,14 @@ namespace X13.DevicePLC {
       j1 = new EP_Compiler.Instruction(EP_InstCode.JZ, null, node.Children[0]);
       _compiler.cur.AddInst(j1);
       _compiler._sp.Pop();
-      node.Threads[0].Visit(this);
-      if(node.Threads.Count > 1) {
+      node.Branches[0].Visit(this);
+      if(node.Branches.Count > 1) {
         j2 = new EP_Compiler.Instruction(EP_InstCode.JMP);
         _compiler.cur.AddInst(j2);
         j3 = new EP_Compiler.Instruction(EP_InstCode.LABEL);
         j1._ref = j3;
         _compiler.cur.AddInst(j3);
-        node.Threads[1].Visit(this);
+        node.Branches[1].Visit(this);
         _compiler._sp.Pop();
         j3 = new EP_Compiler.Instruction(EP_InstCode.LABEL);
         j2._ref = j3;

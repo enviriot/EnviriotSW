@@ -259,7 +259,7 @@ namespace X13.PersistentStorage {
                       lo[i] = v;
                     } else {
                       lo = new JSL.Array(topics.Length + 1) {
-                        [0] = JSC.JSValue.Marshal(dt)
+                        [0] = X13.JsExtLib.Context.ProxyValue(dt)
                       };
                       for (var j = 1; j <= topics.Length; j++) {
                         lo[j] = (i == j) ? v : JSC.JSValue.Null;
@@ -333,7 +333,7 @@ namespace X13.PersistentStorage {
               AddRecord();
               void AddRecord() {
                 JSL.Array lo = new JSL.Array(topics.Length + 1) {
-                  [0] = JSC.JSValue.Marshal(cursor.AddSeconds(t_cnt == 1 ? t_sum : (-step / 2)).ToLocalTime()),
+                  [0] = X13.JsExtLib.Context.ProxyValue(cursor.AddSeconds(t_cnt == 1 ? t_sum : (-step / 2)).ToLocalTime()),
                 };
                 t_cnt = 0;
                 t_sum = 0;

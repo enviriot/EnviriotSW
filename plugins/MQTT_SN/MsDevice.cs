@@ -119,8 +119,8 @@ namespace X13.Periphery {
       _srOwner = this.owner.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Field, "MQTT-SN", OwnerChanged);
 
       _self = JSC.JSObject.CreateObject();
-      _self["GetState"] = JSC.JSValue.Marshal(new Func<string, JSC.JSValue>(GetState));
-      _self["GetField"] = JSC.JSValue.Marshal(new Func<string, string, JSC.JSValue>(GetField));
+      _self["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));      _self["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));
+      _self["GetField"] = X13.JsExtLib.Context.ProxyValue(new Func<string, string, JSC.JSValue>(GetField));
     }
 
     private JSC.JSValue GetState(string path) {
@@ -1075,13 +1075,13 @@ namespace X13.Periphery {
       }
       Topic ts = GetServiceTopic(owner, "stat"), pa = GetServiceTopic(ts, n2);
       if(ts.GetState() == null || ts.GetState().ValueType!=JSC.JSValueType.Date) {
-        ts.SetState(JSC.JSValue.Marshal(DateTime.Now), owner);
+        ts.SetState(X13.JsExtLib.Context.ProxyValue(DateTime.Now), owner);
       }
       pa.SetState(JsLib.OfInt(pa.GetState(), 0)+1, owner);
 
       if(t==MsMessageType.CONNECT && dub) {  // Connect with clean session
         pa = GetServiceTopic(ts, "0_ConnectTime");
-        pa.SetState(JSC.JSValue.Marshal(DateTime.Now), owner);
+        pa.SetState(X13.JsExtLib.Context.ProxyValue(DateTime.Now), owner);
       }
     }
 

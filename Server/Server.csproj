@@ -63,8 +63,8 @@
     <ApplicationIcon>logo32.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="NiL.JS, Version=2.5.1560.0, Culture=neutral, PublicKeyToken=fa941a7c2a4de689, processorArchitecture=MSIL">
-      <HintPath>..\packages\NiL.JS.2.5.1560\lib\net48\NiL.JS.dll</HintPath>
+    <Reference Include="NiL.JS, Version=2.6.1722.0, Culture=neutral, PublicKeyToken=fa941a7c2a4de689, processorArchitecture=MSIL">
+      <HintPath>..\packages\NiL.JS.2.6.1722\lib\net48\NiL.JS.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
@@ -114,8 +114,8 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="app.manifest" />
-    <None Include="packages.config" />
     <EmbeddedResource Include="Repository\base.xst" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="HAServer.resx">

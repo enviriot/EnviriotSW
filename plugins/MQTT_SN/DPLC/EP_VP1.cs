@@ -323,8 +323,10 @@ namespace X13.DevicePLC {
     }
     protected override EP_VP1 Visit(Conditional node) {
       node.Children[0].Visit(this);
-      node.Threads[0].Visit(this);
-      node.Threads[1].Visit(this);
+      node.Branches[0].Visit(this);
+      if (node.Children.Count() > 1) {
+        node.Branches[1].Visit(this);
+      }
       return this;
     }
     protected override EP_VP1 Visit(ConvertToBoolean node) {
@@ -468,7 +470,7 @@ namespace X13.DevicePLC {
           continue;
         }
         if((a1 = node.Initializers[i] as Assignment) != null && (v = a1.Children[0] as Variable) != null) {
-          if(v.Descriptor.LexicalScope) {
+          if(v.Descriptor.IsLexicalScoped) {
             _compiler.DefineMerker(v.Descriptor);  // Local
             a1.Children[1].Visit(this);
             continue;

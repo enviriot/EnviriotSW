@@ -246,7 +246,7 @@ namespace X13.DevicePLC {
         } else if(type == EP_Type.NONE) {
           if(v.Initializer != null && v.Initializer is FunctionDefinition) {
             type = EP_Type.FUNCTION;
-          } else if(v.LexicalScope) {
+          } else if(v.IsLexicalScoped) {
             type = EP_Type.LOCAL;
             addr = (uint)cur.memory.Where(z => z.type == EP_Type.LOCAL).Count();
             if(addr > 15) {
