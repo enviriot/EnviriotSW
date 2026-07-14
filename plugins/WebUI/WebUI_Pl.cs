@@ -15,6 +15,13 @@ using WebSocketSharp.Server;
 using System.IO;
 using NiL.JS.Extensions;
 
+
+/* TODO:
+перевод обработки WebSocket на async;
+устранение блокировок вокруг Topic;
+пересмотр хранения Session;  sessions.Where(...)
+отказ от WeakReference в sessions;
+*/
 namespace X13.WebUI {
   [Export(typeof(IPlugModul))]
   [ExportMetadata("priority", 9)]

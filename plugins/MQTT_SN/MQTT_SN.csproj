@@ -55,7 +55,6 @@
     <Compile Include="DPLC\EP_Enums.cs" />
     <Compile Include="DPLC\EP_VP1.cs" />
     <Compile Include="DPLC\EP_VP2.cs" />
-    <Compile Include="DPLC\NiLJsCompat.cs" />
     <Compile Include="IMsExt.cs" />
     <Compile Include="IMsGate.cs" />
     <Compile Include="MQTT_SNPl.cs" />
