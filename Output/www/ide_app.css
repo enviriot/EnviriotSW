@@ -1,0 +1,21 @@
+:root {
+  --bool_false: #c0c0c0;
+  --bool_true: #006608;
+  --conn_connected: #2f7d20;
+  --conn_connecting: #2563eb;
+  --conn_reconnecting: #b45309;
+  --conn_error: #b91c1c;
+  --conn_unknown: #64748b;
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+}
+body {
+  margin: 0;
+  background: #f6f8fb;
+  color: #1f2933;
+}
+x13-app-shell {
+  display: block;
+  min-height: 100vh;
+}

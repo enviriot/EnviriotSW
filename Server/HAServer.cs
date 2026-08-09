@@ -55,16 +55,16 @@ namespace X13 {
                 new HAServer(cfgPath) 
             };
       ServiceBase.Run(ServicesToRun);
-      if(Programm.IsLinux) {
+      if(Program.IsLinux) {
         System.Threading.Thread.Sleep(5000);   // for mono-service 
       }
 
     }
 
-    private Programm _instance;
+    private Program _instance;
     public HAServer(string cfgPath) {
       InitializeComponent();
-      _instance=new Programm(cfgPath);
+      _instance=new Program(cfgPath);
     }
 
     protected override void OnStart(string[] args) {

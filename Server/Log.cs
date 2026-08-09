@@ -8,22 +8,22 @@ using System.Threading;
 
 namespace X13 {
   public static class Log {
-    private static bool _useDiagnostic;
-    private static bool _useConsole;
+    private static readonly bool _useDiagnostic;
+    private static readonly bool _useConsole;
+    private static readonly AutoResetEvent _kickEv;
+    private static readonly RegisteredWaitHandle _wh;
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<LogRecord> _records;
+    private static readonly string _lfMask;
     public static bool useFile;
-    private static AutoResetEvent _kickEv;
-    private static RegisteredWaitHandle _wh;
-    private static System.Collections.Concurrent.ConcurrentQueue<LogRecord> _records;
     private static string _lfPath;
     private static DateTime _firstDT;
-    private static string _lfMask;
     private static int _busy;
 
     static Log() {
       _useDiagnostic = System.Diagnostics.Debugger.IsAttached;
       try { int window_height = Console.WindowHeight; _useConsole = true; }
       catch { _useConsole = false; }
-      if(!Directory.Exists("../log")) {
+      if (!Directory.Exists("../log")) {
         Directory.CreateDirectory("../log");
       }
       useFile = true;
@@ -49,11 +49,8 @@ namespace X13 {
       _records.Enqueue(new LogRecord() { ll = ll, dt = DateTime.Now, format = format, args = arg });
       _kickEv.Set();
     }
-    public static void AddEntry(LogLevel ll, DateTime dt, string msg){
-      var wr = Write;
-      if(wr != null) {
-        wr(ll, dt, msg, false);
-      }
+    public static void AddEntry(LogLevel ll, DateTime dt, string msg) {
+      Write?.Invoke(ll, dt, msg, false);
     }
     public static event Action<LogLevel, DateTime, string, bool> Write;
     public static Func<DateTime, int, IEnumerable<Log.LogRecord>> History;
@@ -65,26 +62,24 @@ namespace X13 {
     }
 
     private static void Process(object o, bool to) {
-      if(Interlocked.CompareExchange(ref _busy, 2, 1) != 1) {
+      if (Interlocked.CompareExchange(ref _busy, 2, 1) != 1) {
         return;
       }
       LogRecord r;
       string msg;
-      while(_records.TryDequeue(out r)) {
+      while (_records.TryDequeue(out r)) {
         try {
           msg = string.Format(r.format, r.args);
         }
-        catch(Exception) {
+        catch (Exception) {
           r.ll = LogLevel.Error;
           msg = "Bad format: " + r.format;
         }
-        var wr = Write;
-        if(wr != null) {
-          wr(r.ll, r.dt, msg, true);
-        }
+
+        Write?.Invoke(r.ll, r.dt, msg, true);
         string msgA;
         ConsoleColor cc;
-        switch(r.ll) {
+        switch (r.ll) {
         case LogLevel.Info:
           cc = ConsoleColor.White;
           msgA = r.dt.ToString("HH:mm:ss.ff") + "[I] " + msg;
@@ -102,44 +97,40 @@ namespace X13 {
           cc = ConsoleColor.Gray;
           break;
         }
-        if(_useDiagnostic) {
+        if (_useDiagnostic) {
           System.Diagnostics.Debug.WriteLine(msgA);
         }
-        if(_useConsole) {
+        if (_useConsole) {
           Console.ForegroundColor = cc;
           Console.WriteLine(msgA);
         }
-        if(useFile) {
-          LogLevel lt = LogLevel.Debug;
-          if((int)r.ll >= (int)lt) {
-            if(_lfPath == null || _firstDT != r.dt.Date) {
-              _firstDT = r.dt.Date;
-              try {
-                string m1 = string.Format(_lfMask, "*");
-                foreach(string f in Directory.GetFiles(Path.GetDirectoryName(m1), Path.GetFileName(m1), SearchOption.TopDirectoryOnly)) {
-                  if(File.GetLastWriteTime(f).AddDays(20) < _firstDT)
-                    File.Delete(f);
-                }
+        if (useFile) {
+          if (_lfPath == null || _firstDT != r.dt.Date) {
+            _firstDT = r.dt.Date;
+            try {
+              string m1 = string.Format(_lfMask, "*");
+              foreach (string f in Directory.GetFiles(Path.GetDirectoryName(m1), Path.GetFileName(m1), SearchOption.TopDirectoryOnly)) {
+                if (File.GetLastWriteTime(f).AddDays(20) < _firstDT)
+                  File.Delete(f);
               }
-              catch(System.IO.IOException) {
-              }
-              _lfPath = string.Format(_lfMask, _firstDT.ToString("yyMMdd"));
             }
-            for(int i = 2; i >= 0; i--) {
-              try {
-                using(FileStream fs = File.Open(_lfPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite)) {
-                  fs.Seek(0, SeekOrigin.End);
-                  byte[] ba = Encoding.UTF8.GetBytes(msgA + "\r\n");
-                  fs.Write(ba, 0, ba.Length);
-                }
-                break;
+            catch (System.IO.IOException) {
+            }
+            _lfPath = string.Format(_lfMask, _firstDT.ToString("yyMMdd"));
+          }
+          for (int i = 2; i >= 0; i--) {
+            try {
+              using (FileStream fs = File.Open(_lfPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite)) {
+                fs.Seek(0, SeekOrigin.End);
+                byte[] ba = Encoding.UTF8.GetBytes(msgA + "\r\n");
+                fs.Write(ba, 0, ba.Length);
               }
-              catch(System.IO.IOException) {
-                Thread.Sleep(15);
-              }
+              break;
+            }
+            catch (System.IO.IOException) {
+              Thread.Sleep(15);
             }
           }
-
         }
       }
       _busy = 1;

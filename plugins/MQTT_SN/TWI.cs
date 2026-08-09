@@ -35,7 +35,7 @@ namespace X13.Periphery {
       }
 
       _flag = 1;
-      _deviceChangedsSR = this._owner.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Field, "type", DeviceChanged);
+      _deviceChangedsSR = this._owner.Subscribe(SubRec.SubMask.Children | SubRec.SubMask.Field, "type", DeviceChanged);
       if(Verbose) {
         Log.Debug("{0}.Created", _owner.path);
       }

@@ -202,6 +202,13 @@ namespace X13 {
     public byte[] GetBytes() {
       return _val;
     }
+    public static bool IsByteArray(JSC.JSValue value, out ByteArray data) {
+      data = value as ByteArray;
+      if(data == null && value != null) {
+        data = value.Value as ByteArray;
+      }
+      return data != null;
+    }
 
     [JSI.DoNotEnumerate]
     public JSC.JSValue toJSON(JSC.JSValue obj) {

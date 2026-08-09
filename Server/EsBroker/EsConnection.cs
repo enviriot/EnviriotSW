@@ -142,7 +142,7 @@ namespace X13.EsBroker {
       }
       Topic parent = Topic.root.Get(msg[2].Value as string, false, _owner);
       if(parent != null) {
-        var sr1 = parent.Subscribe(SubRec.SubMask.Value | SubRec.SubMask.Field | SubRec.SubMask.Once | SubRec.SubMask.Chldren, string.Empty, _subCB);
+        var sr1 = parent.Subscribe(SubRec.SubMask.Value | SubRec.SubMask.Field | SubRec.SubMask.Once | SubRec.SubMask.Children, string.Empty, _subCB);
         lock(_subscriptions) {
           _subscriptions.Add(new Tuple<SubRec, EsMessage>(sr1, msg));
         }

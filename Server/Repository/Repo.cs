@@ -71,7 +71,7 @@ namespace X13.Repository {
           if(c.Art == Perform.E_Art.subscribe && (sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once) {
             EnquePerf(c);
           }
-          if((sr.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren) {
+          if((sr.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children) {
             b = c.src.children;
           }
           if((sr.mask & SubRec.SubMask.All) == SubRec.SubMask.All) {
@@ -292,8 +292,27 @@ namespace X13.Repository {
     }
 
     public static void Export(string filename, Topic t, bool configOnly) {
-      if(filename == null || t == null) {
-        throw new ArgumentNullException();
+      if(filename == null) {
+        throw new ArgumentNullException("filename");
+      }
+      using(FileStream stream = File.Create(filename)) {
+        Export(stream, t, configOnly);
+      }
+    }
+    public static void Export(Stream stream, Topic t, bool configOnly) {
+      if(stream == null) {
+        throw new ArgumentNullException("stream");
+       }
+      XDocument doc = BuildExportDocument(t, configOnly);
+      System.Xml.XmlTextWriter writer = new System.Xml.XmlTextWriter(stream, Encoding.UTF8);
+      writer.Formatting = System.Xml.Formatting.Indented;
+      writer.QuoteChar = '\'';
+      doc.WriteTo(writer);
+      writer.Flush();
+    }
+    private static XDocument BuildExportDocument(Topic t, bool configOnly) {
+      if(t == null) {
+        throw new ArgumentNullException("topic");
       }
       XDocument doc = new XDocument(new XElement("xst", new XAttribute("path", t.path)));
       doc.Declaration = new XDeclaration("1.0", "utf-8", "yes");
@@ -306,12 +325,7 @@ namespace X13.Repository {
       foreach(Topic c in t.children) {
         Export(doc.Root, c, configOnly);
       }
-      using(System.Xml.XmlTextWriter writer = new System.Xml.XmlTextWriter(filename, Encoding.UTF8)) {
-        writer.Formatting = System.Xml.Formatting.Indented;
-        writer.QuoteChar = '\'';
-        doc.WriteTo(writer);
-        writer.Flush();
-      }
+      return doc;
     }
     private static void Export(XElement x, Topic t, bool configOnly) {
       if(x == null || t == null) {

@@ -41,7 +41,7 @@ namespace X13.Periphery {
         _portsTopic.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         _scanBusy = 1;
       }
-      _portValuesSR = _portsTopic.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Value, PortValuesChanged);
+      _portValuesSR = _portsTopic.Subscribe(SubRec.SubMask.Children | SubRec.SubMask.Value, PortValuesChanged);
 
       _startScan.Set();
     }

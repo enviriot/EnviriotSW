@@ -2,8 +2,14 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/packages
-!/Output/www
-/Output/
 .vs/
+/Output/*
+!/Output/WebUI
+!/Output/WebUI/**
+!/Output/www
+!/Output/www/**
+bin/
 obj/
+/packages
+*.csproj.user
+/*.bat

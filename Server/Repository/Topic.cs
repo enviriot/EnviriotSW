@@ -1,11 +1,14 @@
-﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
-using NiL.JS.Core;
-using JST = NiL.JS.BaseLibrary;
+﻿using NiL.JS.Core;
+using NiL.JS.Extensions;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Collections.Concurrent;
+
+///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using JSC = NiL.JS.Core;
+using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.Repository {
   public sealed class Topic : IComparable<Topic> {
@@ -14,10 +17,10 @@ namespace X13.Repository {
     public static Topic root { get; private set; }
 
     public static void Subscribe(Action<Perform> func) {
-      if(_repo!=null) {
+      if (_repo != null) {
         _repo.SubscribeAll(func);
       } else {
-        Log.Error("Topic.Subscribe({0}.{1}) - _repo == null", func.Target!=null?func.Target.ToString():func.Method.DeclaringType.Name, func.Method.Name);
+        Log.Error("Topic.Subscribe({0}.{1}) - _repo == null", func.Target != null ? func.Target.ToString() : func.Method.DeclaringType.Name, func.Method.Name);
         throw new NullReferenceException("Topic.Subscribe() - _repo == null");
       }
     }
@@ -29,8 +32,8 @@ namespace X13.Repository {
     private volatile ConcurrentDictionary<string, Topic> _children;
     private volatile List<SubRec> _subRecords;
 
-    private JSValue _state;
-    private JSValue _manifest;
+    private JSC.JSValue _state;
+    private JSC.JSValue _manifest;
     private Perform _mfst_pu;
 
     #endregion Member variables
@@ -39,18 +42,18 @@ namespace X13.Repository {
       _sync = new object();
       _name = name;
       _parent = parent;
-      _state = JSValue.Undefined;
+      _state = JSC.JSValue.Undefined;
       disposed = false;
-      if(parent == null) {
+      if (parent == null) {
         _path = "/";
-      } else if(parent == root) {
+      } else if (parent == root) {
         _path = "/" + name;
       } else {
         _path = parent._path + "/" + name;
       }
-      if(fill) {
-        _manifest = JSObject.CreateObject();
-        _manifest["attr"] = new JST.Number((int)0);
+      if (fill) {
+        _manifest = JSC.JSObject.CreateObject();
+        _manifest["attr"] = new JSL.Number((int)0);
       }
     }
 
@@ -65,6 +68,29 @@ namespace X13.Repository {
     public bool disposed { get; private set; }
     public Bill all { get { return new Bill(this, true); } }
     public Bill children { get { return new Bill(this, false); } }
+    public bool HasChildren() {
+      return _children != null && _children.Any(z => !z.Value.disposed);
+    }
+    public string GetStateType() {
+      if (_state == null) return null;
+      switch (_state.ValueType) {
+      case JSValueType.Object:
+        if (_state.Value == null) return "Null";
+        if (_state.Value is X13.ByteArray || _state.Value is X13.ByteArray) return "ByteArray";
+        return "Object";
+      case JSValueType.String: {
+          string text = _state.As<string>();
+          if (text != null && text.StartsWith("¤VR")) return "Version";
+          return "String";
+        }
+      case JSValueType.Boolean: return "Boolean";
+      case JSValueType.Double:
+      case JSValueType.Integer: return "Double";
+      case JSValueType.Date: return "Time";
+      default: return null;
+
+      }
+    }
 
     /// <summary> Get item from tree</summary>
     /// <param name="path">relative or absolute path</param>
@@ -80,27 +106,27 @@ namespace X13.Repository {
       return (topic = Topic.I.Get(this, path, false, null, false, false)) != null;
     }
     public void Move(Topic nParent, string nName, Topic prim = null) {
-      if(this._parent == null) {
+      if (this._parent == null) {
         return;
       }
-      if(nParent == null) {
+      if (nParent == null) {
         nParent = this.parent;
       }
-      if(string.IsNullOrEmpty(nName)) {
+      if (string.IsNullOrEmpty(nName)) {
         nName = this.name;
       }
       Topic tmp;
-      if(nParent._children == null) {
-        lock(nParent) {
-          if(nParent._children == null) {
+      if (nParent._children == null) {
+        lock (nParent) {
+          if (nParent._children == null) {
             nParent._children = new ConcurrentDictionary<string, Topic>();
           }
         }
       }
-      if(!nParent._children.TryAdd(nName, this)) {
+      if (!nParent._children.TryAdd(nName, this)) {
         throw new ArgumentException(this._path + ".Move(" + nParent._path + ", " + nName + ") FAILED");
       }
-      if(!_parent._children.TryRemove(this._name, out tmp)) {
+      if (!_parent._children.TryRemove(this._name, out tmp)) {
         Log.Warning("{0}.Move({1}, {2}) remove FAILED", this._path, nParent._path, nName);
         return;
       }
@@ -120,28 +146,28 @@ namespace X13.Repository {
       return Subscribe(mask, null, func);
     }
     public SubRec Subscribe(SubRec.SubMask mask, string prefix, Action<Perform, SubRec> func) {
-      if(func == null) {
+      if (func == null) {
         throw new ArgumentNullException(this.path + ".Subscribe(func == NULL, " + mask.ToString() + (prefix == null ? string.Empty : ", " + prefix) + ")");
       }
       SubRec sb;
       bool exist = true;
-      if(_subRecords == null) {
-        lock(this._sync) {
-          if(_subRecords == null) {
+      if (_subRecords == null) {
+        lock (this._sync) {
+          if (_subRecords == null) {
             var srs = new List<SubRec>();
             _subRecords = srs;  // PVS V3054. Potentially unsafe double-checked locking.
           }
         }
       }
-      lock(_subRecords) {
+      lock (_subRecords) {
         sb = _subRecords.FirstOrDefault(z => z.func == func && z.setTopic == this && z.mask == mask && ((z.mask & SubRec.SubMask.Field) == SubRec.SubMask.None || z.prefix == prefix));
-        if(sb == null) {
+        if (sb == null) {
           exist = false;
           sb = new SubRec(this, func, mask, prefix);
           _subRecords.Add(sb);
         }
       }
-      if(!exist) {
+      if (!exist) {
         var c = Perform.Create(this, Perform.E_Art.subscribe, this);
         c.o = sb;
         _repo.DoCmd(c, false);
@@ -154,28 +180,31 @@ namespace X13.Repository {
     }
 
     public JSValue GetState() {
-      return _state??JSValue.Null;
+      return _state ?? JSValue.Null;
     }
     public void SetState(JSValue val, Topic prim = null) {
       var c = Perform.Create(this, val, prim);
       _repo.DoCmd(c, false);
-      if(val!=null && val.ValueType==JSValueType.Date) {
-        c = Perform.Create(this, "editor", "Date", prim);
-        _repo.DoCmd(c, false);
+      if (val != null && val.ValueType == JSValueType.Date) {
+        string editor = JsLib.OfString(GetField("editor"), null);
+        if (string.IsNullOrWhiteSpace(editor)) {
+          c = Perform.Create(this, "editor", "Date", prim);
+          _repo.DoCmd(c, false);
+        }
       }
     }
 
     public JSValue GetField(string fPath) {
-      if(_manifest == null) {
+      if (_manifest == null) {
         return JSValue.Undefined;
       }
-      if(string.IsNullOrEmpty(fPath)) {
+      if (string.IsNullOrEmpty(fPath)) {
         return _manifest;
       }
       var ps = fPath.Split(Bill.delmiterObj, StringSplitOptions.RemoveEmptyEntries);
       JSValue val = _manifest;
-      for(int i = 0; i < ps.Length; i++) {
-        if(val.ValueType != JSValueType.Object || val.Value == null) {
+      for (int i = 0; i < ps.Length; i++) {
+        if (val.ValueType != JSValueType.Object || val.Value == null) {
           return JSValue.Undefined;
         }
         val = val.GetProperty(ps[i]);
@@ -183,7 +212,7 @@ namespace X13.Repository {
       return val;
     }
     public bool TrySetField(string fPath, JSValue value, Topic prim) {
-      if(string.IsNullOrEmpty(fPath)) {
+      if (string.IsNullOrEmpty(fPath)) {
         return false;
       }
       var c = Perform.Create(this, fPath, value, prim);
@@ -191,48 +220,48 @@ namespace X13.Repository {
       return true;
     }
     public void SetField(string fPath, JSValue value, Topic prim = null) {
-      if(!TrySetField(fPath, value, prim)) {
+      if (!TrySetField(fPath, value, prim)) {
         throw new ArgumentNullException("fPath");
       }
     }
 
     public bool CheckAttribute(Attribute mask, Attribute value = Attribute.None) {
-      if(value == Attribute.None) {
+      if (value == Attribute.None) {
         value = mask;
       }
       JSValue attr;
-      if(_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
+      if (_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
         return false;
       }
       return ((int)attr & (int)mask) == (int)value;
     }
     public void SetAttribute(Attribute value) {
       JSValue attr;
-      if(_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
-        attr = new JST.Number((int)value);
+      if (_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
+        attr = new JSL.Number((int)value);
       } else {
         int old = (int)attr;
-        if(value == Attribute.DB || value == Attribute.Config) {
+        if (value == Attribute.DB || value == Attribute.Config) {
           old &= ~((int)Attribute.Saved);
         }
-        attr = new JST.Number((int)value | old);
+        attr = new JSL.Number((int)value | old);
       }
       var c = Perform.Create(this, "attr", attr, null);
       _repo.DoCmd(c, false);
     }
     public void ClearAttribute(Attribute value) {
       JSValue attr;
-      if(_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
-        attr = new JST.Number((int)value);
+      if (_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
+        attr = new JSL.Number((int)value);
       } else {
-        attr = new JST.Number((int)attr & ~(int)value);
+        attr = new JSL.Number((int)attr & ~(int)value);
       }
       var c = Perform.Create(this, "attr", attr, null);
       _repo.DoCmd(c, false);
     }
 
     public int CompareTo(Topic other) {
-      if(other == null) {
+      if (other == null) {
         return 1;
       }
       return this._path.CompareTo(other._path);
@@ -262,9 +291,9 @@ namespace X13.Repository {
         _deep = deep;
       }
       public IEnumerator<Topic> GetEnumerator() {
-        if(!_deep) {
-          if(_home._children != null) {
-            foreach(var t in _home._children.OrderBy(z => z.Key)) {
+        if (!_deep) {
+          if (_home._children != null) {
+            foreach (var t in _home._children.OrderBy(z => z.Key)) {
               yield return t.Value;
             }
           }
@@ -276,12 +305,12 @@ namespace X13.Repository {
           do {
             cur = hist.Pop();
             yield return cur;
-            if(cur._children != null) {
-              foreach(var t in cur._children.OrderByDescending(z => z.Key)) {
+            if (cur._children != null) {
+              foreach (var t in cur._children.OrderByDescending(z => z.Key)) {
                 hist.Push(t.Value);
               }
             }
-          } while(hist.Any());
+          } while (hist.Any());
         }
       }
       //public event Action<SubRec, Perform> changed {
@@ -301,38 +330,41 @@ namespace X13.Repository {
         Topic._repo = repo;
         Topic.root = new Topic(null, "/", false);
         Topic.root._manifest = JSObject.CreateObject();
-        Topic.root._manifest["attr"] =  new JST.Number((int)(Attribute.Required | Attribute.Internal));
+        Topic.root._manifest["attr"] = new JSL.Number((int)(Attribute.Required | Attribute.Internal));
       }
 
       public static void Fill(Topic t, JSValue state, JSValue manifest, Topic prim) {
-        t._manifest = (manifest==null || manifest.IsNull)?JSObject.CreateObject():manifest;
-        if(!t._manifest["attr"].IsNumber) {
-          t._manifest = JsLib.SetField(t._manifest, "attr", new JST.Number(0));
+        t._manifest = (manifest == null || manifest.IsNull) ? JSObject.CreateObject() : manifest;
+        if (!t._manifest["attr"].IsNumber) {
+          t._manifest = JsLib.SetField(t._manifest, "attr", new JSL.Number(0));
         }
 
         var c = Perform.Create(t, Perform.E_Art.create, prim);
         _repo.DoCmd(c, false);
 
-        if(state != null) {
+        if (state != null) {
           SetValue(t, state);
         }
       }
 
       public static Topic Get(Topic home, string path, bool create, Topic prim, bool inter, bool fill) {
-        if(string.IsNullOrEmpty(path)) {
+        if (path == Bill.delmiterStr) {
+          return root;
+        }
+        if (string.IsNullOrEmpty(path)) {
           return home;
         }
         Topic next;
-        if(path[0] == Bill.delmiter) {
-          if(path.StartsWith(home._path)) {
+        if (path[0] == Bill.delmiter) {
+          if (path.StartsWith(home._path)) {
             path = path.Substring(home._path.Length);
           } else {
             home = Topic.root;
           }
         }
         var pt = path.Split(Bill.delmiterArr, StringSplitOptions.RemoveEmptyEntries);
-        for(int i = 0; i < pt.Length; i++) {
-          if(pt[i] == Bill.maskAll || pt[i] == Bill.maskChildren) {
+        for (int i = 0; i < pt.Length; i++) {
+          if (pt[i] == Bill.maskAll || pt[i] == Bill.maskChildren) {
             throw new ArgumentException(string.Format("{0}[{1}] dont allow wildcard", home._path, path));
           }
           //if(pt[i] == Bill.maskParent) {
@@ -343,23 +375,23 @@ namespace X13.Repository {
           //  continue;
           //}
           next = null;
-          if(home._children == null) {
-            lock(home) {
-              if(home._children == null) {
+          if (home._children == null) {
+            lock (home) {
+              if (home._children == null) {
                 home._children = new ConcurrentDictionary<string, Topic>();
               }
             }
-          } else if(home._children.TryGetValue(pt[i], out next) && next.disposed) {
+          } else if (home._children.TryGetValue(pt[i], out next) && next.disposed) {
             next = null;
           }
-          if(next == null) {
-            if(create) {
-              if(home._children.TryGetValue(pt[i], out next)) {
+          if (next == null) {
+            if (create) {
+              if (home._children.TryGetValue(pt[i], out next)) {
                 home = next;
               } else {
                 next = new Topic(home, pt[i], fill);
                 home._children[pt[i]] = next;
-                if(fill) {  // else the Perform(create) will be added in Fill()
+                if (fill) {  // else the Perform(create) will be added in Fill()
                   var c = Perform.Create(next, Perform.E_Art.create, prim);
                   _repo.DoCmd(c, inter);
                 }
@@ -379,14 +411,14 @@ namespace X13.Repository {
         Topic t = cmd.src;
         bool r;
         JSValue oc;
-        if(t._mfst_pu == null) {
+        if (t._mfst_pu == null) {
           r = true;
-          oc = t._manifest??JSValue.Null;
+          oc = t._manifest ?? JSValue.Null;
           t._mfst_pu = cmd;
         } else {
           r = false;
           oc = t._mfst_pu.f_v;
-          if(cmd.Prim != t._mfst_pu.Prim) {
+          if (cmd.Prim != t._mfst_pu.Prim) {
             t._mfst_pu.Prim = null; // inform all subscribers
           }
         }
@@ -400,15 +432,15 @@ namespace X13.Repository {
 
       public static void UpdatePath(Topic t) {
         t._path = t.parent == root ? "/" + t._name : t.parent._path + "/" + t._name;
-        if(t._children != null) {
-          foreach(var ch in t._children) {
+        if (t._children != null) {
+          foreach (var ch in t._children) {
             UpdatePath(ch.Value);
           }
         }
       }
       public static void Remove(Topic t) {
         t.disposed = true;
-        if(t._parent != null) {
+        if (t._parent != null) {
           Topic tmp;
           t._parent._children.TryRemove(t._name, out tmp);
         }
@@ -417,18 +449,18 @@ namespace X13.Repository {
         SubRec sb;
         Topic t = cmd.src;
 
-        if((cmd.Art == Perform.E_Art.subscribe || cmd.Art == Perform.E_Art.subAck) && (sb = cmd.o as SubRec) != null) {
+        if ((cmd.Art == Perform.E_Art.subscribe || cmd.Art == Perform.E_Art.subAck) && (sb = cmd.o as SubRec) != null) {
           try {
             sb.func(cmd, sb);
           }
-          catch(Exception ex) {
+          catch (Exception ex) {
             Log.Warning("{0}.{1}({2}) - {3}", sb.func.Method.DeclaringType.Name, sb.func.Method.Name, cmd.ToString(), ex.ToString());
           }
         } else {
-          if(t._subRecords != null) {
-            for(int i = t._subRecords.Count-1; i >= 0; i--) {
+          if (t._subRecords != null) {
+            for (int i = t._subRecords.Count - 1; i >= 0; i--) {
               sb = t._subRecords[i];
-              if(((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && sb.setTopic == t.parent))
+              if (((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children && sb.setTopic == t.parent))
                   && (cmd.Art != Perform.E_Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
                   && (cmd.Art != Perform.E_Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.old_o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
                   ) {
@@ -436,7 +468,7 @@ namespace X13.Repository {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());
                   sb.func(cmd, sb);
                 }
-                catch(Exception ex) {
+                catch (Exception ex) {
                   Log.Warning("{0}.{1}({2}) - {3}", sb.func.Method.DeclaringType.Name, sb.func.Method.Name, cmd.ToString(), ex.ToString());
                 }
               }
@@ -447,18 +479,18 @@ namespace X13.Repository {
       }
       public static void SubscribeByCreation(Topic t_c) {
         Topic p;
-        if((p = t_c.parent) != null) {
-          if(p._subRecords != null) {
-            lock(p._subRecords) {
-              foreach(var st in p._subRecords.Where(z => z.setTopic == p && (z.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren)) {
+        if ((p = t_c.parent) != null) {
+          if (p._subRecords != null) {
+            lock (p._subRecords) {
+              foreach (var st in p._subRecords.Where(z => z.setTopic == p && (z.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children)) {
                 Subscribe(t_c, st);
               }
             }
           }
-          while(p != null) {
-            if(p._subRecords != null) {
-              lock(p._subRecords) {
-                foreach(var st in p._subRecords.Where(z => (z.mask & SubRec.SubMask.All) == SubRec.SubMask.All)) {
+          while (p != null) {
+            if (p._subRecords != null) {
+              lock (p._subRecords) {
+                foreach (var st in p._subRecords.Where(z => (z.mask & SubRec.SubMask.All) == SubRec.SubMask.All)) {
                   Subscribe(t_c, st);
                 }
               }
@@ -468,12 +500,12 @@ namespace X13.Repository {
         }
       }
       public static void SubscribeByMove(Topic t) {
-        if(t._subRecords != null) {
-          t._subRecords.RemoveAll(z => ((z.mask & SubRec.SubMask.Chldren) == SubRec.SubMask.Chldren && z.setTopic != t) || (z.mask & SubRec.SubMask.All) == SubRec.SubMask.All);
+        if (t._subRecords != null) {
+          t._subRecords.RemoveAll(z => ((z.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children && z.setTopic != t) || (z.mask & SubRec.SubMask.All) == SubRec.SubMask.All);
         }
         SubscribeByCreation(t);
-        if(t._children != null) {
-          foreach(var c in t._children) {
+        if (t._children != null) {
+          foreach (var c in t._children) {
             SubscribeByMove(c.Value);
           }
         }
@@ -481,21 +513,21 @@ namespace X13.Repository {
 
       public static void Subscribe(Topic t, SubRec sr) {
 
-        if(t._subRecords == null) {
-          lock(t) {
-            if(t._subRecords == null) {
+        if (t._subRecords == null) {
+          lock (t) {
+            if (t._subRecords == null) {
               t._subRecords = new List<SubRec>();
             }
           }
         }
-        lock(t._subRecords) {
-          if(!t._subRecords.Any(z => z.func == sr.func && z.setTopic == sr.setTopic && z.mask == sr.mask && ((z.mask & SubRec.SubMask.Field) == SubRec.SubMask.None || z.prefix == sr.prefix))) {
+        lock (t._subRecords) {
+          if (!t._subRecords.Any(z => z.func == sr.func && z.setTopic == sr.setTopic && z.mask == sr.mask && ((z.mask & SubRec.SubMask.Field) == SubRec.SubMask.None || z.prefix == sr.prefix))) {
             t._subRecords.Add(sr);
           }
         }
       }
       public static bool Unsubscribe(Topic t, SubRec sr) {
-        if(RemoveSubscripton(t, sr)) {
+        if (RemoveSubscripton(t, sr)) {
           var c = Perform.Create(t, Perform.E_Art.unsubscribe, null);
           c.o = sr;
           _repo.DoCmd(c, false);
@@ -504,11 +536,11 @@ namespace X13.Repository {
         return false;
       }
       public static bool RemoveSubscripton(Topic t, SubRec sr) {
-        if(t._subRecords == null) {
+        if (t._subRecords == null) {
           return false;
         }
         bool fl;
-        lock(t._subRecords) {
+        lock (t._subRecords) {
           fl = t._subRecords.Remove(sr);
         }
         return fl;

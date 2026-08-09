@@ -347,6 +347,18 @@ namespace X13 {
     }
     #endregion Log
 
+    public static bool IsArray(JSC.JSValue value) {
+      if(value == null || value.ValueType != JSC.JSValueType.Object || value.Value == null) {
+        return false;
+      }
+      try {
+        return JSL.Array.isArray(new JSC.Arguments() { value }).As<bool>();
+      }
+      catch {
+        return false;
+      }
+    }
+
     #region AQuery
     public static Func<string[], DateTime, int, DateTime, JSL.Array> AQuery { get; set; }
     private static Task<JSL.Array> AQueryJS(JSC.JSValue topicsJS, JSC.JSValue beginJS, int count, JSC.JSValue endJS) {

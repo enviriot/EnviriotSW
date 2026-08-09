@@ -350,7 +350,7 @@ namespace X13.Periphery {
           } else if(idx != tmp.path.Length - 1) {
             retCode = MsReturnCode.InvalidTopicId;
           } else {
-            mask |= tmp.path[idx] == '#' ? SubRec.SubMask.All : SubRec.SubMask.Chldren;
+            mask |= tmp.path[idx] == '#' ? SubRec.SubMask.All : SubRec.SubMask.Children;
             if(tmp.path.Length > 1) {
               if(tmp.path[0] == '/' && !tmp.path.StartsWith(owner.path)) {
                 retCode = MsReturnCode.InvalidTopicId;

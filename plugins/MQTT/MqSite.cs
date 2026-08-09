@@ -37,7 +37,7 @@ namespace X13.MQTT {
       _mask = SubRec.SubMask.Value;
       for(int i = 0; i < sl.Length; i++) {
         if(sl[i] == "+") {
-          _mask |= SubRec.SubMask.Chldren;
+          _mask |= SubRec.SubMask.Children;
           break;
         }
         if(sl[i] == "#") {
