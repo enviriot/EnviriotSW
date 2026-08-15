@@ -21,7 +21,7 @@ export class X13CatalogDocument extends LitElement {
       color: #243447;
       height: 100%;
       overflow: auto;
-      padding: 12px 16px;
+      padding: 0 0;
       width: 100%;
     }
     .uri {
@@ -35,6 +35,7 @@ export class X13CatalogDocument extends LitElement {
     .grid {
       border: 1px solid #cfd8e3;
       border-bottom: 0;
+      border-left: 0;
       min-width: 640px;
     }
     .row {

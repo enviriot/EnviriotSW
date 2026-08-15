@@ -45,12 +45,29 @@ class X13DisplayEditor extends LitElement {
     .unknown { background: #64748b; }
     .text { overflow: hidden; text-overflow: ellipsis; }
     .via { color: #000; font-weight: bold; }
+    .via-muted { color: #64748b; }
+    .plc-actions { display: inline-flex; gap: 2px; margin-left: 4px; }
+    .plc-action {
+      background: #fff;
+      border: 1px solid #94a3b8;
+      border-radius: 3px;
+      color: #334155;
+      cursor: pointer;
+      flex: 0 0 auto;
+      font: inherit;
+      font-size: 11px;
+      line-height: 16px;
+      padding: 1px 6px;
+    }
+    .plc-action:hover { background: #eef2f7; }
+    .plc-action:active { background: #dde5ee; }
   `;
 
   constructor(options = {}) {
     super();
     this.view = options.view || 'value';
     this.commit = typeof options.commit === 'function' ? options.commit : () => {};
+    this.rpc = typeof options.rpc === 'function' ? options.rpc : () => {};
     this.readonly = true;
     this.selected = false;
     this.state = undefined;
@@ -97,12 +114,33 @@ export class X13EsStatusEditor extends X13DisplayEditor {
   }
 }
 
+const PLC_ACTIONS = [
+  ['Build', 'action:MQTT_SN.PLC.Build'],
+  ['Run', 'action:MQTT_SN.PLC.Run'],
+  ['Start', 'action:MQTT_SN.PLC.Start'],
+  ['Stop', 'action:MQTT_SN.PLC.Stop'],
+];
+
 export class X13DevicePlcEditor extends X13DisplayEditor {
   render() {
     const status = devicePlcStatus(this.state);
+    const via = status.via ? html`<span class="via-muted">${status.via}</span>` : null;
+    const actions = this.view === 'value' ? html`
+      <span class="plc-actions">
+        ${PLC_ACTIONS.map(([label, cmd]) => html`
+          <button type="button" class="plc-action" @click=${(e) => this.#onAction(e, cmd)}>${label}</button>`)}
+      </span>` : null;
     return this.renderDisplay(html`
       <span class="badge ${status.kind}"></span>
-      <span class="text">${status.label}</span>`);
+      ${via}
+      <span class="text">${status.label}</span>
+      ${actions}`);
+  }
+
+  #onAction(e, cmd) {
+    e.preventDefault();
+    e.stopPropagation();
+    this.rpc(cmd);
   }
 }
 
@@ -161,11 +199,17 @@ function esStatus(value) {
 }
 
 function devicePlcStatus(value) {
-  if(typeof value === 'number') {
-    if(Math.trunc(value) === 1) return { kind: 'ok', label: 'run' };
-    if(Math.trunc(value) === 2) return { kind: 'error', label: 'stop' };
+  let st;
+  let via = '';
+  if(typeof value === 'number') st = Math.trunc(value);
+  else if(value && typeof value === 'object') {
+    if(typeof value.st === 'number') st = Math.trunc(value.st);
+    if(typeof value.via === 'string') via = value.via;
   }
-  return { kind: 'unknown', label: 'unknown' };
+
+  if(st === 1) return { kind: 'ok', label: 'run', via };
+  if(st === 2) return { kind: 'error', label: 'stop', via };
+  return { kind: 'unknown', label: 'unknown', via };
 }
 
 customElements.define('x13-version-editor', X13VersionEditor);

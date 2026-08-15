@@ -1,5 +1,5 @@
 import { LitElement, html, css } from '../lib/lit-all.min.js';
-import { formatDefault } from './editor-format.js';
+import { formatDefault, autoGrowTextarea } from './editor-format.js';
 
 export class X13JsEditor extends LitElement {
   static properties = {
@@ -11,10 +11,14 @@ export class X13JsEditor extends LitElement {
 
   static styles = css`
     :host {
+      cursor: text;
       display: inline-flex;
       max-width: 100%;
       width: 100%;
       vertical-align: middle;
+    }
+    :host([readonly]) {
+      cursor: pointer;
     }
     textarea {
       background: transparent;
@@ -43,6 +47,10 @@ export class X13JsEditor extends LitElement {
     }
     :host([selected]) textarea { background: #fff; }
     textarea:disabled { color: #475569; resize: none; }
+    :host([multiline]) textarea {
+      max-height: 70vh;
+      resize: none;
+    }
   `;
 
   constructor(options = {}) {
@@ -58,11 +66,16 @@ export class X13JsEditor extends LitElement {
   }
 
   willUpdate(changed) {
+    this.toggleAttribute('multiline', this.view === 'value');
     if(changed.has('state')) {
       this.#draft = null;
       this.#lastSentDraft = null;
       this.#suppressBlur = false;
     }
+  }
+
+  updated() {
+    if(this.view === 'value') this.#growTextarea();
   }
 
   render() {
@@ -81,7 +94,12 @@ export class X13JsEditor extends LitElement {
     this.#lastSentDraft = null;
     this.#suppressBlur = true;
     if(textarea) textarea.value = this.#format(this.state);
+    if(textarea && this.view === 'value') autoGrowTextarea(textarea);
     this.requestUpdate();
+  }
+
+  #growTextarea() {
+    autoGrowTextarea(this.renderRoot?.querySelector('textarea'));
   }
 
   #currentText() {
@@ -97,6 +115,7 @@ export class X13JsEditor extends LitElement {
   #onInput(e) {
     this.#draft = e.currentTarget.value;
     this.#suppressBlur = false;
+    if(this.view === 'value') autoGrowTextarea(e.currentTarget);
   }
 
   #onKeyDown(e) {

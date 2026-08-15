@@ -87,6 +87,13 @@ namespace X13.WebUI {
           using(FileStream stream = File.OpenRead(file)) WriteResponse(e.Response, stream, ContentType(file));
         } else if(path == "/index.html") {
           WriteRedirect(e.Response, "/ide.html");
+        } else if(path.StartsWith("/ide.html/", StringComparison.Ordinal)) {
+          string ideFile = Path.Combine(_staticPath, "ide.html");
+          if(File.Exists(ideFile)) {
+            using(FileStream stream = File.OpenRead(ideFile)) WriteResponse(e.Response, stream, ContentType(ideFile));
+          } else {
+            WriteResponse(e.Response, HttpStatusCode.NotFound);
+          }
         } else {
           WriteResponse(e.Response, HttpStatusCode.NotFound);
         }
@@ -304,7 +311,7 @@ namespace X13.WebUI {
         _sessionId = Interlocked.Increment(ref _nextSessionId);
         Interlocked.Increment(ref _activeSessionCount);
         _remoteEndPoint = ResolveRemoteEndPoint();
-        _viewSession = new ViewSession(Send);
+        _viewSession = new ViewSession(Send, SendRaw);
         _handlers.Clear();
         _handlers[ViewMessageTypes.ReqHello] = _viewSession.HandleHello;
         _handlers[ViewMessageTypes.ReqExpand] = _viewSession.HandleExpand;
@@ -312,6 +319,8 @@ namespace X13.WebUI {
         _handlers[ViewMessageTypes.ReqMenu] = _viewSession.HandleMenu;
         _handlers[ViewMessageTypes.ReqRpc] = _viewSession.HandleRpc;
         _handlers[ViewMessageTypes.ReqOpen] = _viewSession.HandleOpen;
+        _handlers[ViewMessageTypes.ReqClose] = _viewSession.HandleClose;
+        _handlers[ViewMessageTypes.ReqLog] = _viewSession.HandleLog;
         X13.Log.Info("WebUI WS#{0} connected from {1}", _sessionId, FormatRemoteEndPoint(_remoteEndPoint));
       }
 
@@ -366,6 +375,15 @@ namespace X13.WebUI {
         var json = JsLib.Stringify(response);
         if (_verbose()) X13.Log.Debug("WebUI WS#{0} => {1}", _sessionId, json);
         base.Send(json);
+      }
+
+      // Deliberately does not trace through X13.Log.Debug like Send() does above:
+      // this is used for the live log push (evnt.log), which is itself driven by
+      // X13.Log.Write - tracing it would re-enter Log.Write and push another
+      // evnt.log, tracing that too, forever (a self-feeding loop the moment verbose
+      // WS tracing is on). The log stream can't log itself.
+      private void SendRaw(JSC.JSObject message) {
+        base.Send(JsLib.Stringify(message));
       }
 
       private static JSC.JSObject Error(JSC.JSValue request, string code, string message) {

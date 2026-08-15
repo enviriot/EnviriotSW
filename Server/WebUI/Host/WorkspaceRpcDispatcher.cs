@@ -68,7 +68,9 @@ namespace X13.WebUI.Host {
         return ViewOpResult.Error("paste_source_missing", "Paste source is missing");
       }
       if(!string.IsNullOrWhiteSpace(sourceVid)) {
-        if(VidHelper.GetView(sourceVid) != "workspace" || !string.Equals(VidHelper.GetTopicPath(sourceVid), sourcePath, StringComparison.Ordinal)) {
+        // sourceVid may come from any topic-tree view (workspace, inspchildren, ...) -
+        // only the topic path it encodes matters here, not which tree it was cut from.
+        if(!string.Equals(VidHelper.GetTopicPath(sourceVid), sourcePath, StringComparison.Ordinal)) {
           return ViewOpResult.Error("paste_source_mismatch", "Paste source does not match source vid");
         }
       }
@@ -107,11 +109,12 @@ namespace X13.WebUI.Host {
     }
 
     private static ViewOpResult ExecuteAdd(Topic topic, string key, JSC.JSValue args) {
-      Dictionary<string, JSC.JSValue> actions = WorkspaceMenuBuilder.ResolveAddActions(topic);
-      JSC.JSValue action;
-      if(string.IsNullOrWhiteSpace(key) || actions == null || !actions.TryGetValue(key, out action)) {
+      Dictionary<string, WorkspaceMenuBuilder.AddActionEntry> actions = WorkspaceMenuBuilder.ResolveAddActions(topic);
+      WorkspaceMenuBuilder.AddActionEntry entry;
+      if(string.IsNullOrWhiteSpace(key) || actions == null || !actions.TryGetValue(key, out entry)) {
         return ViewOpResult.Error("add_action_not_found", "Add action not found: " + (key ?? "<null>"));
       }
+      JSC.JSValue action = entry.Action;
       if(WorkspaceMenuBuilder.ResourceBusy(topic, actions, key, action)) {
         return ViewOpResult.Error("add_resource_busy", "Required resource is already used: " + key);
       }

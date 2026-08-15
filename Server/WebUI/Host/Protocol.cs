@@ -12,16 +12,21 @@ namespace X13.WebUI.Host {
     public const string ReqMenu = "req.menu";
     public const string ReqRpc = "req.rpc";
     public const string ReqOpen = "req.open";
+    public const string ReqClose = "req.close";
+    public const string ReqLog = "req.log";
     public const string RespHello = "resp.hello";
     public const string RespExpand = "resp.expand";
     public const string RespCommit = "resp.commit";
     public const string RespMenu = "resp.menu";
     public const string RespRpc = "resp.rpc";
     public const string RespOpen = "resp.open";
+    public const string RespClose = "resp.close";
+    public const string RespLog = "resp.log";
     public const string ProtocolError = "protocol.error";
     public const string EvntAdd = "evnt.add";
     public const string EvntUpd = "evnt.upd";
     public const string EvntDel = "evnt.del";
+    public const string EvntLog = "evnt.log";
   }
 
   internal sealed class ViewRowDto {
@@ -35,6 +40,18 @@ namespace X13.WebUI.Host {
     public bool Readonly;
     public string OptionsKey;
     public JSC.JSValue Options;
+    // Hint for the frontend's editor-host "view" mode (currently only "value" is
+    // meaningful - see view-row.js) beyond the default vid-prefix rule
+    // (inspstate#/inspmanifest# get "value", everything else "row"). Null/empty means
+    // "use the default". Set by TopicTreeController's optional resolveEditorView hook -
+    // e.g. InspectorChildrenViewProvider uses it to give a DevicePLC document's "src"
+    // child topic the multi-line/auto-growing JS editor even though it's a Children row.
+    public string EditorView;
+    // True when the topic's resolved manifest.type is Core/Logram - lets the
+    // frontend decide, synchronously from an already-loaded row (no extra round
+    // trip), whether to default a newly opened document to the Logram view and
+    // whether to show the Inspector/Logram toggle at all. See LogramViewProvider.
+    public bool IsLogram;
   }
 
   internal enum MenuItemKind {
@@ -51,6 +68,9 @@ namespace X13.WebUI.Host {
     public string Hint;
     public bool Enabled;
     public bool Willful;
+    // Renders as a checkmark in place of Icon (context-menu.js) - a toggle command's
+    // current state (e.g. Logram pin "Trace"), not a submenu/selection indicator.
+    public bool Checked;
     public List<MenuItemDto> Children;
   }
 
@@ -115,6 +135,7 @@ namespace X13.WebUI.Host {
     ViewOpResult BuildMenu(string vid, out List<MenuItemDto> items);
     ViewOpResult ExecuteRpc(string vid, string cmd, JSC.JSValue args);
     ViewOpResult Open(string vid, string view);
+    ViewOpResult Close(string vid);
   }
 
   internal abstract class ViewProviderBase : IViewProvider {
@@ -143,6 +164,10 @@ namespace X13.WebUI.Host {
 
     public virtual ViewOpResult Open(string vid, string view) {
       return ViewOpResult.Error("view_open_not_supported", "Open is not supported for view target: " + (vid ?? "<null>"));
+    }
+
+    public virtual ViewOpResult Close(string vid) {
+      return ViewOpResult.Success();
     }
 
     public virtual void Dispose() {
@@ -239,6 +264,7 @@ namespace X13.WebUI.Host {
       if(!string.IsNullOrEmpty(item.Hint)) dto["hint"] = item.Hint;
       if(!item.Enabled) dto["enabled"] = false;
       if(item.Willful) dto["willful"] = true;
+      if(item.Checked) dto["checked"] = true;
       if(item.Children != null && item.Children.Count > 0) dto["children"] = SerializeMenuItems(item.Children);
       return dto;
     }

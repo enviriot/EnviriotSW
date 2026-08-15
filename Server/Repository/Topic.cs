@@ -1,12 +1,11 @@
-﻿using NiL.JS.Core;
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using NiL.JS.Core;
 using NiL.JS.Extensions;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 
@@ -72,14 +71,20 @@ namespace X13.Repository {
       return _children != null && _children.Any(z => !z.Value.disposed);
     }
     public string GetStateType() {
-      if (_state == null) return null;
-      switch (_state.ValueType) {
+      return JsValueTypeName(_state);
+    }
+
+    // Extracted from GetStateType so callers with a bare JSValue (not backed by a Topic - e.g.
+    // a nested field inside another topic's state) can infer the same semantic type name.
+    public static string JsValueTypeName(JSValue value) {
+      if (value == null) return null;
+      switch (value.ValueType) {
       case JSValueType.Object:
-        if (_state.Value == null) return "Null";
-        if (_state.Value is X13.ByteArray || _state.Value is X13.ByteArray) return "ByteArray";
+        if (value.Value == null) return "Null";
+        if (value.Value is X13.ByteArray || value.Value is X13.ByteArray) return "ByteArray";
         return "Object";
       case JSValueType.String: {
-          string text = _state.As<string>();
+          string text = value.As<string>();
           if (text != null && text.StartsWith("¤VR")) return "Version";
           return "String";
         }

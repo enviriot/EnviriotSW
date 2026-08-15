@@ -84,6 +84,11 @@ export class X13ContextMenu extends LitElement {
       height: 16px;
       width: 16px;
     }
+    .check {
+      color: #2563eb;
+      font-weight: 700;
+      text-align: center;
+    }
     .label {
       overflow: hidden;
       text-overflow: ellipsis;
@@ -182,7 +187,7 @@ export class X13ContextMenu extends LitElement {
           title=${item.hint || item.text || item.cmd || ''}
           ?disabled=${item.enabled === false}
           @click=${(e) => this.#select(e, item)}>
-          <span>${this.#renderIcon(item.icon)}</span>
+          <span>${item.checked ? html`<span class="check">✓</span>` : this.#renderIcon(item.icon)}</span>
           <span class="label">${item.text || item.cmd || ''}</span>
           <span class="arrow">${hasChildren ? '›' : ''}</span>
         </button>

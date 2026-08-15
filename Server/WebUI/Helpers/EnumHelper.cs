@@ -11,6 +11,12 @@ namespace X13.WebUI.Helpers {
 
     public static JSC.JSValue ResolveOptions(Topic topic, string editor) {
       string enumSource = Resolve(topic, editor);
+      return ResolveOptionsForSource(enumSource);
+    }
+
+    // Topic-independent tail of ResolveOptions - reusable by callers that only have a bare enum
+    // source string (e.g. a field manifest's "enum" entry, not backed by a Topic).
+    public static JSC.JSValue ResolveOptionsForSource(string enumSource) {
       if(string.IsNullOrWhiteSpace(enumSource)) return null;
 
       Topic enumTopic = Topic.root.Get(ResolveEnumPath(enumSource), false);

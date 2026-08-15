@@ -6,26 +6,14 @@ using X13.WebUI.Helpers;
 
 namespace X13.WebUI.Host {
   internal sealed class WorkspaceRowProjector {
-    private const string ViewName = "workspace";
+    private readonly string _viewName;
+    private readonly Topic _rootTopic;
     private readonly Func<string, bool> _isExpanded;
 
-    internal WorkspaceRowProjector(Func<string, bool> isExpanded) {
+    internal WorkspaceRowProjector(string viewName, Topic rootTopic, Func<string, bool> isExpanded) {
+      _viewName = string.IsNullOrEmpty(viewName) ? "workspace" : viewName;
+      _rootTopic = rootTopic ?? Topic.root;
       _isExpanded = isExpanded ?? (_ => false);
-    }
-
-    internal ViewRowDto BuildRootRow() {
-      Topic root = Topic.root;
-      string vid = TopicVid(root);
-      return new ViewRowDto() {
-        Vid = vid,
-        Level = 0,
-        Expander = root.HasChildren() ? (_isExpanded(vid) ? 2 : 1) : 0,
-        Icon = "/ide_icons/ty_topic.png",
-        Name = Environment.MachineName,
-        Editor = "ConnectionStatus",
-        Value = "connected",
-        Readonly = true,
-      };
     }
 
     internal ViewRowDto BuildTopicRow(Topic topic) {
@@ -44,19 +32,25 @@ namespace X13.WebUI.Host {
         Readonly = topic.CheckAttribute(Topic.Attribute.Readonly),
         OptionsKey = EnumHelper.Resolve(topic, editor),
         Options = EnumHelper.ResolveOptions(topic, editor),
+        IsLogram = string.Equals(JsLib.OfString(topic.GetField("type"), null), "Core/Logram", StringComparison.Ordinal),
       };
     }
 
-    internal static string TopicVid(Topic topic) {
-      return ViewName + "#" + (topic == null ? "/" : topic.path);
+    internal string TopicVid(Topic topic) {
+      return _viewName + "#" + (topic == null ? "/" : topic.path);
     }
 
-    private static int TopicLevel(Topic topic) {
-      if(topic == null || topic.path == "/") return 0;
-      return topic.path.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries).Length;
+    private int TopicLevel(Topic topic) {
+      if(topic == null) return 0;
+      return Math.Max(0, SegmentCount(topic.path) - SegmentCount(_rootTopic == null ? "/" : _rootTopic.path));
     }
 
-    private static JSC.JSValue ToWebStateValue(JSC.JSValue state) {
+    private static int SegmentCount(string path) {
+      if(string.IsNullOrEmpty(path) || path == "/") return 0;
+      return path.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries).Length;
+    }
+
+    internal static JSC.JSValue ToWebStateValue(JSC.JSValue state) {
       X13.ByteArray byteArray;
       if(X13.ByteArray.IsByteArray(state, out byteArray)) {
         return "¤BA" + Convert.ToBase64String(byteArray.GetBytes());

@@ -37,7 +37,8 @@ export class ViewStore {
     if(!patch || !patch.vid) return;
     const index = this.rows.findIndex((row) => row.vid === patch.vid);
     if(index < 0) return;
-    const allowed = ['expander', 'icon', 'editor', 'value', 'readonly', 'options', 'info', 'srcVer', 'actVer', 'downloadEnabled', 'removeEnabled'];
+    const allowed = ['expander', 'icon', 'editor', 'value', 'readonly', 'isLogram', 'options', 'editorView', 'info', 'srcVer', 'actVer', 'downloadEnabled', 'removeEnabled',
+      'x', 'y', 'width', 'height', 'pins', 'pinDirection', 'pinIndex', 'sourceVid', 'sourceLocal', 'sourcePath', 'trace', 'color', 'displayValue'];
     const next = { ...this.rows[index] };
     for(const key of allowed) {
       if(Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
@@ -88,6 +89,24 @@ export class ViewStore {
   }
 }
 
+// Read-only facade over N ordered ViewStores, for rendering multiple independently
+// event-routed trees (e.g. Inspector's State and Children roots) as one combined
+// list. The only method X13TreeDocumentBase ever calls on a "store" is
+// subscribe(callback), so this is a drop-in store for it - the array order fixes
+// the on-screen order (state rows before children rows), and each real ViewStore
+// still only ever receives evnt.* packets for its own vid prefix.
+export class CombinedViewStore {
+  constructor(stores) {
+    this.stores = stores;
+  }
+
+  subscribe(callback) {
+    const emit = () => callback(this.stores.flatMap((store) => store.rows));
+    const unsubscribes = this.stores.map((store) => store.subscribe(emit));
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }
+}
+
 function normalizeRow(row) {
   return {
     vid: row.vid,
@@ -96,14 +115,29 @@ function normalizeRow(row) {
     icon: row.icon || '',
     name: row.name || '',
     editor: row.editor || 'Default',
-    value: row.value,
+    value: Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : '',
     readonly: !!row.readonly,
+    isLogram: !!row.isLogram,
     ...(Object.prototype.hasOwnProperty.call(row, 'options') ? { options: row.options } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'editorView') ? { editorView: row.editorView } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'info') ? { info: row.info } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'srcVer') ? { srcVer: row.srcVer } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'actVer') ? { actVer: row.actVer } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'downloadEnabled') ? { downloadEnabled: !!row.downloadEnabled } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'removeEnabled') ? { removeEnabled: !!row.removeEnabled } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'x') ? { x: row.x } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'y') ? { y: row.y } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'width') ? { width: row.width } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'height') ? { height: row.height } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'pins') ? { pins: row.pins } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'pinDirection') ? { pinDirection: row.pinDirection } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'pinIndex') ? { pinIndex: row.pinIndex } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'sourceVid') ? { sourceVid: row.sourceVid } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'sourceLocal') ? { sourceLocal: row.sourceLocal } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'sourcePath') ? { sourcePath: row.sourcePath } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'color') ? { color: row.color } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'displayValue') ? { displayValue: row.displayValue } : {}),
+    trace: !!row.trace,
   };
 }
 

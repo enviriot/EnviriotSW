@@ -56,8 +56,10 @@ export class X13EditorHost extends LitElement {
     if(!container) return;
     container.textContent = '';
     const commit = (newValue) => this.#commit(newValue);
-    this.#editor = createEditorElement(tagName || DEFAULT_EDITOR_TAG, { commit });
+    const rpc = (cmd) => this.#rpc(cmd);
+    this.#editor = createEditorElement(tagName || DEFAULT_EDITOR_TAG, { commit, rpc });
     this.#editor.commit = commit;
+    this.#editor.rpc = rpc;
     this.#editor.addEventListener('focusin', () => this.#setFocused(true));
     this.#editor.addEventListener('focusout', () => this.#setFocused(false));
     this.#editorKey = key;
@@ -69,6 +71,21 @@ export class X13EditorHost extends LitElement {
     if(!this.row || this.row.readonly) return Promise.resolve();
     const detail = { vid: this.row.vid, value: newValue, promise: null };
     this.dispatchEvent(new CustomEvent('editor-commit', {
+      bubbles: true,
+      composed: true,
+      detail,
+    }));
+    return detail.promise || Promise.resolve();
+  }
+
+  // Lets an editor trigger a req.rpc command against its own row's vid (e.g. the
+  // DevicePLC editor's inline Build/Run/Start/Stop buttons) the same way commit()
+  // lets it trigger req.commit - bubbles to app-shell.js's #onEditorRpc, which is the
+  // only place that actually calls api.rpc.
+  #rpc(cmd) {
+    if(!this.row || !cmd) return Promise.resolve();
+    const detail = { vid: this.row.vid, cmd, promise: null };
+    this.dispatchEvent(new CustomEvent('editor-rpc', {
       bubbles: true,
       composed: true,
       detail,
@@ -119,7 +136,8 @@ export function editorKey(topicOrRow) {
 
 export function applyRowToEditor(editor, row, selected = false, view = 'row') {
   if(!editor) return;
-  editor.view = normalizeEditorView(view === 'value' ? 'row' : view);
+  editor.view = normalizeEditorView(view);
+  editor.vid = row?.vid;
   editor.readonly = !!row?.readonly;
   editor.selected = !!selected;
   editor.value = row?.value;

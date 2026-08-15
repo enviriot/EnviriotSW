@@ -1,5 +1,5 @@
 import { LitElement, html, css } from '../lib/lit-all.min.js';
-import { formatDefault } from './editor-format.js';
+import { formatDefault, autoGrowTextarea } from './editor-format.js';
 
 export class X13ScalarTextEditor extends LitElement {
   static properties = {
@@ -11,9 +11,13 @@ export class X13ScalarTextEditor extends LitElement {
 
   static styles = css`
     :host {
+      cursor: text;
       display: inline-flex;
       max-width: 100%;
       vertical-align: middle;
+    }
+    :host([readonly]) {
+      cursor: pointer;
     }
     :host([wide]) {
       width: 100%;
@@ -50,6 +54,36 @@ export class X13ScalarTextEditor extends LitElement {
     }
     :host([selected]) input { background: #fff; }
     input:disabled { color: #475569; }
+    :host([multiline]) {
+      width: 100%;
+    }
+    textarea.text-editor-multiline {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-sizing: border-box;
+      color: #1f2933;
+      display: block;
+      font: inherit;
+      line-height: 22px;
+      margin: 0;
+      max-height: 70vh;
+      min-height: 24px;
+      min-width: 0;
+      outline: 0;
+      overflow-y: auto;
+      padding: 3px 4px;
+      resize: none;
+      white-space: pre-wrap;
+      width: 100%;
+      word-break: break-word;
+    }
+    :host(:not([readonly])) textarea.text-editor-multiline {
+      border-left: 1px solid #000;
+      border-right: 1px solid #000;
+    }
+    :host([selected]) textarea.text-editor-multiline { background: #fff; }
+    textarea.text-editor-multiline:disabled { color: #475569; }
   `;
 
   constructor(options = {}) {
@@ -69,6 +103,7 @@ export class X13ScalarTextEditor extends LitElement {
   willUpdate(changed) {
     this.toggleAttribute('wide', this.fullWidth());
     this.toggleAttribute('numeric', this.numericLayout());
+    this.toggleAttribute('multiline', this.#isMultiline());
     if(changed.has('state')) {
       this.#draft = null;
       this.#lastSentDraft = null;
@@ -78,9 +113,20 @@ export class X13ScalarTextEditor extends LitElement {
 
   updated(changed) {
     if(changed.has('state')) this.#restorePendingSelection();
+    if(this.#isMultiline()) this.#growTextarea();
   }
 
   render() {
+    if(this.#isMultiline()) {
+      return html`<textarea
+        class="text-editor-multiline"
+        rows="1"
+        .value=${this.#currentText()}
+        ?disabled=${this.readonly}
+        @input=${this.#onMultilineInput}
+        @keydown=${this.#onMultilineKeyDown}
+        @blur=${this.#onBlur}></textarea>`;
+    }
     return html`<input
       class=${this.inputClass()}
       .value=${this.#currentText()}
@@ -95,6 +141,9 @@ export class X13ScalarTextEditor extends LitElement {
   inputClass() { return 'text-editor'; }
   fullWidth() { return true; }
   numericLayout() { return false; }
+  // Only String opts in (scalar-editors.js bottom) - a multi-line box makes no sense
+  // for Integer/Double/Hexadecimal/Time/ByteArray, so this is off by default here.
+  multilineInValueView() { return false; }
   parse(text) { return { ok: true, value: text }; }
   format(value) { return formatDefault(value); }
   allowedInputPattern() { return /[\s\S]/; }
@@ -109,7 +158,37 @@ export class X13ScalarTextEditor extends LitElement {
     this.#lastSentDraft = null;
     this.#suppressBlur = true;
     if(input) input.value = this.format(this.state);
+    if(input && this.#isMultiline()) autoGrowTextarea(input);
     this.requestUpdate();
+  }
+
+  #isMultiline() {
+    return this.view === 'value' && this.multilineInValueView();
+  }
+
+  #growTextarea() {
+    autoGrowTextarea(this.renderRoot?.querySelector('textarea.text-editor-multiline'));
+  }
+
+  #onMultilineInput(e) {
+    this.#draft = e.currentTarget.value;
+    this.#suppressBlur = false;
+    autoGrowTextarea(e.currentTarget);
+  }
+
+  // Escape reverts, Ctrl/Cmd+Enter commits, plain Enter inserts a newline (default
+  // textarea behavior, not prevented) - same convention js-editor.js already uses.
+  #onMultilineKeyDown(e) {
+    if(e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.restoreConfirmed(e.currentTarget);
+      return;
+    }
+    if(e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    this.#tryCommit();
+    this.#suppressBlur = true;
   }
 
   #currentText() {
@@ -224,6 +303,7 @@ function scalarEditorValuesEqual(left, right) {
 
 export class X13StringEditor extends X13ScalarTextEditor {
   parse(text) { return { ok: true, value: String(text ?? '') }; }
+  multilineInValueView() { return true; }
 }
 
 export class X13IntegerEditor extends X13ScalarTextEditor {

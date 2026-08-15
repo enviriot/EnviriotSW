@@ -28,4 +28,14 @@ export class ViewApi {
   open(vid, view) {
     return this.client.request('req.open', { vid, view });
   }
+
+  close(vid) {
+    return this.client.request('req.close', { vid });
+  }
+
+  log(before, count) {
+    const payload = { count };
+    if(before) payload.before = before;
+    return this.client.request('req.log', payload);
+  }
 }

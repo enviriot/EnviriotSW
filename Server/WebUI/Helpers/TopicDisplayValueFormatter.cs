@@ -1,5 +1,6 @@
 ///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
+using System;
 using System.Collections.Generic;
 
 namespace X13.WebUI.Helpers {
@@ -16,14 +17,19 @@ namespace X13.WebUI.Helpers {
       return TrimDisplay(state.ToString());
     }
 
+    // Keys are sorted before truncating to a display subset - JS object property
+    // enumeration order isn't guaranteed stable across rebuilds of the same logical
+    // value (e.g. JsLib.SetField always reconstructs the object from scratch on every
+    // single-field write), so an unsorted summary could read as "changed" between two
+    // calls that differ only in enumeration order, not content - causing spurious
+    // evnt.upd pushes for any row using the Default editor's summary text.
     private static string FormatObjectSummary(JSC.JSValue value) {
       List<string> names = new List<string>();
-      int total = 0;
-      foreach(var kv in value) {
-        total++;
-        if(names.Count < MaxDisplaySummaryItems) names.Add(kv.Key);
-      }
-      if(total == 0) return "{}";
+      foreach(var kv in value) names.Add(kv.Key);
+      if(names.Count == 0) return "{}";
+      names.Sort(StringComparer.Ordinal);
+      int total = names.Count;
+      if(names.Count > MaxDisplaySummaryItems) names.RemoveRange(MaxDisplaySummaryItems, names.Count - MaxDisplaySummaryItems);
       string suffix = total > names.Count ? ", …" : string.Empty;
       return TrimDisplay("{ " + string.Join(", ", names.ToArray()) + suffix + " }");
     }
