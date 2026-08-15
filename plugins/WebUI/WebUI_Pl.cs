@@ -204,6 +204,8 @@ namespace X13.WebUI {
           return "application/javascript; charset=utf-8";
       case ".ico":
         return "image/x-icon";
+      case ".svg":
+        return "image/svg+xml; charset=utf-8";
       }
       return "application/octet-stream";
     }

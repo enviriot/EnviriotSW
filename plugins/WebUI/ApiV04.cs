@@ -29,6 +29,12 @@ namespace X13.WebUI {
 
     private List<X13.Repository.SubRec> _subscriptions;
     private Session _ses;
+    /* Config-editor channel for this session — see the "G" handler below.
+     * A topic pair per session rather than one shared pair: Repo's EnquePerf
+     * collapses several setState performs for the same topic inside one tick,
+     * so two browsers configuring at once would silently lose a request. */
+    private Topic _cfgReqT, _cfgRspT;
+    private SubRec _cfgRspSub;
 
     protected override void OnOpen() {
       if (_wsMan == null) {
@@ -75,7 +81,18 @@ namespace X13.WebUI {
           }
         } else if (/*!_disAnonym.value || */(_ses != null /*&& !string.IsNullOrEmpty(_ses.userName)*/)) {
           if (sa[0] == "P" && sa.Length == 3) {
-            if (sa[1] != null && (sa[1].StartsWith("/export/") || sa[1].StartsWith("/Public/") || CheckAccess(sa[1]))) {
+            // /export/* used to be open to any connected client unconditionally.
+            // Matches SW/Server's asw_ws_gateway model instead, added 2026-08-08
+            // so the same web_loc/ front-end behaves identically against either
+            // backend: LAN may always write, a remote client only while
+            // /local/asw/access is 2 (Remote). /Public/* and everything else
+            // still goes through the existing per-topic CheckAccess() filter
+            // unchanged (that already covers /local/* once its "WebUI.Filter"
+            // is set — see AntSwPl.Start()).
+            bool allowed = sa[1] != null && (
+              sa[1].StartsWith("/export/") ? (IsLan() || RemoteWriteAllowed())
+              : (sa[1].StartsWith("/Public/") || CheckAccess(sa[1])));
+            if (allowed) {
               WebUI_Pl.ProcessPublish(sa[1], sa[2], _ses);
             } else {
               X13.Log.Warning("{0}.publish({1}) - access forbinden", (_ses == null || _ses.owner == null) ? "UNK" : _ses.owner.name, sa[1]);
@@ -85,15 +102,30 @@ namespace X13.WebUI {
               string p = sa[1];
               SubRec.SubMask mask = Repository.SubRec.SubMask.Value;
               Topic t;
-              int idx = p.IndexOfAny(new[] { '+', '#' });
-              if (idx < 0) {
-                mask |= SubRec.SubMask.Once;
-              } else if (idx == p.Length - 1 && p[idx - 1] == '/') {
-                mask |= p[idx] == '#' ? SubRec.SubMask.All : SubRec.SubMask.Chldren;
-                p = p.Substring(0, p.Length - 2);
+              if (p == "/local" || p.StartsWith("/local/")) {
+                // Any /local/... subscribe grants the whole /local subtree — a
+                // blanket "give me the LAN-only firehose" flag, not a per-path
+                // filter. Deliberately mirrors asw_ws_gateway (gateway_main.c's
+                // ws_client_thread), so the same web_loc/ front-end works
+                // against either backend: it asks for "/local/out/#", but the
+                // topic it actually needs is /local/asw/access. Under plain
+                // subtree subscription semantics that asks for a sibling tree
+                // (and "/local/out" doesn't even exist), so nothing was ever
+                // delivered and the UI sat at its "no data yet" state. Also
+                // means a future /local/* topic needs no change here.
+                p = "/local";
+                mask |= SubRec.SubMask.All;
               } else {
-                X13.Log.Warning("{0}.subscribe({1}) - access forbinden", (_ses == null || _ses.owner == null) ? "UNK" : _ses.owner.name, sa[1]);
-                return;
+                int idx = p.IndexOfAny(new[] { '+', '#' });
+                if (idx < 0) {
+                  mask |= SubRec.SubMask.Once;
+                } else if (idx == p.Length - 1 && p[idx - 1] == '/') {
+                  mask |= p[idx] == '#' ? SubRec.SubMask.All : SubRec.SubMask.Chldren;
+                  p = p.Substring(0, p.Length - 2);
+                } else {
+                  X13.Log.Warning("{0}.subscribe({1}) - access forbinden", (_ses == null || _ses.owner == null) ? "UNK" : _ses.owner.name, sa[1]);
+                  return;
+                }
               }
               if (Topic.root.Exist(p, out t)) {
                 _subscriptions.Add(t.Subscribe(mask, SubChanged));
@@ -103,12 +135,91 @@ namespace X13.WebUI {
             } else {
               X13.Log.Warning("{0}.subscribe({1}) - bad path", (_ses == null || _ses.owner == null) ? "UNK" : _ses.owner.name, sa[1]);
             }
+          } else if (sa[0] == "G" && sa.Length >= 2) {
+            // Config editor (web_loc/SetupRemote.html): request/response, not
+            // pub/sub. The payload is already one of the CFG* command lines
+            // asw_core's IPC listener accepts, so nothing here needs to
+            // understand node/code/data — it only checks the command name, so
+            // that this cannot become a way to poke arbitrary internal topics,
+            // and hands the line to AntSw over a per-session topic pair.
+            // LAN-only, unconditionally: same rule as everything under
+            // /local/, and SetupRemote.html is a LAN-only page to begin with.
+            string line = e.Data.Substring(2);
+            string verb = sa[1];
+            if (!IsLan()) {
+              // Silent, like every other /local-flavoured rejection.
+            } else if (verb != "CFGGET" && verb != "CFGSET") {
+              Send(string.Concat("R\t", line, "\tERR\tbad cmd"));
+            } else {
+              CfgChannel().SetState(line, _ses.owner);
+            }
           }
         }
       }
     }
 
+    /* Lazily creates this session's request topic (and starts listening on the
+     * matching response one). Both live under /$YS/, which is not /export,
+     * /Public or /local — so CheckAccess can never expose this channel to a
+     * browser however the filters are configured. */
+    private Topic CfgChannel() {
+      if (_cfgReqT == null) {
+        _cfgRspT = Topic.root.Get("/$YS/AntSw/cfg/rsp", true).Get(_ses.id, true);
+        _cfgRspT.SetState(string.Empty);
+        _cfgRspSub = _cfgRspT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, CfgAnswered);
+        _cfgReqT = Topic.root.Get("/$YS/AntSw/cfg/req", true).Get(_ses.id, true);
+      }
+      return _cfgReqT;
+    }
+
+    private void CfgAnswered(Perform p, SubRec sr) {
+      if (p.Art != Perform.E_Art.changedState) {
+        return;
+      }
+      var v = p.src.GetState();
+      if (v.ValueType != NiL.JS.Core.JSValueType.String) {
+        return;
+      }
+      var s = v.Value as string;
+      if (!string.IsNullOrEmpty(s)) {
+        Send(string.Concat("R\t", s));
+      }
+    }
+
+    // Reuses CheckAccess's own per-top-level-topic "WebUI.Filter" CIDR against
+    // "/local" specifically, rather than duplicating the CIDR-matching logic —
+    // "is this client LAN" and "is this client inside /local's configured
+    // filter" are the same question once AntSwPl.Start() sets /local's filter
+    // to the LAN CIDR. The path itself doesn't need to exist as a topic, only
+    // "/local" (the first segment) does — see CheckAccess.
+    private bool IsLan() {
+      return CheckAccess("/local/asw");
+    }
+
+    // The one access tri-state, 0=Lock / 1=Local / 2=Remote — same topic, same
+    // encoding as SW/Server's asw_state_t.access (see its state.h). Only 2
+    // lets a client outside the LAN write.
+    private bool RemoteWriteAllowed() {
+      Topic t;
+      if (!Topic.root.Exist("/local/asw/access", out t)) {
+        return false;   // fail-safe closed, e.g. if AntSw never started
+      }
+      var v = t.GetState();
+      return v.IsNumber && (int)v == 2;
+    }
+
     private bool CheckAccess(string sa) {
+      // A loopback client is always trusted, regardless of any topic's
+      // configured WebUI.Filter CIDR — added 2026-08-09 after a real test:
+      // the default lan_cidr (192.168.0.0/16) doesn't include 127.0.0.1, so
+      // testing from the same machine the host runs on (a completely normal
+      // thing to do) got rejected as "remote" every time. This matches how
+      // most people expect localhost to behave, and IsLan() (used for the
+      // /export/req write gate) shares this same bypass since it calls
+      // through CheckAccess.
+      if (_ses != null && _ses.ip != null && IPAddress.IsLoopback(_ses.ip)) {
+        return true;
+      }
       if (sa[0] != Topic.Bill.delmiter) {
         return false;
       }
@@ -155,7 +266,16 @@ namespace X13.WebUI {
     }
 
     private void SubChanged(Perform p, SubRec sr) {
-      if(p.Art==Perform.E_Art.subAck || p.Prim==_ses.owner) {
+      // Self-echo suppression (Prim == this session's own topic) is kept for
+      // the normal Enviriot UI, where an input box would otherwise fight with
+      // the value it just sent. It is deliberately NOT applied under /local/,
+      // to match asw_ws_gateway, which echoes every publish to every
+      // subscriber including the writer — web_loc relies on that: its
+      // Lock/Local/Remote tab only repaints on an incoming value, never
+      // optimistically on click, so without the echo a click appears to do
+      // nothing even though the state did change.
+      if(p.Art==Perform.E_Art.subAck
+        || (p.Prim==_ses.owner && !p.src.path.StartsWith("/local/"))) {
         return;
       }
       var vj = JsLib.Stringify(p.src.GetState());
@@ -174,6 +294,22 @@ namespace X13.WebUI {
       }
       foreach (var s in _subscriptions) {
         s.Dispose();
+      }
+      /* Drop this session's config channel — otherwise every browser that ever
+       * opened SetupRemote.html leaves a pair of topics behind for the life of the
+       * process. Unsubscribe before removing, so the removal itself cannot
+       * come back through CfgAnswered on a socket that is already closing. */
+      if (_cfgRspSub != null) {
+        _cfgRspSub.Dispose();
+        _cfgRspSub = null;
+      }
+      if (_cfgReqT != null) {
+        _cfgReqT.Remove();
+        _cfgReqT = null;
+      }
+      if (_cfgRspT != null) {
+        _cfgRspT.Remove();
+        _cfgRspT = null;
       }
     }
   }
