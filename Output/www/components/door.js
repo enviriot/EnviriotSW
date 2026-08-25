@@ -17,7 +17,7 @@ x13-door {
   min-height:12px;
   border-style: solid;
   border-width: 0px 3px;
-  border-color: #FF4040;
+  border-color: #4040FF;
 }
 x13-door>hr{
   width:95%;
@@ -30,7 +30,7 @@ x13-door.open {
   border-color: transparent;
 }
 x13-door.open>hr{
-  background-color:#40FF40;
+  background-color:#808080;
   }
 `;
 X13_Door.bindAttributes({ value: "value"});

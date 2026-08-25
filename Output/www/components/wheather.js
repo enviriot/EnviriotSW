@@ -58,10 +58,12 @@ class X13_wheather extends BaseComponent {
     this.ref.wh_dt.innerText = (new Date()).format("dddd dd.MMM.yy HH:mm");
   }
   forecastChanged(data) {
-    if (data && Array.isArray(data) && data.length>0) {
+    if (data && Array.isArray(data) && data.length > 0) {
+      let dt_min = (new Date()).getTime();
       for (let i = 0; i < data.length; i++) {
-        let dt1 = new Date(data[i].dt);
-        data[i].dt = new Date(dt1.getTime() - 24 * 60 * 60 * 1000);
+        let dt1 = new Date(data[i].dt).getTime();
+        if (dt1 < dt_min) dt_min = dt1;
+        data[i].dt = new Date(dt1 - 24 * 60 * 60 * 1000);
         this.addData(data[i].dt, 3, data[i].t);
         if (!this.icons[data[i].i]) {
           let img = new Image();
@@ -70,7 +72,9 @@ class X13_wheather extends BaseComponent {
           img.src = '/img/' + data[i].i + '.png';
         }
       }
-      this.g.updateOptions({ 'file': this.data });
+      dt_min = new Date(dt_min);
+      dt_min = new Date(dt_min.getFullYear(), dt_min.getMonth(), dt_min.getDate(), dt_min.getHours(), -30, 0).getTime();
+      this.g.updateOptions({ 'file': this.data, dateWindow: [dt_min - 24 * 60 * 60 * 1000, dt_min] });
     }
   }
   imgLoaded() {
@@ -87,28 +91,18 @@ class X13_wheather extends BaseComponent {
     this.timer = setTimeout(this.reqArchive.bind(this), 3600000 - ((now.getMinutes() * 60 + now.getSeconds()) * 1000 + now.getMilliseconds()));
     now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0);
     let req = "/api/arch04?p=" + encodeURIComponent(JSON.stringify(this.t_path))
-      + "&b=" + encodeURIComponent(JSON.stringify(new Date(now.getTime() - 48 * 60 * 60 * 1000)))
+      + "&b=" + encodeURIComponent(JSON.stringify(new Date(now.getTime() - 49 * 60 * 60 * 1000)))
       + "&e=" + encodeURIComponent(JSON.stringify(now))
-      + "&c=48";
+      + "&c=49";
     fetch(req).then(t => t.json()).then(j => this.responseData(j)).catch(e => console.error(e));
   }
   responseData(arr) {
     if (arr.length == 0) {
       return;
     }
-    let opt = {};
     let i;
     let now = new Date();
     now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0).getTime();
-
-    if (this.data.length > 1) {
-      for (i = this.data.length - 1; i >= 0; i--) {
-        if (this.data[i][1]) {
-          opt.dateWindow = [now - 24 * 60 * 60 * 1000, now];
-          break;
-        }
-      }
-    }
 
     for (i in arr) {
       let v = arr[i][1];
@@ -116,14 +110,13 @@ class X13_wheather extends BaseComponent {
       this.addData(new Date(dt + 24 * 60 * 60 * 1000), 1, v);
       this.addData(new Date(dt), 2, v);
     }
-    opt['file'] = this.data;
 
-    this.g.updateOptions(opt);
+    this.g.updateOptions({ 'file': this.data });
   }
   addData(dt, idx, value) {
     let i;
     let now = new Date();
-    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0);
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()-1, 0, 0);
     let rangeMin = now.getTime() - 24 * 60 * 60 * 1000;
     while (this.data.length>0 && this.data[0][0].getTime() < rangeMin) {
       this.data.shift();

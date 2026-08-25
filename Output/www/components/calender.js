@@ -121,7 +121,7 @@ class X13_calender extends BaseComponent {
           if (cur.getMonth() & 1) {
             cl += " odd";
           }
-          if (Math.abs(today - cur.getTime()) < 3601000) {  // sommertime
+          if (Math.abs(today - cur.getTime()) < 3601000) {
             cl += " today";
             isToday = true;
           }
@@ -145,6 +145,14 @@ class X13_calender extends BaseComponent {
     }
     this.$.dayList = lst;
     events.sort((a, b) => a.start.getTime() - b.start.getTime());
+    i = 0;
+    while(events.length > 8 && i < events.length){
+      if(events[i].start<today && (!events[i].end || events[i].end<today)){
+        events.splice(i, 1);
+      } else {
+        i++;
+      }
+    }
     this.$.events = events;
   }
   checkEvent(evnt, dt) {
