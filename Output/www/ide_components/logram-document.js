@@ -4,12 +4,16 @@ import './context-menu.js';
 const CELL = 16;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 5;
-// Canvas has no server-side size (LogramGraphController doesn't send one, see
-// #canvasSize) - it's the elements' own bounding box plus this much empty cell
-// space around it, so there's always room to drop a new block or pan a bit
-// without the surface's edge (and its SVG clip) being right against content.
-const CANVAS_MARGIN_CELLS = 3;
+// Half a cell of white beyond the content on every side (#canvasSize). The SVG viewport
+// clips at the canvas edge, so without it a wire routed along the topmost row - or an
+// element's own border - draws with half its stroke outside and comes out visibly thinner
+// than the same line one cell further in.
+const CANVAS_PAD = CELL / 2;
 const MIN_CANVAS_CELLS = { w: 20, h: 14 };
+// Where the view comes to rest (#resetPan): the canvas's top-left corner sits this far in
+// from the panel's own corner. A pan offset and nothing more - the canvas itself carries no
+// margin, it is sized to its content.
+const VIEW_MARGIN_CELLS = 3;
 // How far a wire's drawn line stops short of a corner before curving through it (see
 // #wirePathD, which clamps it to half of the shorter adjacent run so adjacent curves can
 // never overlap). At half a CELL the clamp binds on every single-cell run, so a tight
@@ -82,19 +86,13 @@ export class X13LogramDocument extends LitElement {
     super();
     this.rows = [];
     this.scale = 2.5;
-    this.tx = 0;
-    this.ty = 0;
+    this.#resetPan();
     this.selected = null;
     this.dragState = null;
     this.wireDraft = null;
     this.marquee = null;
     this.menuState = null;
     this.unsubscribe = null;
-    // Set whenever a new document's rows haven't started arriving yet (see
-    // #subscribeStore) - checked on every update() until the LogramCanvas row
-    // actually arrives (#tryCenterView), so centering happens exactly once per
-    // opened document, whichever render that data lands on.
-    this.pendingCenter = false;
     this.onKeyDown = (e) => this.#handleKeyDown(e);
   }
 
@@ -105,7 +103,6 @@ export class X13LogramDocument extends LitElement {
 
   updated(changed) {
     if(changed.has('store')) this.#subscribeStore();
-    if(this.pendingCenter) this.#tryCenterView();
   }
 
   disconnectedCallback() {
@@ -129,13 +126,18 @@ export class X13LogramDocument extends LitElement {
       const { vids, dx, dy } = this.dragState;
       elements = elements.map((el) => vids.has(el.vid) ? { ...el, x: (el.x || 0) + dx, y: (el.y || 0) + dy } : el);
     }
-    const { width, height } = this.#canvasSize(elements);
+    const { x: boxX, y: boxY, width, height } = this.#canvasSize(elements);
     const { pinsByParent, rowsByVid } = this.#sceneRows();
 
     return html`
       <div class="viewport" @pointerdown=${this.#onSurfacePointerDown} @wheel=${this.#onWheel} @contextmenu=${this.#onSurfaceContextMenu}
         @dragover=${this.#onSurfaceDragOver} @drop=${this.#onSurfaceDrop}>
-        <svg class="surface" width=${width} height=${height}
+        <!-- The viewBox origin is negative by CANVAS_PAD, and that is the whole of how the
+             white field gets its half-cell on the top and left: content keeps drawing at its
+             own cell coordinates and nothing inside has to know. Width/height match the
+             viewBox, so the SVG's own scale stays 1 and .surface's CSS transform is still the
+             only zoom in play. -->
+        <svg class="surface" width=${width} height=${height} viewBox="${boxX} ${boxY} ${width} ${height}"
           style="transform:translate(${this.tx}px,${this.ty}px) scale(${this.scale})">
           <defs>
             <!-- x/y=-8 shifts where each tile repeat lands, without moving the mark
@@ -148,8 +150,8 @@ export class X13LogramDocument extends LitElement {
               <path d="M 6.5 8 h 3 M 8 6.5 v 3" stroke="#dde2e8" stroke-opacity="0.6" stroke-width="1"></path>
             </pattern>
           </defs>
-          <rect class="grid-bg" x="0" y="0" width=${width} height=${height}></rect>
-          <rect class="grid-dots" x="0" y="0" width=${width} height=${height} fill="url(#grid-cross)"></rect>
+          <rect class="grid-bg" x=${boxX} y=${boxY} width=${width} height=${height}></rect>
+          <rect class="grid-dots" x=${boxX} y=${boxY} width=${width} height=${height} fill="url(#grid-cross)"></rect>
           ${elements.map((el) => this.#renderElement(el, pinsByParent.get(el.vid) || [], rowsByVid))}
           ${this.wireDraft ? svg`<line class="wire-draft" x1=${this.wireDraft.originX} y1=${this.wireDraft.originY} x2=${this.wireDraft.x} y2=${this.wireDraft.y}></line>` : svg``}
           ${this.marquee ? svg`<rect class="marquee" x=${this.marquee.x0} y=${this.marquee.y0} width=${this.marquee.x1 - this.marquee.x0} height=${this.marquee.y1 - this.marquee.y0}></rect>` : svg``}
@@ -165,12 +167,16 @@ export class X13LogramDocument extends LitElement {
           @menu-command=${this.#onMenuCommand} @menu-close=${this.#closeMenu}></x13-context-menu>` : html``}`;
   }
 
-  // Bounding box of the given elements (x/y/width/height all in grid cells, same
-  // units render() uses to draw them - see #renderBlock's comment on why they stay
-  // in cells), plus CANVAS_MARGIN_CELLS of empty space and floored at
-  // MIN_CANVAS_CELLS so a new/empty diagram isn't a sliver. No extra `+ 1` needed on
-  // the right any more - a block's width already reaches its output pins (baked into
-  // WidthCells server-side, see LogramGraphController.BuildLayout).
+  // The box the surface draws: the elements' own bounding box (x/y/width/height all in grid
+  // cells, same units render() uses to draw them - see #renderBlock's comment on why they
+  // stay in cells), floored at MIN_CANVAS_CELLS so a new/empty diagram isn't a sliver, plus
+  // CANVAS_PAD of white on every side. No `+ 1` on the right - a block's width already
+  // reaches its output pins (baked into WidthCells server-side, see
+  // LogramGraphController.BuildLayout) - and no spare margin beyond the pad either: this
+  // runs on every render, mid-drag included (see render()), so the canvas simply follows a
+  // block dragged or dropped past its current edge instead of keeping room in reserve for
+  // one. The server bounds its wire search by the same box (LogramGraphController.ResolveWires)
+  // - a route outside it would be clipped by the SVG viewport rather than drawn.
   #canvasSize(elements) {
     let rightCells = 0, bottomCells = 0;
     for(const el of elements) {
@@ -179,9 +185,9 @@ export class X13LogramDocument extends LitElement {
       rightCells = Math.max(rightCells, (el.x || 0) + w);
       bottomCells = Math.max(bottomCells, (el.y || 0) + h);
     }
-    const widthCells = Math.max(MIN_CANVAS_CELLS.w, rightCells + CANVAS_MARGIN_CELLS);
-    const heightCells = Math.max(MIN_CANVAS_CELLS.h, bottomCells + CANVAS_MARGIN_CELLS);
-    return { width: widthCells * CELL, height: heightCells * CELL };
+    const widthCells = Math.max(MIN_CANVAS_CELLS.w, rightCells);
+    const heightCells = Math.max(MIN_CANVAS_CELLS.h, bottomCells);
+    return { x: -CANVAS_PAD, y: -CANVAS_PAD, width: widthCells * CELL + 2 * CANVAS_PAD, height: heightCells * CELL + 2 * CANVAS_PAD };
   }
 
   #renderElement(el, pins, rowsByVid) {
@@ -345,33 +351,23 @@ export class X13LogramDocument extends LitElement {
     this.unsubscribe = null;
     this.rows = [];
     this.scale = 1;
-    this.tx = 0;
-    this.ty = 0;
-    this.pendingCenter = true;
+    this.#resetPan();
     if(!this.store) return;
     this.unsubscribe = this.store.subscribe((rows) => {
       this.rows = rows;
     });
   }
 
-  // Runs on every update() while pendingCenter is set (see constructor) - a no-op
-  // until the LogramCanvas row actually arrives from the server (SendSnapshot
-  // always sends it first, ahead of any element/pin rows - see
-  // LogramGraphController.SendSnapshot), so this fires on the very first render
-  // that has anything at all to center against, rather than the still-empty one.
-  #tryCenterView() {
-    const canvasRow = this.rows.find((row) => row.editor === 'LogramCanvas');
-    if(!canvasRow) return;
-    this.pendingCenter = false;
-    const elements = this.rows.filter((row) => row.editor === 'LogramBlock' || row.editor === 'LogramVariable');
-    const { width, height } = this.#canvasSize(elements);
-    this.#centerView(width, height);
-  }
-
-  #centerView(width, height) {
-    const rect = this.renderRoot.querySelector('.viewport')?.getBoundingClientRect();
-    this.tx = rect ? (rect.width - width * this.scale) / 2 : 0;
-    this.ty = rect ? (rect.height - height * this.scale) / 2 : 0;
+  // The view's resting position: the canvas's top-left corner, VIEW_MARGIN_CELLS in from
+  // the panel's own corner. Deliberately a corner and not the middle: the canvas has no
+  // server-side size, it's derived from the element rows - and those arrive *after* the
+  // LogramCanvas row that used to trigger centering, so "the middle" was computed against
+  // a still-empty MIN_CANVAS_CELLS canvas and put every diagram down and to the right, with
+  // no second attempt once the real rows landed. A corner needs no size at all, so nothing
+  // here has to wait for data.
+  #resetPan() {
+    this.tx = VIEW_MARGIN_CELLS * CELL;
+    this.ty = VIEW_MARGIN_CELLS * CELL;
   }
 
   #openInInspector(vid) {
@@ -422,10 +418,14 @@ export class X13LogramDocument extends LitElement {
     window.addEventListener('pointerup', up, { once: true });
   }
 
+  // Client px -> content coordinates (cell coordinates * CELL - what element rows and wire
+  // waypoints are drawn in). The surface's box starts CANVAS_PAD outside the content, where
+  // its viewBox origin sits (see #canvasSize), so that pad comes back off here once instead
+  // of at each of the call sites downstream.
   #toSvgPoint(clientX, clientY) {
     const rect = this.renderRoot.querySelector('.surface').getBoundingClientRect();
     const scale = this.scale || 1;
-    return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
+    return { x: (clientX - rect.left) / scale - CANVAS_PAD, y: (clientY - rect.top) / scale - CANVAS_PAD };
   }
 
   #pinAtPoint(clientX, clientY) {
@@ -770,7 +770,12 @@ export class X13LogramDocument extends LitElement {
       for(const vid of vids) {
         const row = this.rows.find((r) => r.vid === vid);
         if(!row) continue;
-        this.api.commit(vid, { top: (row.y || 0) + roundDy, left: (row.x || 0) + roundDx }).catch((error) => console.warn('logram req.commit failed', vid, error));
+        // Clamped like both drop handlers above: a drag past the top/left edge would otherwise
+        // store a negative coordinate, which puts the element outside the canvas the server
+        // routes inside (LogramGraphController.IsBlocked) and aliases its routing-grid cells.
+        const top = Math.max(0, (row.y || 0) + roundDy);
+        const left = Math.max(0, (row.x || 0) + roundDx);
+        this.api.commit(vid, { top, left }).catch((error) => console.warn('logram req.commit failed', vid, error));
       }
     };
     window.addEventListener('pointermove', move);
@@ -842,16 +847,18 @@ export class X13LogramDocument extends LitElement {
       anchorY = rect ? rect.top + rect.height / 2 : 0;
     }
     const p = this.#toSvgPoint(anchorX, anchorY);
-    this.tx -= p.x * (newScale - this.scale);
-    this.ty -= p.y * (newScale - this.scale);
+    // #toSvgPoint answers in content coordinates, but the anchor has to be measured from
+    // the surface box's own corner - and the viewBox puts that CANVAS_PAD outside the
+    // content, so the pad goes back on here. Without it every tick would drift by
+    // CANVAS_PAD * (newScale - scale) px, which is the very thing this method exists to avoid.
+    this.tx -= (p.x + CANVAS_PAD) * (newScale - this.scale);
+    this.ty -= (p.y + CANVAS_PAD) * (newScale - this.scale);
     this.scale = newScale;
   }
 
   #resetView() {
     this.scale = 1;
-    const elements = this.rows.filter((row) => row.editor === 'LogramBlock' || row.editor === 'LogramVariable');
-    const { width, height } = this.#canvasSize(elements);
-    this.#centerView(width, height);
+    this.#resetPan();
   }
 }
 

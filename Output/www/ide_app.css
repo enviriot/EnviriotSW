@@ -17,5 +17,5 @@ body {
 }
 x13-app-shell {
   display: block;
-  min-height: 100vh;
+  height: 100vh;
 }

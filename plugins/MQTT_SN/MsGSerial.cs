@@ -30,6 +30,9 @@ namespace X13.Periphery {
       _pl = pl;
       ThreadPool.RegisterWaitForSingleObject(_startScan, ScanSerialPorts, null, 289012, false);
       _portsTopic = Topic.root.Get("/$YS/MQTT-SN/ports");
+      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+      // from "set to the default", so the topic would never be created.
       if(!_portsTopic.CheckAttribute(Topic.Attribute.Required) || _portsTopic.GetState().ValueType!=JSC.JSValueType.Boolean) {
         var act = new JSL.Array(1);
         var r_a = JSC.JSObject.CreateObject();
@@ -55,7 +58,7 @@ namespace X13.Periphery {
     }
 
     private static void ScanSerialPorts(object o, bool intervalScan) {
-      if(_portsTopic.GetState().ValueType==JSC.JSValueType.Boolean && (bool)_portsTopic.GetState()) {
+      if(_portsTopic.GetState().AsBool(false)) {
         Interlocked.CompareExchange(ref _scanBusy, 1, 0);  // turn on scan
       } else {
         Interlocked.CompareExchange(ref _scanBusy, 0, 1);  // turn off scan
@@ -65,7 +68,7 @@ namespace X13.Periphery {
       }
       SerialPort port = null;
 
-      if(!intervalScan || !_pl._devs.Any() || _pl._devs.Where(z => z.state == State.Lost || z.state == State.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").Value as string).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
+      if(!intervalScan || !_pl._devs.Any() || _pl._devs.Where(z => z.state == State.Lost || z.state == State.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").AsString(null)).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
         var pns = SerialPort.GetPortNames().Where(z => !z.StartsWith("/dev/tty") || z.StartsWith("/dev/ttyS") || z.StartsWith("/dev/ttyUSB") || z.StartsWith("/dev/ttyA")).ToArray();
         for(int i = 0; i < pns.Length; i++) {
           if(_pl._gates.Exists(z => z.name == pns[i])) {
@@ -78,6 +81,9 @@ namespace X13.Periphery {
               pn = pn.Substring(si+1);
             }
             var portT = _portsTopic.Get(pn, true, _portsTopic);
+            // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+            // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+            // from "set to the default", so the topic would never be created.
             if(portT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
               portT.SetAttribute(Topic.Attribute.Config);
               portT.SetState(true, _portsTopic);
@@ -110,7 +116,7 @@ namespace X13.Periphery {
           }
           port = null;
         }
-        foreach(var t in _portsTopic.children.Where(z=>z.name != "ScanAll" && (z.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean || (bool)z.GetState()) && pns.All(z1 => !z1.EndsWith(z.name)))) {
+        foreach(var t in _portsTopic.children.Where(z=>z.name != "ScanAll" && z.GetState().AsBool(true) && pns.All(z1 => !z1.EndsWith(z.name)))) {
           t.Remove(_portsTopic);
         }
       }

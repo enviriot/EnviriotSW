@@ -33,6 +33,9 @@ namespace X13.MQTT {
     public void Start() {
       _owner = Topic.root.Get("/$YS/MQTT");
       var verboseT = _owner.Get("verbose");
+      // Deliberately a raw ValueType test, NOT AsBool: this decides whether the config topic has
+      // to be CREATED and seeded. A reader with a default cannot tell "not set yet" from "set to
+      // the default", so the topic would never be created.
       if(verboseT.GetState().ValueType != JSC.JSValueType.Boolean) {
         verboseT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
 //#if DEBUG
@@ -41,6 +44,9 @@ namespace X13.MQTT {
         verboseT.SetState(false);
 //#endif
       }
+      // Deliberately As<bool>() and not AsBool(false): this reads JS truthiness, so a verbose flag
+      // set to 1 or to a non-empty string still turns tracing on. AsBool is strict and would
+      // silently ignore those.
       _verboserSR = verboseT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, (p, s) => verbose = (_verboserSR.setTopic != null && _verboserSR.setTopic.GetState().As<bool>()));
       _subMq = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "MQTT.uri", SubFunc);
     }
@@ -59,6 +65,9 @@ namespace X13.MQTT {
     public bool enabled {
       get {
         var en = Topic.root.Get("/$YS/MQTT", true);
+        // Deliberately a raw ValueType test, NOT AsBool: this decides whether the config topic has
+        // to be CREATED and seeded. A reader with a default cannot tell "not set yet" from "set to
+        // the default", so the topic would never be created.
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -78,7 +87,8 @@ namespace X13.MQTT {
     #region RPC
     private void ReconnectRpc(JSC.JSValue[] obj) {
       string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+      // AsString folds the null and type checks in; only the arity test is left beside it.
+      if(obj == null || obj.Length != 1 || string.IsNullOrEmpty(path = obj[0].AsString(null))) {
         return;
       }
       var s = _sites.FirstOrDefault(z => z.Owner.path==path);
@@ -101,7 +111,7 @@ namespace X13.MQTT {
         _sites.Remove(ms);
       }
       if(p.Art == Perform.E_Art.changedField || p.Art==Perform.E_Art.subscribe) {
-        var uri = p.src.GetField("MQTT.uri").Value as string;
+        string uri = p.src.GetField("MQTT.uri").AsString(null);
         if(string.IsNullOrEmpty(uri)) {
           return;
         }

@@ -47,6 +47,9 @@ namespace X13.Periphery {
     public void Start() {
       _owner = Topic.root.Get("/$YS/MQTT-SN");
       var verboseT = _owner.Get("verbose");
+      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+      // from "set to the default", so the topic would never be created.
       if(verboseT.GetState().ValueType != JSC.JSValueType.Boolean) {
         verboseT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
 #if DEBUG
@@ -55,8 +58,14 @@ namespace X13.Periphery {
         verboseT.SetState(false);
 #endif
       }
+      // Deliberately As<bool>() and not AsBool(false): this reads JS truthiness, so a verbose flag
+      // set to 1 or to a non-empty string still turns tracing on. AsBool is strict and would
+      // silently ignore those.
       _verboserSR = verboseT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, (p, s) => verbose = (_verboserSR.setTopic != null && _verboserSR.setTopic.GetState().As<bool>()));
       _stat = _owner.Get("statistic");
+      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+      // from "set to the default", so the topic would never be created.
       if(_stat.GetState().ValueType != JSC.JSValueType.Boolean) {
         _stat.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         _stat.SetState(false);
@@ -88,6 +97,9 @@ namespace X13.Periphery {
     public bool enabled {
       get {
         var en = Topic.root.Get("/$YS/MQTT-SN", true);
+        // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+        // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+        // from "set to the default", so the topic would never be created.
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);
@@ -110,9 +122,16 @@ namespace X13.Periphery {
       }
     }
     #region RPC
+    /// <summary>Every RPC below takes exactly one argument: the path of the topic to act on.</summary>
+    /// <remarks>The guard was written out five times, byte for byte. AsString folds four of the
+    /// original five conditions into itself - it returns the default both for a null element and
+    /// for anything that is not a string - so only the arity check is left beside it.</remarks>
+    private static bool TrySinglePath(JSC.JSValue[] args, out string path) {
+      path = args != null && args.Length == 1 ? args[0].AsString(null) : null;
+      return !string.IsNullOrEmpty(path);
+    }
     private void SendDisconnectRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+      if(!TrySinglePath(obj, out string path)) {
         return;
       }
       var d = _devs.FirstOrDefault(z => z.owner.path == path);
@@ -122,8 +141,7 @@ namespace X13.Periphery {
       }
     }
     private void PlcBuildRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+      if(!TrySinglePath(obj, out string path)) {
         return;
       }
       var d = _plcs.FirstOrDefault(z => z.Path == path);
@@ -132,8 +150,7 @@ namespace X13.Periphery {
       }
     }
     private void PlcStartRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+      if(!TrySinglePath(obj, out string path)) {
         return;
       }
       var d = _plcs.FirstOrDefault(z => z.Path == path);
@@ -142,8 +159,7 @@ namespace X13.Periphery {
       }
     }
     private void PlcStopRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+      if(!TrySinglePath(obj, out string path)) {
         return;
       }
       var d = _plcs.FirstOrDefault(z => z.Path == path);
@@ -152,8 +168,7 @@ namespace X13.Periphery {
       }
     }
     private void PlcRunRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
+      if(!TrySinglePath(obj, out string path)) {
         return;
       }
       var plc = _plcs.FirstOrDefault(z => z.Path == path);

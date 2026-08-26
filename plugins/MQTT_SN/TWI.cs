@@ -1,4 +1,5 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using NiL.JS.Extensions;
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -24,6 +25,9 @@ namespace X13.Periphery {
       this._pub = pub;
       this._devs = new List<TwiDevice>();
       this._reqs = new Queue<TwiPack>();
+      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+      // from "set to the default", so the topic would never be created.
       this._verbose = Topic.root.Get("/$YS/TWI/verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
@@ -136,9 +140,7 @@ namespace X13.Periphery {
         _devs.Remove(d);
         d.Dispose();
       }
-      JSC.JSValue jType;
-      if((p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedField || p.Art == Perform.E_Art.subscribe) && (jType = p.src.GetField("type")).ValueType == JSC.JSValueType.String
-        && jType.Value != null && (jType.Value as string).StartsWith("TWI")) {
+      if((p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedField || p.Art == Perform.E_Art.subscribe) && p.src.GetField("type").AsString(string.Empty).StartsWith("TWI")) {
         _devs.Add(new TwiDevice(p.src, this));
       }
     }
@@ -182,8 +184,9 @@ namespace X13.Periphery {
         this._twi = twi;
         JSC.JSValue jSrc;
         var jType = owner.GetField("type");
-        if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out var tt)
-          && (jSrc = JsLib.GetField(tt.GetState(), "src")).ValueType == JSC.JSValueType.String) {
+        var types = Topic.root.Get("$YS/TYPES", false);  // null until PersistentStorage seeds it, and always null when that plugin is off
+        if(types != null && jType.AsString(null) is string tp && types.Exist(tp, out var tt)
+          && (jSrc = tt.GetState().Field("src")).Is<string>()) {
         } else {
           jSrc = null;
         }
@@ -194,7 +197,7 @@ namespace X13.Periphery {
             _ctx.DefineVariable("setInterval").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
             _ctx.DefineVariable("setAlarm").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
 
-            if(_ctx.Eval(jSrc.Value as string) is JSL.Function f) {
+            if(_ctx.Eval(jSrc.AsString(string.Empty)) is JSL.Function f) {
               f.prototype["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));
               f.prototype["SetState"] = X13.JsExtLib.Context.ProxyValue(new Action<string, JSC.JSValue>(SetState));
               f.prototype["GetField"] = X13.JsExtLib.Context.ProxyValue(new Func<string, string, JSC.JSValue>(GetField));

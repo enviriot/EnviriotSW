@@ -50,7 +50,47 @@ namespace X13 {
       _kickEv.Set();
     }
     public static void AddEntry(LogLevel ll, DateTime dt, string msg) {
-      Write?.Invoke(ll, dt, msg, false);
+      Publish(ll, dt, msg, false);
+    }
+
+    /// <summary>Invokes each Write subscriber in isolation.</summary>
+    /// <remarks>Subscribers write to sockets they do not own the lifetime of - a WebUI session
+    /// (WebUI/Host/LogHandler.cs) and an EsBroker connection (EsBroker/EsConnection.cs) both push
+    /// straight to a client that may already be gone, and neither guards the call. A plain
+    /// multicast invoke made that two separate failures: the exception escaped Process before it
+    /// could restore _busy, killing console/file/history logging for the rest of the process
+    /// lifetime (and, with no legacyUnhandledExceptionPolicy, taking the process down from a
+    /// ThreadPool callback), and it also stopped delivery to every subscriber further down the
+    /// invocation list - one dead session starved LiteDB history and all the other sessions.
+    /// Nothing in here may route back through Log.*: that re-enters this very queue.</remarks>
+    private static void Publish(LogLevel ll, DateTime dt, string msg, bool live) {
+      Action<LogLevel, DateTime, string, bool> handlers = Write;
+      if (handlers == null) {
+        return;
+      }
+      foreach (Delegate handler in handlers.GetInvocationList()) {
+        try {
+          ((Action<LogLevel, DateTime, string, bool>)handler)(ll, dt, msg, live);
+        }
+        catch (Exception ex) {
+          ReportDirect("Log subscriber failed - " + ex.ToString());
+        }
+      }
+    }
+
+    // Bypasses the queue on purpose - see Publish.
+    private static void ReportDirect(string text) {
+      try {
+        if (_useDiagnostic) {
+          System.Diagnostics.Debug.WriteLine(text);
+        }
+        if (_useConsole) {
+          Console.ForegroundColor = ConsoleColor.Red;
+          Console.WriteLine(text);
+        }
+      }
+      catch (Exception) {
+      }
     }
     public static event Action<LogLevel, DateTime, string, bool> Write;
     public static Func<DateTime, int, IEnumerable<Log.LogRecord>> History;
@@ -67,73 +107,88 @@ namespace X13 {
       }
       LogRecord r;
       string msg;
-      while (_records.TryDequeue(out r)) {
-        try {
-          msg = string.Format(r.format, r.args);
-        }
-        catch (Exception) {
-          r.ll = LogLevel.Error;
-          msg = "Bad format: " + r.format;
-        }
-
-        Write?.Invoke(r.ll, r.dt, msg, true);
-        string msgA;
-        ConsoleColor cc;
-        switch (r.ll) {
-        case LogLevel.Info:
-          cc = ConsoleColor.White;
-          msgA = r.dt.ToString("HH:mm:ss.ff") + "[I] " + msg;
-          break;
-        case LogLevel.Warning:
-          cc = ConsoleColor.Yellow;
-          msgA = r.dt.ToString("HH:mm:ss.ff") + "[W] " + msg;
-          break;
-        case LogLevel.Error:
-          cc = ConsoleColor.Red;
-          msgA = r.dt.ToString("HH:mm:ss.ff") + "[E] " + msg;
-          break;
-        default:
-          msgA = r.dt.ToString("HH:mm:ss.ff") + "[D] " + msg;
-          cc = ConsoleColor.Gray;
-          break;
-        }
-        if (_useDiagnostic) {
-          System.Diagnostics.Debug.WriteLine(msgA);
-        }
-        if (_useConsole) {
-          Console.ForegroundColor = cc;
-          Console.WriteLine(msgA);
-        }
-        if (useFile) {
-          if (_lfPath == null || _firstDT != r.dt.Date) {
-            _firstDT = r.dt.Date;
-            try {
-              string m1 = string.Format(_lfMask, "*");
-              foreach (string f in Directory.GetFiles(Path.GetDirectoryName(m1), Path.GetFileName(m1), SearchOption.TopDirectoryOnly)) {
-                if (File.GetLastWriteTime(f).AddDays(20) < _firstDT)
-                  File.Delete(f);
-              }
-            }
-            catch (System.IO.IOException) {
-            }
-            _lfPath = string.Format(_lfMask, _firstDT.ToString("yyMMdd"));
+      FileStream fs = null;
+      try {
+        while (_records.TryDequeue(out r)) {
+          try {
+            msg = string.Format(r.format, r.args);
           }
-          for (int i = 2; i >= 0; i--) {
-            try {
-              using (FileStream fs = File.Open(_lfPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite)) {
-                fs.Seek(0, SeekOrigin.End);
-                byte[] ba = Encoding.UTF8.GetBytes(msgA + "\r\n");
-                fs.Write(ba, 0, ba.Length);
+          catch (Exception) {
+            r.ll = LogLevel.Error;
+            msg = "Bad format: " + r.format;
+          }
+
+          Publish(r.ll, r.dt, msg, true);
+          string msgA;
+          ConsoleColor cc;
+          switch (r.ll) {
+          case LogLevel.Info:
+            cc = ConsoleColor.White;
+            msgA = r.dt.ToString("HH:mm:ss.ff") + "[I] " + msg;
+            break;
+          case LogLevel.Warning:
+            cc = ConsoleColor.Yellow;
+            msgA = r.dt.ToString("HH:mm:ss.ff") + "[W] " + msg;
+            break;
+          case LogLevel.Error:
+            cc = ConsoleColor.Red;
+            msgA = r.dt.ToString("HH:mm:ss.ff") + "[E] " + msg;
+            break;
+          default:
+            msgA = r.dt.ToString("HH:mm:ss.ff") + "[D] " + msg;
+            cc = ConsoleColor.Gray;
+            break;
+          }
+          if (_useDiagnostic) {
+            System.Diagnostics.Debug.WriteLine(msgA);
+          }
+          if (_useConsole) {
+            Console.ForegroundColor = cc;
+            Console.WriteLine(msgA);
+          }
+          if (useFile) {
+            if (_lfPath == null || _firstDT != r.dt.Date) {
+              _firstDT = r.dt.Date;
+              try {
+                string m1 = string.Format(_lfMask, "*");
+                foreach (string f in Directory.GetFiles(Path.GetDirectoryName(m1), Path.GetFileName(m1), SearchOption.TopDirectoryOnly)) {
+                  if (File.GetLastWriteTime(f).AddDays(20) < _firstDT)
+                    File.Delete(f);
+                }
               }
-              break;
+              catch (System.IO.IOException) {
+              }
+              _lfPath = string.Format(_lfMask, _firstDT.ToString("yyMMdd"));
+              // date rolled over (or first write of this batch): the open handle, if any, points at the wrong file
+              fs?.Dispose();
+              fs = null;
             }
-            catch (System.IO.IOException) {
-              Thread.Sleep(15);
+            byte[] ba = Encoding.UTF8.GetBytes(msgA + "\r\n");
+            for (int i = 2; i >= 0; i--) {
+              try {
+                if (fs == null) {
+                  fs = File.Open(_lfPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
+                  fs.Seek(0, SeekOrigin.End);
+                }
+                fs.Write(ba, 0, ba.Length);
+                break;
+              }
+              catch (System.IO.IOException) {
+                fs?.Dispose();
+                fs = null;
+                Thread.Sleep(15);
+              }
             }
           }
         }
       }
-      _busy = 1;
+      finally {
+        // batch complete (or Process re-entered on the next signal): don't hold the handle across ThreadPool callbacks
+        fs?.Dispose();
+        // Inside the finally, not after it: anything escaping the loop would otherwise leave
+        // _busy at 2 and every later Process call would bail at the CompareExchange above.
+        _busy = 1;
+      }
     }
     public class LogRecord {
       public LogLevel ll;

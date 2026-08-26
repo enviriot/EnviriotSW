@@ -41,6 +41,9 @@ namespace X13.Logram {
     public void Start() {
       _owner = Topic.root.Get("/$YS/Logram");
       _verbose = _owner.Get("verbose");
+      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet" from
+      // "set to the default", so the topic would never be created. See todo.md.
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
 #if DEBUG
@@ -87,6 +90,9 @@ namespace X13.Logram {
     public bool enabled {
       get {
         var en = Topic.root.Get("/$YS/Logram", true);
+        // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+        // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet" from
+        // "set to the default", so the topic would never be created. See todo.md.
         if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
           en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           en.SetState(true);

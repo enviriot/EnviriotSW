@@ -1,0 +1,190 @@
+﻿import { BaseComponent, Data } from '../lib/symbiote.js';
+import '../lib/dygraph.min.js';
+
+class X13_wheather extends BaseComponent {
+  constructor() {
+    super();
+    this.t_path = [this.dataset.temperature];
+    this.data = [];
+    this.icons = {};
+    this.timer = null;
+  }
+  init$ = {
+    forecast: {},
+    temperature: 0,
+  }
+  initCallback() {
+    let now = new Date();
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0).getTime();
+    let opt = {
+      width: this.clientWidth*0.98,
+      height: this.clientHeight - 20,
+      dateWindow: [now - 24 * 60 * 60 * 1000, now],
+      connectSeparatedPoints: true,
+      legend: 'always',
+      labels: ["time", "history", "current", "forecast"],
+      labelsDiv: this.ref.wh_le,
+      labelsSeparateLines: false,
+      ylabel: '°C',
+      series: {
+        history: { fillGraph: true, fillAlpha:0.05, }
+      },
+      colors: ['rgba(127,206,241,0.5)', '#009BDC', '#C080FF'],
+      underlayCallback: this.underlayCB.bind(this),
+      interactionModel: {
+        dblclick: dblClickV3,
+      },
+    };
+    this.g = new Dygraph(this.ref.wh_gr, [[new Date(), 0, 0, 0]], opt);
+    this.sub('temperature', this.tempChanged.bind(this));
+    this.sub('forecast', this.forecastChanged.bind(this));
+    window.addEventListener('resize', this.resized.bind(this), true);
+    this.timer = setTimeout(this.reqArchive.bind(this), 30);
+    this.minuteTick = setInterval(this.drawDate.bind(this), 60000);
+    this.drawDate();
+  }
+  disconnectedCallback() {
+    clearInterval(this.minuteTick);
+    clearTimeout(this.timer);
+    this.g.destroy();
+  }
+  resized() {
+    this.g.resize(this.clientWidth*0.98, this.clientHeight - 20);
+  }
+  tempChanged(val) {
+    this.ref.wh_title.innerText = this.$.temperature.format("0.0 °C");
+  }
+  drawDate() {
+    this.ref.wh_dt.innerText = (new Date()).format("dddd dd.MMM.yy HH:mm");
+  }
+  forecastChanged(data) {
+    if (data && Array.isArray(data) && data.length > 0) {
+      let dt_min = (new Date()).getTime();
+      for (let i = 0; i < data.length; i++) {
+        let dt1 = new Date(data[i].dt).getTime();
+        if (dt1 < dt_min) dt_min = dt1;
+        data[i].dt = new Date(dt1 - 24 * 60 * 60 * 1000);
+        this.addData(data[i].dt, 3, data[i].t);
+        if (!this.icons[data[i].i]) {
+          let img = new Image();
+          img.addEventListener('load', this.imgLoaded.bind(this));
+          this.icons[data[i].i] = img;
+          img.src = '/img/' + data[i].i + '.png';
+        }
+      }
+      dt_min = new Date(dt_min);
+      dt_min = new Date(dt_min.getFullYear(), dt_min.getMonth(), dt_min.getDate(), dt_min.getHours(), -30, 0).getTime();
+      this.g.updateOptions({ 'file': this.data, dateWindow: [dt_min - 24 * 60 * 60 * 1000, dt_min] });
+    }
+  }
+  imgLoaded() {
+    let complete = true;
+    for (let i in this.icons) {
+      complete = complete && this.icons[i].complete;
+    }
+    if (complete) {
+      this.g.updateOptions({ 'file': this.data });
+    }
+  }
+  reqArchive() {
+    if (!wsBond.apiToken) {
+      // The handshake has not landed yet, so there is no token to send. Retry shortly rather
+      // than waiting out the hourly timer this method normally re-arms.
+      this.timer = setTimeout(this.reqArchive.bind(this), 500);
+      return;
+    }
+    let now = new Date();
+    this.timer = setTimeout(this.reqArchive.bind(this), 3600000 - ((now.getMinutes() * 60 + now.getSeconds()) * 1000 + now.getMilliseconds()));
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0);
+    let req = "/api/archivist?t=" + encodeURIComponent(wsBond.apiToken)
+      + "&p=" + encodeURIComponent(JSON.stringify(this.t_path))
+      + "&b=" + encodeURIComponent(JSON.stringify(new Date(now.getTime() - 49 * 60 * 60 * 1000)))
+      + "&e=" + encodeURIComponent(JSON.stringify(now))
+      + "&c=49";
+    fetch(req).then(t => t.json()).then(j => this.responseData(j)).catch(e => console.error(e));
+  }
+  responseData(arr) {
+    if (arr.length == 0) {
+      return;
+    }
+    let i;
+    let now = new Date();
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0).getTime();
+
+    for (i in arr) {
+      let v = arr[i][1];
+      let dt = Date.parse(arr[i][0]);
+      this.addData(new Date(dt + 24 * 60 * 60 * 1000), 1, v);
+      this.addData(new Date(dt), 2, v);
+    }
+
+    this.g.updateOptions({ 'file': this.data });
+  }
+  addData(dt, idx, value) {
+    let i;
+    let now = new Date();
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()-1, 0, 0);
+    let rangeMin = now.getTime() - 24 * 60 * 60 * 1000;
+    while (this.data.length>0 && this.data[0][0].getTime() < rangeMin) {
+      this.data.shift();
+    }
+    for (i = 0; i < this.data.length; i++) {
+      let delta = (this.data[i][0].getTime() - dt.getTime())/1000;
+      if (Math.abs(delta) < 15) {
+        this.data[i][idx] = value;
+        break;
+      } else if (delta > 0) {
+        let row = [dt, null, null, null];
+        row[idx] = value;
+        this.data.splice(i, 0, row);
+        break;
+      }
+    }
+    if (i == this.data.length) {
+      let row = [dt, null, null, null];
+      row[idx] = value;
+      this.data.push(row);
+    }
+  }
+  underlayCB(canvas, area, g) {
+    let width = (area.w / 50) | 0;
+    canvas.textAlign = "center";
+    canvas.font = "12px sans-serif";
+    for (let i = 0; i < this.$.forecast.length; i++) {
+      let item = this.$.forecast[i];
+      let cx = g.toDomXCoord(item.dt);
+      if (cx + width < area.x + area.w) {
+        if (i == 0 || item.i != this.$.forecast[i - 1].i) {
+          let img = this.icons[item.i];
+          if (img.complete && img.width > 0) {
+            canvas.drawImage(img, cx - width, area.y + area.h / 2 - width, width * 2, width * 2);
+          } else {
+            canvas.fillStyle = 'red';
+            canvas.fillText(item.i, cx, area.y + area.h / 2);
+          }
+        }
+        if (item.u > 0.25) {
+          canvas.beginPath();
+          canvas.arc(cx, area.y, (width * Math.min(0.5, 0.25 + item.u / 20)).toFixed(0), 0, Math.PI);
+          canvas.fillStyle = 'hsl(' + (Math.max(300, 498 - item.u * 18) % 360).toFixed(0) + ',100%, 50%)';
+          canvas.fill();
+
+        }
+        canvas.fillStyle = 'hsl(' + (Math.max(300, 560 - item.w * 2.5) % 360).toFixed(0) + ',100%, 50%)';
+        let h = area.h * Math.min(0.4, item.w / 300);
+        canvas.fillRect(cx -  2, area.y + area.h - h, 4, h);
+      }
+    }
+  }
+}
+
+function dblClickV3(event, g, context) {
+  let now = new Date();
+  now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0).getTime();
+  g.updateOptions({ dateWindow: [now - 24 * 60 * 60 * 1000, now] });
+}
+
+X13_wheather.template = /*html*/ '<div class="wh_top"><div ref="wh_le"></div><div ref="wh_title"></div><div ref="wh_dt"></div></div><div ref="wh_gr"></div>';
+X13_wheather.bindAttributes({ "forecast": "forecast", "temperature": "temperature" });
+
+X13_wheather.reg("x13-wheather");

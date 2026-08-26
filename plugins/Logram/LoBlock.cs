@@ -1,4 +1,5 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using NiL.JS.Extensions;
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -34,9 +35,9 @@ namespace X13.Logram {
     public void ManifestChanged() {
       JSC.JSValue jSrc;
       var jType = _owner.GetField("type");
-      Topic tt;
-      if (jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out tt)
-        && _typeT != tt && (jSrc = JsLib.GetField(tt.GetState(), "src")).ValueType == JSC.JSValueType.String) {
+      Topic tt, types = Topic.root.Get("$YS/TYPES", false);  // null until PersistentStorage seeds it, and always null when that plugin is off
+      if (types != null && jType.Is<string>() && jType.Value != null && types.Exist(jType.Value as string, out tt)
+        && _typeT != tt && (jSrc = tt.GetState().Field("src")).ValueType == JSC.JSValueType.String) {
         _typeT = tt;
       } else {
         jSrc = null;
@@ -80,7 +81,7 @@ namespace X13.Logram {
       v = _pins.FirstOrDefault(z => z.Owner == t);
       if (v == null) {
         v = _pl.GetVariable(t);
-        var ddr = _typeT != null ? JsLib.OfInt(_typeT.GetState(), "Children." + t.name + ".ddr", 0) : 0;
+        var ddr = _typeT != null ? _typeT.GetState().AsInt("Children." + t.name + ".ddr", 0) : 0;
         if (t.parent != _owner || ddr <= 0) {
           v.AddLink(this);
         } else {

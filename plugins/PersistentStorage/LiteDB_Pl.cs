@@ -1,4 +1,4 @@
-﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using NiL.JS.Extensions;
@@ -11,431 +11,635 @@ using X13.Repository;
 using System.Threading;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Collections;
+using System.Security.Policy;
 
 namespace X13.PersistentStorage {
+  /// <summary>Stores the repository state - manifests, states and the log - in persist.ldb.</summary>
+  /// <remarks>Was two classes until now: an abstract base plus an eighteen-line LiteDB_Pl carrying
+  /// the MEF export. The split existed for the Firebird and MySQL backends, which implemented five
+  /// abstract archive methods; the archive became the separate Archivist plugin and those two
+  /// backends were deleted, leaving a base class with no abstract members and an heir that added
+  /// nothing. Nothing outside referenced either name.
+  /// <para>The archive is gone from here entirely - ArchStore, ArchRollup and ArchRetention live in
+  /// Archivist now, and the thinning does not live anywhere.</para></remarks>
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 2)]
   [System.ComponentModel.Composition.ExportMetadata("name", "LiteDB")]
-  internal class LiteDB_Pl : PersistentStorageBase, IPlugModul {
-    public LiteDB_Pl() : base("LiteDB") {
-      _archLst = new List<ArchLog>();
+  internal class LiteDB_Pl : IPlugModul {
+    /// <summary>The one legacy value that has to keep its meaning: an explicit "off".</summary>
+
+    private Topic _owner;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Perform> _q;
+    private Thread _tr;
+    private bool _terminate;
+    private readonly AutoResetEvent _tick;
+    public LiteDB_Pl() {
+      _tick = new AutoResetEvent(false);
+      _q = new System.Collections.Concurrent.ConcurrentQueue<Perform>();
     }
 
-    #region Archivist
-    private const string DBA_PATH = "../data/archive.ldb";
-    private LiteDatabase _dba;
-    private ILiteCollection<BsonDocument> _archive;
-    private ILiteCollection<ArchLog> _archLog;
-    private readonly List<ArchLog> _archLst;
-    private int _archIdx;
-    DateTime backupDT_Arch;
-
-    protected override void OpenOrCreateArch() {
-      bool exist = File.Exists(DBA_PATH);
-      _dba = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DBA_PATH }) { CheckpointSize = 100 };
-      exist = exist && _dba.CollectionExists("archive");
-      _archive = _dba.GetCollection<BsonDocument>("archive");
+    #region IPlugModul Members
+    public void Init() {
+      _owner = Topic.root.Get("/$YS/PersistentStorage", true);
+      var dir = Path.GetDirectoryName(DB_PATH);
+      if (!Directory.Exists(dir)) {
+        Directory.CreateDirectory(dir);
+      }
+      bool exist = File.Exists(DB_PATH);
+      // Seeded whether or not a database is here yet. It used to be seeded only alongside the
+      // startup backup, which runs only when one exists - so a server first started on an empty
+      // data directory never got the setting at all, and the nightly Backup() then resolved it to
+      // the four-letter string "undefined" and took persistent storage down with it.
+      SeedBackupDir(dir);
+      if (exist) {
+        string bak_dir = BackupDir(dir);
+        string fb = bak_dir + (new string(Path.DirectorySeparatorChar, 1)) + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
+        File.Copy(DB_PATH, fb);
+        Log.Info("backup {0} created", fb);
+      }
+      _base = new Dictionary<Topic, Stash>();
+      _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH }) { CheckpointSize = 50 };
+      exist = exist && _db.CollectionExists("history");
+      _history = _db.GetCollection<BsonDocument>("history");
       if (!exist) {
-        _archive.EnsureIndex("t", false);
-        _archive.EnsureIndex("p", false);
+        _history.EnsureIndex("t");
       }
-      exist = exist && _dba.CollectionExists("archLog");
-      _archLog = _dba.GetCollection<ArchLog>("archLog");
-      if (!exist) {
-        _archLog.EnsureIndex("p", false);
-      }
-      backupDT_Arch = DateTime.Now.AddDays(1).Date.AddHours(3.5);
+      Log.History = History;
+      Log.Write += Log_Write;
     }
-    protected override void SaveArch(Topic topic) {
-      try {
-        var jTmp = topic.GetState();
+    public void Start() {
+      _terminate = false;
+      _tr = new Thread(new ThreadStart(ThreadM)) {
+        IsBackground = true,
+        Name = "PersistentStorage",
+        Priority = ThreadPriority.BelowNormal
+      };
+      _tr.Start();
+      _tick.WaitOne();  // wait load
+      Topic.Subscribe(SubFunc);
+      if(_db.UserVersion < 4) {
+        _db.UserVersion = 4;
+        ImportDefault();
+      }
+    }
+    public void Tick() {
+      if(_q.Any()) {
+        _tick.Set();
+      }
+    }
+    public void Stop() {
+      _terminate = true;
+      _tick.Set();
+      if(!_tr.Join(5000)) {
+        _tr.Abort();
+      }
+      //Interlocked.Exchange(ref _db, null)?.Dispose();
+      _tick.Dispose();
+    }
+    /// <summary>Whether the state store runs, as a plain bool - the same shape every other plugin
+    /// uses at /$YS/&lt;name&gt;.</summary>
+    /// <remarks>It held a STRING until now, naming which storage backend was active: "LiteDB",
+    /// "FBSQL", "MySQL" or "Disabled". That existed because three plugins answered this property and
+    /// exactly one of them had to say yes, so the name was the arbitration. FBSQL and MySQL are
+    /// gone, one backend is left, and a name that can only take one value carries no information.
+    /// <para>The old value is still read once, and read for its meaning rather than discarded: a
+    /// storage someone deliberately turned off must not switch itself back on because the encoding
+    /// changed. After that single read the topic is rewritten as a bool and the branch is dead
+    /// weight - harmless, and cheaper than asking every installation to fix its own config.</para></remarks>
+    public bool enabled {
+      get {
+        var en = Topic.root.Get("/$YS/PersistentStorage", true);
+        var st = en.GetState();
+        // Deliberately a raw ValueType test, NOT AsBool: this decides whether the config topic has
+        // to be CREATED and seeded, and a reader with a default cannot tell "not set yet" from
+        // "set to the default" - the topic would then never be created.
+        if(st.ValueType == JSC.JSValueType.Boolean) {
+          return (bool)st;
+        }
+        bool on = true;
+        en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+        en.SetState(on);
+        return on;
+      }
+      set {
+        Topic.root.Get("/$YS/PersistentStorage", true).SetState(value);
+      }
+    }
+    #endregion IPlugModul Members
 
-        _dba.BeginTrans();
-        ExistOrCreate(topic);
-        _archive.Insert(new BsonDocument { ["_id"] = ObjectId.NewObjectId(), ["t"] = new BsonValue(DateTime.Now), ["p"] = topic.path, ["v"] = Js2Bs(jTmp) });
-        _dba.Commit();
-      }catch (Exception ex) {
-        Log.Warning("SaveArch({0}) - {2}", topic, ex.Message);
-      }
-    }
-    protected override void IdleTaskArch() {
-      if (backupDT_Arch < DateTime.Now) {
-        backupDT_Arch = DateTime.Now.AddDays(1).Date.AddHours(3.5);
-        try {
-          CompressArch();
-        }
-        catch (Exception ex) {
-          Log.Warning("ShrinkArch failed - " + ex.ToString());
-        }
-      } else {
-        try {
-          OptimizeArch();
-        }
-        catch (Exception ex) {
-          Log.Warning("OptimizeArch() - " + ex.ToString());
-        }
-      }
-    }
-    protected override void CloseArch() {
-      var dba = Interlocked.Exchange(ref _dba, null);
-      if (dba != null) {
-        try {
-          dba.Commit();
-          dba.Checkpoint();
-        }
-        catch (Exception ex) {
-          Log.Warning("PersistenStorage.Arch.Terminate - {0}", ex);
-        }
-        dba.Dispose();
-      }
+    #region Persisten Storage Members
+    private const string DB_PATH = "../data/persist.ldb";
+
+    private LiteDatabase _db;
+    private ILiteCollection<BsonDocument> _objects, _states, _history;
+    // Deliberately not sorted: Topic.CompareTo orders by the mutable _path, and Move() rewrites
+    // _path in place, which would silently corrupt a comparison-ordered index. Topic does not
+    // override Equals/GetHashCode, so this keys on identity and survives a rename.
+    private Dictionary<Topic, Stash> _base;
+
+    private class Stash {
+      public ObjectId id;
+      public BsonDocument bm;
+      public JSC.JSValue jm;
+      public BsonDocument bs;
+      public JSC.JSValue js;
     }
 
-    private class ArchLog {
-      public const double ARCH_JITTER = 0.1; // 2:24
-      public const double ARCH_JITTER2 = 10; // days
+    private static string EscapFieldName(string fn) {
+      if (string.IsNullOrEmpty(fn)) {
+        throw new ArgumentNullException("PersistentStorage.EscapFieldName()");
+      }
+      StringBuilder sb = new StringBuilder();
 
-      public ArchLog(Topic t, DateTime ct, DateTime at) {
-        Id = ObjectId.NewObjectId();
-        Path = t.path;
-        Ct = ct;
-        At = at;
-        topic = t;
-      }
-      [BsonCtor]
-      public ArchLog(ObjectId _id, string p, DateTime ct, DateTime at) {
-        Id = _id;
-        Path = p;
-        Ct = ct;
-        At = at;
-        topic = Topic.root.Get(Path, false);
-      }
-      public ObjectId Id { get; private set; }
-      [BsonField("p")]
-      public string Path { get; private set; }
-      [BsonField("ct")]
-      public DateTime Ct { get; set; }
-      [BsonField("at")]
-      public DateTime At { get; set; }
-      [BsonIgnore]
-      public readonly Topic topic;
-      [BsonIgnore]
-      public double Keep {
-        get {
-          if(topic == null) {
-            return double.NaN;
-          }
-          var keep = topic.GetField("Arch.keep");
-          double k_d;
-          if((keep.ValueType != JSC.JSValueType.Double && keep.ValueType != JSC.JSValueType.Integer) || (k_d = keep.As<double>()) <= 0) {
-            return ARCH_JITTER2;
-          }
-          return k_d;
-        }
-      }
-    }
-    private ArchLog ExistOrCreate(Topic t) {
-      ArchLog al;
-      if((al = _archLst.Find(z => z.topic == t)) == null) {
-        al = _archLog.FindOne("$.p=@0", t.path);
-        if(al == null) {
-          var min = _archive.Query().Where("$.p=@0", t.path).OrderBy("$.t").FirstOrDefault();
-          al = new ArchLog(t, DateTime.Now.AddDays(-1.5*ArchLog.ARCH_JITTER), min == null ? DateTime.Now : min["t"].AsDateTime);
-          _archLog.Insert(al);
-        }
-        _archLst.Add(al);
-      }
-      return al;
-    }
-    protected override JSL.Array AQuery(string[] topics, DateTime begin, int count, DateTime end) {
-      //var sw = System.Diagnostics.Stopwatch.StartNew();
-      var tba = topics.Select(z => new BsonValue(z)).ToArray();
+      for (var i = 0; i < fn.Length; i++) {
+        var c = fn[i];
 
-      var rez = new JSL.Array();
-      var p1 = new BsonValue(begin);
-      var p2 = new BsonArray(tba);
-      var p3 = new BsonValue(end);
-
-      if(end <= begin || count == 0) {  // end == MinValue
-        ILiteQueryable<BsonDocument> resp1;
-        if(end > begin) {
-          resp1 = _archive.Query().Where("$.t BETWEEN @0 AND @2 AND $.p IN @1", p1, p2, p3);
+        if (char.IsLetterOrDigit(c) || (c == '$' && i == 0) || (c == '-' && i > 0)) {
+          sb.Append(c);
         } else {
-          resp1 = _archive.Query().Where("$.t < @0 AND $.p IN @1", p1, p2);
+          sb.Append("_");
+          sb.Append(((ushort)c).ToString("X4"));
         }
-        if(count < 0) {
-          resp1 = resp1.OrderByDescending("$.t");
-        } else if(count >= 0) {
-          resp1 = resp1.OrderBy("$.t");
+      }
+      return sb.ToString();
+    }
+    private static string UnescapFieldName(string fn) {
+      if (string.IsNullOrEmpty(fn)) {
+        throw new ArgumentNullException("PersistentStorage.UnescapFieldName()");
+      }
+      StringBuilder sb = new StringBuilder();
+      for (var i = 0; i < fn.Length; i++) {
+        var c = fn[i];
+        if (c == '_' && i + 4 < fn.Length && ushort.TryParse(fn.Substring(i + 1, 4), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out ushort cc)) {
+          i += 4;
+          sb.Append((char)cc);
+        } else {
+          sb.Append(c);
         }
-        var resp2 = count != 0 ? resp1.Limit(Math.Abs(count)).ToEnumerable() : resp1.ToEnumerable();
-        JSL.Array lo = null;
-        foreach(var li in resp2) {
-          var p = li["p"];
-          int i;
-          for(i = 0; p != tba[i]; i++)
-            ;
-          i++;
-          if(lo != null && lo[i].ValueType == JSC.JSValueType.Object && (li["t"].AsDateTime - ((JSL.Date)lo[0].Value).ToDateTime()).TotalSeconds < 15) {  // Null.ValueType==Object
-            lo[i] = Bs2Js(li["v"]);
-          } else {
-            lo = new JSL.Array(tba.Length + 1) {
-              [0] = Bs2Js(li["t"])
-            };
-            for(var j = 1; j <= tba.Length; j++) {
-              lo[j] = (i == j) ? Bs2Js(li["v"]) : JSC.JSValue.Null;
+      }
+      return sb.ToString();
+    }
+    private BsonValue Js2Bs(JSC.JSValue val) {
+      if (val == null) {
+        return BsonValue.Null;
+      }
+      switch (val.ValueType) {
+        case JSC.JSValueType.NotExists:
+        case JSC.JSValueType.NotExistsInObject:
+        case JSC.JSValueType.Undefined:
+          return BsonValue.Null;
+        case JSC.JSValueType.Boolean:
+          return new BsonValue((bool)val);
+        case JSC.JSValueType.Date: {
+            if (val.Value is JSL.Date jsd) {
+              return new BsonValue(jsd.ToDateTime().ToUniversalTime());
             }
-            rez.Add(lo);
+            return BsonValue.Null;
           }
-        }
-      } else {
-        var step = (end - begin).TotalSeconds / Math.Abs(count);
-
-        DateTime cursor = begin.AddSeconds(step);
-        var f_cnt = new int[tba.Length];
-        var f_val = new double[tba.Length];
-        var l_val = new double[tba.Length];
-        var l_delta = new double[tba.Length];
-        var t_cnt = 0;
-        double t_sum = 0;
-        int i;
-
-        for(i = 0; i < tba.Length; i++) {
-          f_val[i] = 0;
-          f_cnt[i] = 0;
-          l_delta[i] = -step;
-          var p_i = tba[i];
-          var r = _archive.Query().Where("$.t < @1 and $.p = @2", p1, p_i).OrderByDescending("$.t").FirstOrDefault();
-          l_val[i] = r != null ? r["v"].AsDouble : double.NaN;
-        }
-        var resp = _archive.Query().Where("$.t BETWEEN @0 AND @2 AND $.p IN @1", p1, p2, p3).OrderBy("$.t").ToEnumerable();
-        foreach(var li in resp) {
-          var t_cur = li["t"].AsDateTime;
-          if(t_cur >= cursor) {
-            AddRecord();
-            do {
-              cursor = cursor.AddSeconds(step);
-            } while(t_cur >= cursor);
-          }
-          var p = li["p"];
-          for(i = 0; i < tba.Length; i++) {
-            if(p == tba[i]) {
-              var v = li["v"].AsDouble;
-              if(!double.IsNaN(v)) {
-                var td = (t_cur - cursor).TotalSeconds;
-                if(!double.IsNaN(l_val[i])) {
-                  f_val[i] += l_val[i] * (td - l_delta[i]) / step;
-                  l_delta[i] = td;
+        case JSC.JSValueType.Double:
+          return new BsonValue((double)val);
+        case JSC.JSValueType.Integer:
+          return new BsonValue((int)val);
+        case JSC.JSValueType.String: {
+            string s = val.AsString(null);
+            if (s != null && s.StartsWith("¤TR")) {
+              var t = Topic.I.Get(Topic.root, s.Substring(3), false, null, false, false);
+              if (t != null) {
+                if (_base.TryGetValue(t, out Stash tu)) {
+                  return tu.bm["_id"];
                 }
-                f_cnt[i]++;
-                l_val[i] = v;
-                t_cnt++;
-                t_sum += td;
               }
-              break;
+              throw new ArgumentException("TopicRefernce(" + s.Substring(3) + ") NOT FOUND");
+            }
+            return new BsonValue(s);
+          }
+        case JSC.JSValueType.Object:
+          if (val.IsNull) {
+            return BsonValue.Null;
+          }
+          if (val is JSL.Array arr) {
+            var r = new BsonArray();
+            foreach (var f in arr) {
+              if (int.TryParse(f.Key, out int i)) {
+                while (i >= r.Count()) { r.Add(BsonValue.Null); }
+                r[i] = Js2Bs(f.Value);
+              }
+            }
+            return r;
+          }
+          // The dual representation, named once - see ByteArray.IsByteArray.
+          if(ByteArray.IsByteArray(val, out ByteArray ba)) {
+            return new BsonValue(ba.GetBytes());
+          } {
+            var r = new BsonDocument();
+            foreach (var f in val) {
+              r[EscapFieldName(f.Key)] = Js2Bs(f.Value);
+            }
+            return r;
+          }
+        default:
+          throw new NotImplementedException("js2Bs(" + val.ValueType.ToString() + ")");
+      }
+    }
+    private string Id2Topic(ObjectId id) {
+      var d = _objects.FindById(id);
+      BsonValue p;
+      if (d != null && (p = d["p"]) != null && p.IsString) {
+        return p.AsString;
+      }
+      return null;
+    }
+    private JSC.JSValue Bs2Js(BsonValue val) {
+      if (val == null) {
+        return JSC.JSValue.Undefined;
+      }
+      switch (val.Type) { //-V3002
+        case BsonType.ObjectId: {
+            var p = Id2Topic(val.AsObjectId);
+            if (p != null) {
+              return new JSL.String("¤TR" + p);
+            } else {
+              throw new ArgumentException("Unknown ObjectId: " + val.AsObjectId.ToString());
+            }
+          }
+        case BsonType.Array: {
+            var arr = val.AsArray;
+            var r = new JSL.Array(arr.Count);
+            for (int i = 0; i < arr.Count; i++) {
+              if (!arr[i].IsNull) {
+                r[i] = Bs2Js(arr[i]);
+              }
+            }
+            return r;
+          }
+        case BsonType.Boolean:
+          return new JSL.Boolean(val.AsBoolean);
+        case BsonType.DateTime:
+          return X13.JsExtLib.Context.ProxyValue(val.AsDateTime.ToLocalTime());
+        case BsonType.Binary:
+          return new ByteArray(val.AsBinary);
+        case BsonType.Document: {
+            var r = JSC.JSObject.CreateObject();
+            var o = val.AsDocument;
+            foreach (var i in o) {
+              r[UnescapFieldName(i.Key)] = Bs2Js(i.Value);
+            }
+            return r;
+          }
+        case BsonType.Double: {
+            return new JSL.Number(val.AsDouble);
+          }
+        case BsonType.Int32:
+          return new JSL.Number(val.AsInt32);
+        case BsonType.Int64:
+          return new JSL.Number(val.AsInt64);
+        case BsonType.Null:
+          return JSC.JSValue.Null;
+        case BsonType.String:
+          return new JSL.String(val.AsString);
+      }
+      throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
+    }
+    private void SubFunc(Perform p) {
+      if (p.Art == Perform.E_Art.subscribe || p.Art == Perform.E_Art.subAck || p.Art == Perform.E_Art.setField || p.Art == Perform.E_Art.setState || p.Art == Perform.E_Art.unsubscribe || p.Prim == _owner) {
+        return;
+      }
+      _q.Enqueue(p);
+    }
+
+    private void ThreadM() {
+      Load();
+      _tick.Set();
+
+      DateTime backupDT;
+      backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.25);
+      do {
+        // The guard covers the whole body, not just Save. It used to sit around Save alone, so a
+        // throw anywhere else - _db.BeginTrans() on a null _db, after a failed backup - ended the
+        // thread outright. The server survives that, which is the bad part: it keeps running with
+        // nothing being written, and the only sign is one line in the log.
+        try {
+          if (_tick.WaitOne(15)) {
+            _db.BeginTrans();
+            while (_q.TryDequeue(out Perform p)) {
+              try {
+                Save(p);
+              }
+              catch (Exception ex) {
+                Log.Warning("PersistentStorage(" + (p == null ? "null" : p.ToString()) + ") - " + ex.ToString());
+              }
+            }
+            _db.Commit();
+          } else if (backupDT < DateTime.Now) {
+            backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.3);
+            Log.Info("Backup started");
+            try {
+              Backup();
+              Log.Info("Backup finished");
+            }
+            catch (Exception ex) {
+              Log.Warning("Backup failed - " + ex.ToString());
             }
           }
         }
-        AddRecord();
-        void AddRecord() {
-          JSL.Array lo = new JSL.Array(tba.Length + 1) {
-            [0] = X13.JsExtLib.Context.ProxyValue(cursor.AddSeconds(t_cnt == 1 ? t_sum : (-step / 2)).ToLocalTime()),
-          };
-          t_cnt = 0;
-          t_sum = 0;
-          for(i = 0; i < tba.Length; i++) {
-            lo[i + 1] = f_cnt[i] > 1 ? new JSL.Number(f_cnt[i] == 1 ? l_val[i] : (f_val[i] + l_val[i] * (-l_delta[i]) / step)) : JSC.JSValue.Null;
-            f_val[i] = 0;
-            f_cnt[i] = 0;
-            l_delta[i] = -step;
-          }
-          rez.Add(lo);
+        catch (ThreadAbortException) {
+          throw;                                  // Stop() is taking the thread down on purpose
         }
+        catch (Exception ex) {
+          Log.Error("PersistentStorage.ThreadM - " + ex.ToString());
+          Thread.Sleep(1000);                     // do not spin on a fault that repeats every pass
+        }
+      } while (!_terminate);
+      var db = Interlocked.Exchange(ref _db, null);
+      if (db != null) {
+        try {
+          db.Commit();
+          db.Checkpoint();
+        }
+        catch (Exception ex) {
+          Log.Warning("PersistenStorage.DB.Terminate - {0}", ex);
+        }
+        db.Dispose();
       }
-      //sw.Stop();
-      //Log.Debug("AQuery([{0}], {1:yyMMdd'T'HHmmss}, {2}, {3:yyMMdd'T'HHmmss}) {4:0.0} mS", string.Join(", ", topics), begin, count, end, sw.Elapsed.TotalMilliseconds);
-      return rez;
-
     }
-    private void OptimizeArch() {
-      if(_archIdx >= _archLst.Count) {
-        _archIdx = 0;
+
+    private void Load() {
+      bool exist = _db.CollectionExists("objects");
+      _objects = _db.GetCollection<BsonDocument>("objects");
+      _states = _db.GetCollection<BsonDocument>("states");
+
+      if (exist) {
+        Topic t;
+        Stash a;
+        JSC.JSValue jTmp;
+        bool saved;
+        string sTmp;
+        List<string> oldT = new List<string>();
+        List<ObjectId> oldId = new List<ObjectId>();
+
+        foreach (var obj in _objects.FindAll().OrderBy(z => z["p"])) {
+          sTmp = obj["p"].AsString;
+          if (oldT.Any(z => sTmp.StartsWith(z))) {
+            oldId.Add(obj["_id"]);
+            continue;  // skip load, old version
+          }
+          t = Topic.I.Get(Topic.root, sTmp, true, _owner, false, false);
+          a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
+          // check version
+          {
+            jTmp = t.GetField("version");
+
+            if ((sTmp = jTmp.AsString(null)) != null && sTmp.StartsWith("¤VR") && Version.TryParse(sTmp.Substring(3), out Version vRepo)) {
+              jTmp = a.jm["version"];
+              if ((sTmp = jTmp.AsString(null)) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out Version vDB) || vRepo > vDB) {
+                oldT.Add(t.path + "/");
+                oldId.Add(a.id);
+                continue; // skip load, old version
+              }
+            }
+          }
+          // check attribute
+          JSC.JSValue attr;
+          if (!a.jm.IsObject() || !(attr = a.jm["attr"]).IsNumber) {
+            saved = false;
+          } else {
+            saved = ((int)attr & (int)Topic.Attribute.Saved) == (int)Topic.Attribute.DB;
+          }
+
+          if (a.bs != null) {
+            if (saved) {
+              a.js = Bs2Js(a.bs["v"]);
+            } else {
+              _states.Delete(obj["_id"]);
+              a.bs = null;
+            }
+          }
+          _base.Add(t, a);
+          Topic.I.Fill(t, a.js, a.jm, _owner);
+        }
+        oldT.Clear();
+        foreach (var id in oldId) {
+          _states.Delete(id);
+          _objects.Delete(id);
+        }
+        oldId.Clear();
       } else {
-        var al = _archLst[_archIdx++];
-        double k_d = al.Keep;
-        if(k_d > ArchLog.ARCH_JITTER) {
-          if(al.Ct < DateTime.Now.AddDays(-ArchLog.ARCH_JITTER)) {
-            al.Ct = ArchCompact0(al.Path, al.Ct, 5.01);
-            _archLog.Update(al);
-          } else if(al.At < DateTime.Now.AddDays(-ArchLog.ARCH_JITTER2)) {
-            al.At = ArchCompact2(al.Path, al.At.AddMinutes(-al.At.Minute).AddSeconds(-al.At.Second), 60);
-            _archLog.Update(al);
-          }
-        } else {
-          var k_gr = DateTime.Now.AddDays(-k_d);
-          if(al.Ct < k_gr) {
-            al.Ct = k_gr;
-            _archive.DeleteMany("$.t < @0 AND $.p=@1", k_gr, al.Path);
-          }
+        _objects.EnsureIndex("p", true);
+      }
+    }
+
+    private static void ImportDefault() {
+      var assembly = typeof(Repo).Assembly;
+      using (var rs = assembly.GetManifestResourceStream("X13.Repository.base.xst")) {
+        using (var reader = new StreamReader(rs)) {
+          Log.Info("Import base.xst");
+          Repo.Import(reader, null);
         }
       }
     }
-    /// <summary>наивный вариант</summary>
-    private DateTime ArchCompact0(string path, DateTime t0, double interval) {
-      //Log.Debug("OptimizeArch({0}, {1}, {2})", path, t0.ToString(), interval);
-      var nt = t0.AddMinutes(interval);
-      var r = _archive.Query().Where("$.t>=@0 AND $.p=@1", t0, path).OrderBy("$.t").ExecuteReader();
-      if(!r.Read()) {
-        return DateTime.Now;
-      }
-      t0 = r.Current["t"].AsDateTime.ToLocalTime();
-      if(t0 > nt) {
-        r.Dispose();
-        return t0;
-      }
-      var v0 = r.Current["v"].AsDouble;
-      //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), v0);
-      if(!r.Read()) {
-        r.Dispose();
-        return DateTime.Now;
-      }
-      var t1 = r.Current["t"].AsDateTime.ToLocalTime();
-      if(t1 > nt) {
-        r.Dispose();
-        return t1;
-      }
-      var o1 = r.Current;
-      DateTime t2;
-      while(r.Read()) {
-        t2 = r.Current["t"].AsDateTime.ToLocalTime();
-        if(t2 > nt) {
-          break;
-        }
-        var ve = v0 + ((o1["v"].AsDouble - v0) / (t1 - t0).TotalSeconds) * (t2 - t0).TotalSeconds;
-        if(Math.Abs(r.Current["v"].AsDouble - ve) > Math.Abs(ve * 0.05)) {
-          break;
-        }
-        //Log.Debug(" | {1}, {2}", path, t1.ToLongTimeString(), o1["v"].AsDouble);
-        _archive.Delete(o1["_id"]);
-        o1 = r.Current;
-        t1 = t2;
-      }
-      //Log.Debug(" v {1}, {2}", path, t1.ToLongTimeString(), o1["v"].AsDouble);
-      r.Dispose();
-      return t1;
-    }
-    /// <summary>Линейная регрессия</summary>
-    private DateTime ArchCompact1(string path, DateTime t0, double interval) {
-      //Log.Debug("OptimizeArch({0}, {1}, {2})", path, t0.ToString(), interval);
-      double sx=0, sy=0, sxy=0, sxx=0, say=0;
-      int n = 0;
-      void Summs(double x, double y) {
-        sx+=x;
-        sy+=y;
-        sxy+=x*y;
-        sxx+=x*x;
-        say+=Math.Abs(y);
-        n++;
-      }
-      DateTime t1 = DateTime.Now, t2, nt = t0.AddMinutes(interval);
 
-      using(var r = _archive.Query().Where("$.t>=@0 AND $.p=@1", t0, path).OrderBy("$.t").ExecuteReader()) {
-        if(!r.Read()) {
-          return DateTime.Now;
+    private void Save(Perform p) {
+      Topic t = p.src;
+      Stash a;
+      JSC.JSValue jTmp;
+      bool saveM = false, saveS = false;
+      if (!_base.TryGetValue(t, out a)) {
+        if (p.Art == Perform.E_Art.remove) {
+          return;
         }
-        t0 = r.Current["t"].AsDateTime.ToLocalTime();
-        if(t0 > nt) {
-          return t0;
-        }
-        Summs(0, r.Current["v"].AsDouble);
-        //Log.Debug(" ^ {1}, {2}", path, t0.ToLongTimeString(), r.Current["v"].AsDouble);
-        BsonValue o1 = null;
-        double v2;
+        var obj = _objects.FindOne(Query.EQ("p", t.path));
+        a = obj != null ? new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null } : new Stash { id = ObjectId.NewObjectId() };
+        _base[t] = a;
+      }
 
-        while(r.Read()) {
-          t2 = r.Current["t"].AsDateTime.ToLocalTime();
-          if(t2 > nt) {
-            if(o1==null) {
-              t1 = t2;
+      if (p.Art == Perform.E_Art.remove) {
+        _states.Delete(a.id);
+        _objects.Delete(a.id);
+        _base.Remove(t);
+      } else {   //create, changedField, changedState, move
+        // Manifest
+        jTmp = t.GetField(null);
+        if (!object.ReferenceEquals(jTmp, a.jm)) {
+          if (a.bm == null) {
+            a.bm = new BsonDocument {
+              ["_id"] = a.id,
+              ["p"] = t.path
+            };
+          }
+          a.bm["v"] = Js2Bs(jTmp);
+          a.jm = jTmp;
+          saveM = true;
+        }
+        // State
+        if (t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
+          saveS = true;
+        } else if (a.bs != null) {
+          _states.Delete(a.id);
+          a.bs = null;
+          saveS = false;
+        }
+        if (saveS) {
+          jTmp = t.GetState();
+          if (!object.ReferenceEquals(jTmp, a.js)) {
+            if (a.bs == null) {
+              a.bs = new BsonDocument {
+                ["_id"] = a.id
+              };
             }
-            break;
+            a.bs["v"] = Js2Bs(jTmp);
+            a.js = jTmp;
+          } else {
+            saveS = false;
           }
-          v2 = r.Current["v"].AsDouble;
-          Summs((t2 - t0).TotalSeconds, v2);
-          if(o1!=null) {
-            var det = sxx*n-sx*sx;                      // Линейная регрессия, Метод наименьших квадратов
-            var k = (sxy*n-sx*sy)/det;
-            var y0 = (sy-k*sx)/n;
-            var ve = y0 + k*(t2 - t0).TotalSeconds;
-            var err = (v2 - ve)*100*n/say;
-            if(Math.Abs(err) > 5) {
-              break;
-            }
-            //Log.Debug(" | {1}, {2}, {3:0.00}%", path, t1.ToLongTimeString(), o1["v"].AsDouble, err);
-            _archive.Delete(o1["_id"]);
-          }
-          o1 = r.Current;
-          t1 = t2;
         }
-        //Log.Debug(" v {1}, {2}", path, t1.ToLongTimeString(), o1==null ? double.NaN : o1["v"].AsDouble);
+
+        if (p.Art == Perform.E_Art.move) {
+          a.bm["p"] = t.path;
+          saveM = true;
+        }
+        if (saveM) {
+          _objects.Upsert(a.bm);
+        }
+        if (saveS && a.bs != null) {
+          _states.Upsert(a.bs);
+        }
       }
-      return t1;
     }
-    /// <summary>средневзвешенное за период</summary>
-    private DateTime ArchCompact2(string path, DateTime bt, double interval) {
-      var et = bt.AddMinutes(interval);
-      var l_d = _archive.Query().Where("$.t < @1 and $.p = @2", bt, path).OrderByDescending("$.t").FirstOrDefault();
-      var l_val = l_d != null ? l_d["v"].AsDouble : double.NaN;
-
-      int f_cnt = 0;
-      double f_val = 0;
-      double l_delta = 0;
-
-      var r_d = _archive.Query().Where("$.t BETWEEN @0 AND @2 AND $.p IN @1", bt, path, et).OrderBy("$.t").ToEnumerable();
-      foreach(var li in r_d) {
-        var t_cur = li["t"].AsDateTime;
-        var v = li["v"].AsDouble;
-        if(!double.IsNaN(v)) {
-          var td = (t_cur - bt).TotalMinutes;
-          if(!double.IsNaN(l_val)) {
-            f_val += l_val * (td - l_delta) / interval;
-            l_delta = td;
-          }
-          f_cnt++;
-          l_val = v;
-        }
-        _archive.Delete(li["_id"]);
+    /// <summary>Creates the backup-directory setting if it is not there yet.</summary>
+    /// <remarks>Config, Required and Readonly as before: the owner may retarget it, the tree keeps
+    /// it, and nothing else writes it.</remarks>
+    private void SeedBackupDir(string dir) {
+      Topic bakT;
+      if (_owner.Exist("bak", out bakT)) {
+        return;
       }
-      if(f_cnt > 0) {
-        var val = f_cnt == 1 ? l_val : (f_val + l_val * (interval - l_delta) / interval);
-        _archive.Insert(new BsonDocument {
+      bakT = _owner.Get("bak", true, _owner);
+      bakT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+      bakT.SetState(dir);
+    }
+
+    /// <summary>Where backups go, with the data directory as the fallback.</summary>
+    /// <remarks>AsString and not ToString(): on an undefined state ToString() returns the four
+    /// letters "undefined", which is a perfectly valid relative path as far as Windows is
+    /// concerned, so the failure surfaced only as a DirectoryNotFoundException at File.Copy - by
+    /// which point Backup had already closed the database. Same family as the As&lt;string&gt;()
+    /// defects cleared on 21.08; this site was missed because it does not go through As&lt;string&gt;().
+    /// <para>The directory is created here rather than assumed, so a setting pointing somewhere
+    /// that does not exist yet is not fatal either.</para></remarks>
+    private string BackupDir(string fallback) {
+      var bak_dir = _owner.Get("bak", true, _owner).GetState().AsString(null);
+      if (string.IsNullOrEmpty(bak_dir)) {
+        Log.Warning("PersistentStorage.bak is not set, backing up into {0}", fallback);
+        bak_dir = fallback;
+      }
+      if (!Directory.Exists(bak_dir)) {
+        Directory.CreateDirectory(bak_dir);
+      }
+      return bak_dir;
+    }
+
+    /// <summary>Deletes the copy Rebuild leaves behind.</summary>
+    /// <remarks>LiteDB.Rebuild renames the old file to "&lt;name&gt;-backup.ldb" and never removes it;
+    /// a later rebuild finding that name taken writes "-backup-1", then "-backup-2". Nothing ever
+    /// collects them, and Backup() rebuilds once a night, so this is one orphan a day for as long as
+    /// the server runs - about 470 MB a year at the live persist.ldb size. Found by an overnight run,
+    /// not by reading, and the same defect had already been fixed in Archivist for the sample files.
+    /// <para>Distinct from the dated .bak this method creates on purpose: that one is the backup,
+    /// pruned by the retention pass below. This is the debris of rewriting the live file.</para>
+    /// <para>Deleted rather than kept: the rebuild has completed and the database is open again by
+    /// the time this runs, so what is left is a copy of a file already known to be good. Failing to
+    /// delete is not worth failing the backup over - the next pass will get it.</para></remarks>
+    private static void DropRebuildLeftovers() {
+      string dir = Path.GetDirectoryName(Path.GetFullPath(DB_PATH));
+      string stem = Path.GetFileNameWithoutExtension(DB_PATH);
+      try {
+        foreach(var f in Directory.GetFiles(dir, stem + "-backup*" + Path.GetExtension(DB_PATH))) {
+          try {
+            File.Delete(f);
+          }
+          catch(IOException) {
+          }
+        }
+      }
+      catch(IOException ex) {
+        Log.Warning("PersistentStorage could not list rebuild leftovers in {0} - {1}", dir, ex.Message);
+      }
+    }
+
+    private void Backup() {
+      _history.DeleteMany(Query.LT("t", DateTime.Now.AddDays(-36)));
+      // Resolved BEFORE anything is closed. Everything between the close and the reopen runs under
+      // a database that does not exist, so the less that happens there the better - and a bad
+      // setting now fails while the store is still up and usable.
+      var bak_dir = BackupDir(Path.GetDirectoryName(DB_PATH));
+      string fb = bak_dir + (new string(Path.DirectorySeparatorChar, 1)) + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
+
+      var db = Interlocked.Exchange(ref _db, null);
+      if (db != null) {
+        db.Commit();
+        _history = null;
+        _objects = null;
+        _states = null;
+        db.Checkpoint();
+        db.Dispose();
+      }
+      // The reopen is in a finally because it has to happen even when the copy throws. It did not
+      // use to: a failing copy left _db null for good, the next loop pass raised a
+      // NullReferenceException on _db.BeginTrans(), and that killed the storage thread - after
+      // which the server ran on with nothing being persisted at all, and said so only in the log.
+      try {
+        File.Copy(DB_PATH, fb);
+        Log.Info("backup {0} created", fb);
+      }
+      finally {
+        _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH }) { CheckpointSize = 50 };
+        _db.Rebuild();
+        DropRebuildLeftovers();
+        _objects = _db.GetCollection<BsonDocument>("objects");
+        _states = _db.GetCollection<BsonDocument>("states");
+        _history = _db.GetCollection<BsonDocument>("history");
+      }
+
+      try {
+        DateTime now = DateTime.Now, fdt;
+        foreach (string f in Directory.GetFiles(bak_dir, "??????_??????.bak", SearchOption.TopDirectoryOnly)) {
+          fdt = File.GetLastWriteTime(f);
+          if (fdt.AddDays(7) > now || (fdt.DayOfWeek == DayOfWeek.Thursday && fdt.Hour == 3 && (fdt.AddMonths(1) > now || (fdt.AddMonths(6) > now && fdt.Day < 8)))) {
+            continue;
+          }
+          File.Delete(f);
+          Log.Info("backup {0} deleted", Path.GetFileName(f));
+        }
+      }
+      catch (System.IO.IOException) {
+      }
+    }
+    #endregion Persisten Storage Members
+
+    #region History
+    private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
+      if (_history != null && ll != LogLevel.Debug) {
+        var d = new BsonDocument {
           ["_id"] = ObjectId.NewObjectId(),
-          ["t"] = new BsonValue(bt.AddMinutes(interval / 2)),
-          ["p"] = path,
-          ["v"] = val
+          ["t"] = new BsonValue(dt.ToUniversalTime()),
+          ["l"] = new BsonValue((int)ll),
+          ["m"] = new BsonValue(msg)
+        };
+        _history.Insert(d);
+      }
+    }
+    private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
+      var t = new BsonValue(dt);
+      return _history.Query().Where(z => z["t"] < t).OrderByDescending(z => z["t"]).Limit(cnt).ToEnumerable()
+        //Find(Query.And(Query.All("t", Query.Descending), Query.LT("t", t)), 0, cnt)
+        .Select(z => new Log.LogRecord {
+          dt = z["t"].AsDateTime,
+          ll = (LogLevel)z["l"].AsInt32,
+          format = z["m"].AsString,
+          args = null
         });
-      }
-      return et;
     }
-    private void CompressArch() {
-      _archLst.Clear();
-      _archIdx = 0;
-      DateTime dte = DateTime.Now.AddDays(1 - ArchLog.ARCH_JITTER2);
-      foreach(var p in _archive.Query().GroupBy("p").Select("@key").ToArray().Select(z => z["expr"].AsString)) {
-        if(!Topic.root.Exist(p, out var t) || t.disposed || !t.GetField("Arch.enable").As<bool>()) {
-          _archive.DeleteMany("$.p=@0", p);
-        } else {
-          var al = ExistOrCreate(t);
-          var k_d = al.Keep;
-          if(k_d > ArchLog.ARCH_JITTER) {
-            _archive.DeleteMany("$.t < @0 AND $.p=@1", DateTime.Now.AddDays(-k_d), t.path);
-          }
-        }
-      }
-      _dba.Commit();
-      _dba.Checkpoint();
-      _dba.Rebuild();
-    }
-    #endregion Archivist
+    #endregion History
+
   }
 }

@@ -26,11 +26,27 @@ namespace X13.DevicePLC {
     public uint StackBottom { get; private set; }
     public SortedList<uint, byte[]> Hex;
 
+    private string _sourceText;
+
+    /// <summary>Source location of a node, formatted like CompilerMessageCallback does.</summary>
+    /// <remarks>CodeNode.Position is a character offset, so it needs the source text to become a
+    /// line and column - which is why Parse now keeps it.</remarks>
+    internal string Where(NiL.JS.Core.CodeNode node) {
+      if(_sourceText == null || node == null) {
+        return string.Empty;
+      }
+      // Formatted like CompilerMessageCallback below, not via CodeCoordinates.ToString() - that
+      // one prints (line:column*length), and two shapes of location in one log is one too many.
+      var c = CodeCoordinates.FromTextPosition(_sourceText, node.Position, node.Length);
+      return string.Format("[{0}, {1}] ", c.Line, c.Column);
+    }
+
     public EP_Compiler() {
       Hex = new SortedList<uint, byte[]>();
     }
 
     public bool Parse(string code) {
+      _sourceText = code;   // kept so a compile error can name the line it happened on, see Where()
       bool success = false;
       _scope = new Stack<Scope>();
       _programm = new List<Scope>();

@@ -2,6 +2,7 @@ import { LitElement, html, css } from '../lib/lit-all.min.js';
 import './view-workspace.js';
 import './catalog-document.js';
 import './inspector-document.js';
+import './chart-document.js';
 import './logo-document.js';
 import './log-panel.js';
 import { WsClient } from '../ide_services/ws-client.js';
@@ -10,6 +11,7 @@ import { ViewStore, CombinedViewStore } from '../ide_services/view-store.js';
 import { LogStore } from '../ide_services/log-store.js';
 import { clamp, readPositiveNumber, readBoolean } from '../ide_services/local-storage-utils.js';
 import { getTopicPath } from '../ide_services/vid-helper.js';
+import { setApiToken } from '../ide_services/api-token.js';
 
 const WORKSPACE_WIDTH_KEY = 'x13.workspace.width';
 const DEFAULT_WORKSPACE_WIDTH = 420;
@@ -37,13 +39,14 @@ export class X13AppShell extends LitElement {
   };
 
   static styles = css`
-    :host { display: block; min-height: 100vh; }
+    :host { display: block; height: 100vh; }
     .shell {
       background: #f6f8fb;
       box-sizing: border-box;
       display: grid;
       grid-template-columns: minmax(0, 1fr) 8px var(--workspace-width);
-      min-height: 100vh;
+      grid-template-rows: minmax(0, 1fr);
+      height: 100%;
     }
     .workspace-pane {
       background: #fff;
@@ -140,11 +143,15 @@ export class X13AppShell extends LitElement {
   }
 
   async #onConnected(status) {
-    if(status !== 'connected') return;
+    if(status !== 'connected') {
+      setApiToken('');  // the token dies with the session that issued it
+      return;
+    }
     try {
       this.#resetRepositoryState();
       const hello = await this.api.hello();
       this.serverName = hello?.name || '';
+      setApiToken(hello?.token);
     }
     catch(error) {
       console.warn('req.hello failed', error);
@@ -158,6 +165,7 @@ export class X13AppShell extends LitElement {
     if(!restore) return;
     if(restore.view === 'inspector') this.#setInspectorDocument(restore.path, restore.isLogram, restore.forceMode);
     else if(restore.view === 'catalog') this.#openCatalog(ROOT_VID, { pushHistory: false });
+    else if(restore.view === 'chart') this.#setChartDocument(restore.path);
   }
 
   // Only ONE of Inspector/Logram is ever open at a time (see #openInspectorPanes/
@@ -444,6 +452,10 @@ export class X13AppShell extends LitElement {
         .isLogram=${this.activeDocument.isLogram} .subView=${this.activeDocument.subView} .logramStore=${this.activeDocument.logramStore}
         @segment-command=${this.#onSegmentCommand} @view-toggle=${this.#toggleDocumentView}></x13-inspector-document>`;
     }
+    if(this.activeDocument?.view === 'chart') {
+      return html`<x13-chart-document .path=${this.activeDocument.path} .rootName=${this.serverName}
+        @segment-command=${this.#onSegmentCommand}></x13-chart-document>`;
+    }
     if(this.pendingRestore) return html``;
     return html`<x13-logo-document></x13-logo-document>`;
   }
@@ -454,6 +466,10 @@ export class X13AppShell extends LitElement {
     if(!row?.vid) return;
     if(cmd === 'open' || cmd === 'open-tab') {
       this.#navigateInspector(getTopicPath(row.vid), cmd === 'open-tab', !!row.isLogram);
+      return;
+    }
+    if(cmd === 'chart') {
+      this.#openChart(getTopicPath(row.vid));
       return;
     }
     if(cmd === 'catalog') this.#openCatalog(row.vid);
@@ -479,14 +495,14 @@ export class X13AppShell extends LitElement {
       const forceMode = 'inspector';
       this.activeDocument = { ...doc, subView: 'inspector', logramOpened: false, forceMode };
       this.#openInspectorPanes(doc.path);
-      history.replaceState({ inspectorPath: doc.path, forceMode }, '', pathToInspectorUrl(doc.path, forceMode));
+      history.replaceState({ inspectorPath: doc.path, forceMode }, '', pathToDocumentUrl(doc.path, forceMode));
     }
     else {
       this.#closeInspectorPanes(doc);
       const forceMode = null;
       this.activeDocument = { ...doc, subView: 'logram', inspectorOpened: false, logramStore: new ViewStore(), forceMode };
       this.#openLogram(doc.path);
-      history.replaceState({ inspectorPath: doc.path, forceMode }, '', pathToInspectorUrl(doc.path, forceMode));
+      history.replaceState({ inspectorPath: doc.path, forceMode }, '', pathToDocumentUrl(doc.path, forceMode));
     }
   }
 
@@ -522,6 +538,25 @@ export class X13AppShell extends LitElement {
     }
   }
 
+  // The Chart document has no server side at all: its data comes over HTTP from
+  // /api/archivist, carrying the session token this.api's handshake already handed us
+  // (ide_services/api-token.js), so there is no req.open to make and nothing to close
+  // afterwards - which is also why #onDocumentRootDeleted has no chart case. Closing the
+  // previous document's panes is still ours to do, exactly as #openCatalog does it.
+  #openChart(path) {
+    if(!path) return;
+    this.#setChartDocument(path);
+    history.pushState({ chartPath: path }, '', pathToDocumentUrl(path, 'chart'));
+  }
+
+  #setChartDocument(path) {
+    if(this.activeDocument?.view === 'inspector') {
+      this.#closeInspectorPanes(this.activeDocument);
+      this.#closeLogram(this.activeDocument);
+    }
+    this.activeDocument = { view: 'chart', path };
+  }
+
   #onSegmentCommand(e) {
     const { cmd, path, isLogram } = e.detail || {};
     if(!path) return;
@@ -544,7 +579,7 @@ export class X13AppShell extends LitElement {
   }
 
   #navigateInspector(path, newTab, isLogram, forceMode = null) {
-    const url = pathToInspectorUrl(path, forceMode);
+    const url = pathToDocumentUrl(path, forceMode);
     if(newTab) {
       window.open(url, '_blank');
       return;
@@ -560,17 +595,25 @@ export class X13AppShell extends LitElement {
       history.replaceState({ mode: 'catalog' }, '', '/ide.html/?mode=catalog');
       return;
     }
-    const path = inspectorPathFromLocation(location.pathname);
-    if(path) {
-      const forceMode = mode === 'inspector' ? 'inspector' : null;
-      this.pendingRestore = { view: 'inspector', path, forceMode };
-      history.replaceState({ inspectorPath: path, forceMode }, '', location.pathname + location.search);
+    const path = topicPathFromLocation(location.pathname);
+    if(!path) return;
+    if(mode === 'chart') {
+      this.pendingRestore = { view: 'chart', path };
+      history.replaceState({ chartPath: path }, '', location.pathname + location.search);
+      return;
     }
+    const forceMode = mode === 'inspector' ? 'inspector' : null;
+    this.pendingRestore = { view: 'inspector', path, forceMode };
+    history.replaceState({ inspectorPath: path, forceMode }, '', location.pathname + location.search);
   }
 
   #onPopState(e) {
     if(e.state?.inspectorPath) {
       this.#requestDocument({ view: 'inspector', path: e.state.inspectorPath, forceMode: e.state.forceMode || null });
+      return;
+    }
+    if(e.state?.chartPath) {
+      this.#requestDocument({ view: 'chart', path: e.state.chartPath });
       return;
     }
     if(e.state?.mode === 'catalog') {
@@ -643,13 +686,16 @@ export class X13AppShell extends LitElement {
 
 customElements.define('x13-app-shell', X13AppShell);
 
-function pathToInspectorUrl(path, forceMode = null) {
+// The URL of a document rooted on a topic: /ide.html/<path>, plus ?mode= for the cases the path
+// alone cannot tell apart. 'inspector' pins the Inspector view of a Logram-typed topic, whose
+// resolved default would be Logram; 'chart' names a different document on the same topic.
+function pathToDocumentUrl(path, mode = null) {
   const segments = String(path || '/').split('/').filter(Boolean).map(encodeURIComponent);
   const base = segments.length ? `/ide.html/${segments.join('/')}` : '/ide.html/';
-  return forceMode === 'inspector' ? `${base}?mode=inspector` : base;
+  return mode === 'inspector' || mode === 'chart' ? `${base}?mode=${mode}` : base;
 }
 
-function inspectorPathFromLocation(pathname) {
+function topicPathFromLocation(pathname) {
   const prefix = '/ide.html/';
   if(!String(pathname || '').startsWith(prefix)) return null;
   const rest = pathname.slice(prefix.length);

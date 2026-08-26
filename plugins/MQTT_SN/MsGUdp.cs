@@ -1,4 +1,5 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using NiL.JS.Extensions;
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -30,6 +31,9 @@ namespace X13.Periphery {
       //_inBuf = new System.Collections.Concurrent.ConcurrentQueue<Tuple<byte[], byte[]>>();
       _udpT = Topic.root.Get("/$YS/MQTT-SN/udp");
 
+      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+      // from "set to the default", so the topic would never be created.
       if(!_udpT.CheckAttribute(Topic.Attribute.Required) || _udpT.GetState().ValueType!=JSC.JSValueType.Boolean) {
         _udpT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         var act = new JSL.Array(1);
@@ -74,10 +78,10 @@ namespace X13.Periphery {
       }
       List<AddrWithMask> wl = new List<AddrWithMask>();
       if(!rescan) {
-        foreach(var c in _udpT.children.Where(z => z.GetState().ValueType == NiL.JS.Core.JSValueType.String)) {
-          var we = AddrWithMask.Parse(c.GetState().Value as string, c.name);
+        foreach(var c in _udpT.children.Where(z => z.GetState().Is<string>())) {
+          var we = AddrWithMask.Parse(c.GetState().AsString(null), c.name);
           if(we == null) {
-            Log.Warning("{0} = {1} is not IpAddress with Mask", c.path, c.GetState().Value as string);
+            Log.Warning("{0} = {1} is not IpAddress with Mask", c.path, c.GetState().AsString(null));
           } else {
             wl.Add(we);
           }

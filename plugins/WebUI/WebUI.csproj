@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>X13.WebUI</RootNamespace>
+    <AssemblyName>WebUI</AssemblyName>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <OutputPath>..\..\Output\bin_d\</OutputPath>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <OutputPath>..\..\Output\bin_r\</OutputPath>
+    <DebugType>pdbonly</DebugType>
+  </PropertyGroup>
+
+  <!-- Version attributes are generated into the server's tree by VersionUpdate.exe and
+       shared by every plugin, so each one compiles that single file as a link. -->
+  <ItemGroup>
+    <Compile Include="..\..\Server\Properties\VersionInfo.cs" Link="Properties\VersionInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Server\Server.csproj" />
+  </ItemGroup>
+
+  <!-- WebSocketSharp used to be restored only as a side effect of Server\packages.config
+       listing it; this project referenced the .dll out of packages\ without declaring it. -->
+  <ItemGroup>
+    <PackageReference Include="NiL.JS" Version="2.6.1722" />
+    <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11" />
+  </ItemGroup>
+
+  <!-- Framework assemblies outside the set the SDK references implicitly for net48. -->
+  <ItemGroup>
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.Data.DataSetExtensions" />
+  </ItemGroup>
+
+</Project>

@@ -6,7 +6,7 @@ using System.ComponentModel;
 using System.Configuration.Install;
 using System.Linq;
 
-namespace X13 {
+namespace X13.Svc {
   [RunInstaller(true)]
   public partial class ProjectInstaller : System.Configuration.Install.Installer {
     public ProjectInstaller() {

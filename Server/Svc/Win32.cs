@@ -139,9 +139,14 @@ namespace CSWindowsServiceRecoveryProperty
     internal class Win32
     {
         public const int SERVICE_ALL_ACCESS = 0xF01FF;
-        public const int SERVICE_QUERY_CONFIG = 0x0001;
+        // SCM-level right, needed by OpenSCManager. Numerically equal to the service-level
+        // SERVICE_QUERY_CONFIG (0x0001) - do not confuse the two constant families.
+        public const int SC_MANAGER_CONNECT = 0x0001;
+        // Service-level right, all ChangeServiceConfig2 needs.
+        public const int SERVICE_CHANGE_CONFIG = 0x0002;
         public const int SERVICE_CONFIG_FAILURE_ACTIONS = 0x2;
         public const int ERROR_ACCESS_DENIED = 5;
+        public const int ERROR_NOT_ALL_ASSIGNED = 1300;
         public const int SERVICE_CONFIG_FAILURE_ACTIONS_FLAG = 0x4;
 
         public const string SE_SHUTDOWN_NAME = "SeShutdownPrivilege";
@@ -223,14 +228,16 @@ namespace CSWindowsServiceRecoveryProperty
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern bool CloseHandle(IntPtr handle);
 
-        [DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool AttachConsole(int dwProcessId);
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool AllocConsole();
 
+        // DWORD_PTR SetThreadAffinityMask(HANDLE, DWORD_PTR): pointer-sized, 8 bytes on x64,
+        // both for the mask and for the returned previous mask.
         [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern int SetThreadAffinityMask(IntPtr hThread, int dwThreadAffinityMask);
+        public static extern UIntPtr SetThreadAffinityMask(IntPtr hThread, UIntPtr dwThreadAffinityMask);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr GetCurrentThread();

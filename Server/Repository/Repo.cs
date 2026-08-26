@@ -1,4 +1,5 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using NiL.JS.Extensions;
 using NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -71,11 +72,12 @@ namespace X13.Repository {
           if(c.Art == Perform.E_Art.subscribe && (sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once) {
             EnquePerf(c);
           }
+          // unsorted: the fan-out subscribes every descendant, order is irrelevant here
           if((sr.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children) {
-            b = c.src.children;
+            b = new Topic.Bill(c.src, false, false);
           }
           if((sr.mask & SubRec.SubMask.All) == SubRec.SubMask.All) {
-            b = c.src.all;
+            b = new Topic.Bill(c.src, true, false);
           }
           if(b != null) {
             foreach(Topic tmp in b) {
@@ -115,7 +117,7 @@ namespace X13.Repository {
         EnquePerf(c);
         break;
       case Perform.E_Art.remove:
-        foreach(Topic tmp in c.src.all) {
+        foreach(Topic tmp in new Topic.Bill(c.src, true, false)) {  // unsorted: every descendant gets a remove Perform anyway
           EnquePerf(Perform.Create(tmp, Perform.E_Art.remove, c.Prim));
         }
         break;
@@ -143,8 +145,8 @@ namespace X13.Repository {
       SortedList<string, JSValue> lo = null, ln = null, lc = null;
       JSValue to = null, tn = p.src.GetField("type"), vn;
       if(p.Art == Perform.E_Art.changedField) {
-        JSValue o = JsLib.GetField(p.old_o as JSValue, "cctor"), n = p.src.GetField("cctor");
-        to = JsLib.GetField(p.old_o as JSValue, "type");
+        JSValue o = (p.old_o as JSValue).Field("cctor"), n = p.src.GetField("cctor");
+        to = (p.old_o as JSValue).Field("type");
         if(!object.ReferenceEquals(o, n)) {
           JsLib.Propertys(ref lo, o);
           JsLib.Propertys(ref ln, n);
@@ -157,12 +159,16 @@ namespace X13.Repository {
         return;
       }
       if(!object.ReferenceEquals(to, tn)) {
-        Topic tt;
-        if(to!=null && to.ValueType == JSValueType.String && to.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(to.Value as string, out tt)) {
-          JsLib.Propertys(ref lo, JsLib.GetField(tt.GetState(), "cctor"));
-        }
-        if(tn != null && tn.ValueType == JSValueType.String && tn.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(tn.Value as string, out tt)) {
-          JsLib.Propertys(ref ln, JsLib.GetField(tt.GetState(), "cctor"));
+        // $YS/TYPES is seeded by PersistentStorage (priority 2) and does not exist yet during
+        // Repo.Init(), nor at all when that plugin is disabled
+        Topic types = Topic.root.Get("$YS/TYPES", false), tt;
+        if(types != null) {
+          if(to.Is<string>() && to.Value != null && types.Exist(to.Value as string, out tt)) {
+            JsLib.Propertys(ref lo, tt.GetState().Field("cctor"));
+          }
+          if(tn.Is<string>() && tn.Value != null && types.Exist(tn.Value as string, out tt)) {
+            JsLib.Propertys(ref ln, tt.GetState().Field("cctor"));
+          }
         }
       }
       if(lo != null && ln != null) {
@@ -248,7 +254,7 @@ namespace X13.Repository {
           Version oldVer;
           var ov_js = cur.GetField("version");
           string ov_s;
-          if(ov_js.ValueType == JSValueType.String && (ov_s = ov_js.Value as string) != null && ov_s.StartsWith("¤VR") && Version.TryParse(ov_s.Substring(3), out oldVer) && oldVer >= ver) {
+          if(ov_js.Is<string>() && (ov_s = ov_js.Value as string) != null && ov_s.StartsWith("¤VR") && Version.TryParse(ov_s.Substring(3), out oldVer) && oldVer >= ver) {
             return; // don't import older version
           }
         }

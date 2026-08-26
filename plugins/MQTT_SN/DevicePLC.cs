@@ -38,6 +38,9 @@ namespace X13.Periphery {
       this._owner = owner;
       this._pub = pub;
       this._verbose = Topic.root.Get("/$YS/DevicePLC/verbose");
+      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+      // from "set to the default", so the topic would never be created.
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
         _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
 #if DEBUG
@@ -60,9 +63,8 @@ namespace X13.Periphery {
     #region RPC Members
     public X13.DevicePLC.EP_Compiler Build() {
       var st = _owner.Get("src", false, _owner);
-      if(st == null || st.GetState().ValueType != JSC.JSValueType.String || !(st.GetState().Value is string src)) {
-        src = string.Empty;
-      }
+      // One read instead of three, and AsString carries the type test and the default with it.
+      string src = st == null ? string.Empty : st.GetState().AsString(string.Empty);
       var c = new X13.DevicePLC.EP_Compiler();
       c.CMsg += C_CMsg;
       return c.Parse(src)?c:null;
@@ -123,10 +125,10 @@ namespace X13.Periphery {
       }
       _owner.parent.SetField("Children", ch_t, _owner);
       string sTag;
-      var varLst = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").Value as string) != null && sTag.StartsWith("M")).ToArray();
+      var varLst = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").AsString(null)) != null && sTag.StartsWith("M")).ToArray();
       var rereg = new List<Tuple<Topic, string>>();
       foreach(var t in varLst) {
-        sTag = t.GetField("MQTT-SN.tag").Value as string;
+        sTag = t.GetField("MQTT-SN.tag").AsString(null);
         var vt = c.varList.FirstOrDefault(z => t.name == z.Key.Replace('.', '_'));
         if(vt.Key==null) {
           rereg.Add(new Tuple<Topic, string>(t, string.Empty));

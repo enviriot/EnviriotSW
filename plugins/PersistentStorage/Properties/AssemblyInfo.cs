@@ -17,3 +17,7 @@ using System.Runtime.InteropServices;
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 [assembly: Guid("2b9c8121-81cf-43a0-8ede-7e15acf6fb7b")]
+
+// Everything in this plugin is internal - without this the test project could reference the
+// assembly and still see nothing. Same declaration Server/Properties/AssemblyInfo.cs carries.
+[assembly: InternalsVisibleTo("X13.Tests")]

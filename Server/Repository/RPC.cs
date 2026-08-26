@@ -8,25 +8,24 @@ using System.Text;
 
 namespace X13.Repository {
   public static class RPC {
-    private static Dictionary<string, Action<JSC.JSValue[]>> _list;
-    private static Dictionary<string, Action<Topic, Perform.E_Art>> _cctors;
-
-    static RPC() {
-      _list = new Dictionary<string, Action<JSC.JSValue[]>>();
-      _cctors = new Dictionary<string, Action<Topic, Perform.E_Art>>();
-    }
+    // Concurrent: plugins register from Init()/Start() on the main thread while worker threads
+    // (e.g. PersistentStorage's) already Call/CCtor - a plain Dictionary is not safe for that.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Action<JSC.JSValue[]>> _list
+      = new System.Collections.Concurrent.ConcurrentDictionary<string, Action<JSC.JSValue[]>>();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Action<Topic, Perform.E_Art>> _cctors
+      = new System.Collections.Concurrent.ConcurrentDictionary<string, Action<Topic, Perform.E_Art>>();
 
     public static void Register(string name, Action<JSC.JSValue[]> cb) {
-      lock(_list) {
-        _list.Add(name, cb);
+      if(!_list.TryAdd(name, cb)) {  // keeps Dictionary.Add's contract: a duplicate name is a bug
+        throw new ArgumentException("RPC.Register - duplicate name: " + name);
       }
     }
     public static void Register(string name, Action<Topic, Perform.E_Art> cb) {
-      lock(_list) {
-        _cctors.Add(name, cb);
+      if(!_cctors.TryAdd(name, cb)) {
+        throw new ArgumentException("RPC.Register(cctor) - duplicate name: " + name);
       }
     }
-    internal static void Call(string name, JSC.JSValue[] args) {
+    public static void Call(string name, JSC.JSValue[] args) {
       Action<JSC.JSValue[]> cb;
       if(_list.TryGetValue(name, out cb)) {
         cb.Invoke(args);

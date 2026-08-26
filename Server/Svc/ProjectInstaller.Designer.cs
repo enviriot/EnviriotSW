@@ -1,5 +1,5 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
-namespace X13 {
+namespace X13.Svc {
   partial class ProjectInstaller {
     /// <summary>
     /// Erforderliche Designervariable.
@@ -37,7 +37,7 @@ namespace X13 {
       // 
       this.serviceInstaller1.Description = "Provides network communications and Logramm processing";
       this.serviceInstaller1.DisplayName = "Enviriot service";
-      this.serviceInstaller1.ServiceName = "Enviriot";
+      this.serviceInstaller1.ServiceName = HAServer.SERVICE_NAME;
       this.serviceInstaller1.StartType = System.ServiceProcess.ServiceStartMode.Automatic;
       // 
       // ProjectInstaller

@@ -18,7 +18,15 @@ namespace X13.Repository {
       return new Perform(E_Art.setField, src, prim) { o = fName, f_v = val, i = 0 }; ;
     }
 
-    internal object o;
+    /// <summary>Untyped payload whose meaning depends on <see cref="Art"/>.</summary>
+    /// <remarks>Readable from outside the assembly since WebUI moved to plugins\, written only
+    /// here. What it holds, per Art: <c>move</c> - the path the topic had BEFORE the move (a
+    /// string; the only case a plugin needs today, since the new path is already on src);
+    /// <c>setState</c> - the JSValue being set; <c>setField</c> - the field name (string), with
+    /// the value in f_v; <c>subscribe</c>/<c>subAck</c>/<c>unsubscribe</c> - the SubRec; otherwise
+    /// null. A subscriber that reads this must check Art first - `o as T` on the wrong Art
+    /// silently yields null rather than failing.</remarks>
+    public object o { get; internal set; }
     internal int i;
     internal object old_o;
     internal JSValue f_v;
@@ -39,6 +47,12 @@ namespace X13.Repository {
         && this.src == other.src
         && (((int)this.Art) >> 2) == (((int)other.Art) >> 2);
     }
+    /// <summary>Ordering within a priority bucket, tuned for Repo.EnquePerf and nothing else.</summary>
+    /// <remarks>This deliberately breaks IComparable's antisymmetry: for two Performs in the same
+    /// bucket that are not the same-source setState/changedState pair, both a.CompareTo(b) and
+    /// b.CompareTo(a) return -1, so that BinarySearch appends and arrival order is preserved.
+    /// Consequences: _prOp must never be reordered with a plain Sort, and EnquePerf must stay the
+    /// only insertion path - any other caller would get an order BinarySearch cannot reason about.</remarks>
     public int CompareTo(Perform other) {
       if(other == null) {
         return -1;

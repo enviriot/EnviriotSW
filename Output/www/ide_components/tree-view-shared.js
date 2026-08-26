@@ -3,6 +3,7 @@ import './view-row.js';
 import './context-menu.js';
 import { clamp, readPositiveNumber } from '../ide_services/local-storage-utils.js';
 import { getTopicPath } from '../ide_services/vid-helper.js';
+import { apiUrl } from '../ide_services/api-token.js';
 
 export const MIN_VALUE_WIDTH = 110;
 export const CUT_CLIPBOARD_PREFIX = 'x13-webui-topic-cut:';
@@ -98,7 +99,7 @@ export function cloneMenuItemWithPasteState(item, pasteEnabled) {
 export function exportXst(row) {
   const path = getTopicPath(row?.vid) || '/';
   const link = document.createElement('a');
-  link.href = `/api/export${encodeExportPath(path)}`;
+  link.href = apiUrl(`/api/export${encodeExportPath(path)}`);
   link.download = `${safeExportFileName(row?.name || 'root')}.xst`;
   link.click();
 }
@@ -109,7 +110,7 @@ export async function importXst() {
   const form = new FormData();
   form.append('file', file, file.name);
   try {
-    const response = await fetch('/api/import', { method: 'POST', body: form });
+    const response = await fetch(apiUrl('/api/import'), { method: 'POST', body: form });
     const text = await response.text();
     if(!response.ok) throw new Error(text || `HTTP ${response.status}`);
   }
@@ -317,7 +318,7 @@ export class X13TreeDocumentBase extends LitElement {
       this.willfulAddState = { vid: row.vid, cmd, item: e.detail.item };
       return;
     }
-    if(cmd === 'open' || cmd === 'open-tab' || cmd === 'catalog') {
+    if(cmd === 'open' || cmd === 'open-tab' || cmd === 'catalog' || cmd === 'chart') {
       this.dispatchEvent(new CustomEvent('workspace-menu-command', {
         bubbles: true,
         composed: true,

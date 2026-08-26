@@ -2,12 +2,12 @@
 <xst path='/' m='{"attr":65}'>
   <i n='$YS' m='{"attr":65}'>
     <i n='TYPES' m='{"attr":65}'>
-      <i n='Core' m='{"attr":65}' ver="0.4.1712.06015">
+      <i n='Core' m='{"attr":65}' ver="0.4.2608.17001">
         <i n='Boolean' s='{"default":false,"icon":"Boolean","manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
         <i n='Double' s='{"default":0,"icon":"Double","manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
         <i n='Folder' s='{"icon":"Folder","manifest":{"attr":0},"willful":true}' m='{"attr":69}' />
         <i n='Integer' s='{"default":0,"editor":"Integer","icon":"Integer","manifest":{"attr":4,"editor":"Integer"},"willful":true}' m='{"attr":69}' />
-        <i n='Logram' s='{"icon":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAadEVYdFNvZnR3YXJlAFBhaW50Lk5FVCB2My41LjEwMPRyoQAAAGBJREFUOE9jKK9pIh7FJaUzAFX/Jw4AVSI0xNZlQhBQ7+YprBAEZCOLU6aBGEeh2ECyhtCsOmQE1I8WdBARhKdpr4FkP5CsoS4rDIKQdSLHGrqnSdZAmpNIS63AuCAJAQDZygmbQTNYbQAAAABJRU5ErkJggg==","manifest":{"type":"Core/Logram"},"willful":true}' m='{"attr":69}' />
+        <i n='Logram' s='{"icon":"Logram","manifest":{"type":"Core/Logram"},"willful":true}' m='{"attr":69}' />
         <i n='Object' s='{"default":{},"icon":"Object","manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
         <i n='String' s='{"default":"","icon":"String","manifest":{"attr":4},"willful":true}' m='{"attr":69}' />
       </i>
@@ -17,7 +17,7 @@
       <i n='Ext' m='{"attr":65}' >
         <i n='Connection' s='{"Children":{"default":{}},"Fields":{"Address":{"attr":3},"Dns":{"attr":3},"Port":{"attr":3}},"icon":"EsConnection","editor":"EsStatus"}' m='{"attr":69}' ver='0.4.2608.4005' />
         <i n='DevicePLC' s='{"Action":[{"name":"MQTT_SN.PLC.Build","text":"Build programm"},{"name":"MQTT_SN.PLC.Run","text":"Run"},{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"editor":"DevicePLC","icon":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAACxMAAAsTAQCanBgAAAA5UExURQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAm/wCU/wD/kP8AAMNYIEMAAAAOdFJOUwAZGh9AaHJ7gMvc5ebo3msmjQAAAGBJREFUGNONj1sOgCAMBFcRKCAv739YCykYjYnOT5PJpt0C35jdABszRDwiQMwQNllQYqZJHMilZIKNpgumCR41SOglkVqCHjvk0HVFxOyhvFe9aZCmulZ9+2F1bvnxKk6PwgS5I8stGwAAAABJRU5ErkJggg=="}'  m='{"attr":69}' ver='0.4.1908.27006' />
-        <i n='Manifest' s='{"mi":{"Arch":{"default":{"enable":true,"keep":365.25},"mi":{"enable":{"default":true},"keep":{"default":365.25,"hint":"keep archive in days"}}},"attr":{"editor":"Attribute","attr":1},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"publish":true,"subscribe":true,"uri":"","retained":false},"mi":{"publish":{"default":true,"hint":"publish enabled"},"retained":{"default":false,"hint":"publish with retained flag"},"subscribe":{"default":true,"hint":"subscribe enabled"},"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","editor":"JS","hint":"value converter for input"},"convOut":{"default":"","editor":"JS","hint":"value converter for output"},"suppressed":{"default":true}}},"type":{"default":""}}}' m='{"attr":69}' ver='0.4.2309.15690' />
+        <i n='Manifest' s='{"mi":{"Arch":{"default":{"enable":true,"keep":365.25},"mi":{"enable":{"default":true},"keep":{"default":365.25,"hint":"keep archive in days"}}},"attr":{"editor":"Attribute","attr":1},"DashboardRO":{"path":"dashboard.netRO","default":"local, 127.0.0.0/8","hint":"networks allowed to read this subtree from a dashboard"},"DashboardRW":{"path":"dashboard.netRW","default":"local, 127.0.0.0/8","hint":"networks allowed to write this subtree from a dashboard"},"editor":{"default":"","editor":"Editor"},"MQTT":{"default":{"publish":true,"subscribe":true,"uri":"","retained":false},"mi":{"publish":{"default":true,"hint":"publish enabled"},"retained":{"default":false,"hint":"publish with retained flag"},"subscribe":{"default":true,"hint":"subscribe enabled"},"uri":{"default":""}}},"MQTT-SN":{"attr":1,"mi":{"tag":{"attr":3},"convIn":{"default":"","editor":"JS","hint":"value converter for input"},"convOut":{"default":"","editor":"JS","hint":"value converter for output"},"suppressed":{"default":true}}},"type":{"default":""}}}' m='{"attr":69}' ver='0.4.2608.24003' />
         <i n='LBDescr' s='{"Fields":{"Children":{},"src":{"default":"","editor":"JS","manifest":{"attr":68}},"type":{"default":""}}}' m='{"attr":69}' ver='0.4.1711.20005' />
         <i n='TwiDev' s='{"Fields":{"Children":{},"src":{"default":"","editor":"JS","manifest":{"attr":68}},"type":{"default":""}}}' m='{"attr":69}' ver='0.4.1711.19004' />
       </i>

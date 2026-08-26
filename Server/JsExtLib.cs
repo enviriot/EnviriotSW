@@ -54,7 +54,8 @@ namespace X13 {
         }
         _req = (HttpWebRequest)WebRequest.Create(url);
         //_req.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;  // TrustFailure on Linux
-        _req.Method = method;
+        // normalized like a browser does, so open("post", ...) behaves as POST
+        _req.Method = string.IsNullOrEmpty(method) ? "GET" : method.ToUpperInvariant();
         _contentType = null;
         readyState = 1;
 
@@ -70,8 +71,8 @@ namespace X13 {
         _req?.Abort();
       }
       public void send(JSC.JSValue value) {
-        byte[] data = (value!=null && value.ValueType == JSC.JSValueType.String && value.Value is string s)? Encoding.UTF8.GetBytes(s) : null;
-        if(_req.Method == "POST" && data!=null) {
+        byte[] data = (value.Is<string>() && value.Value is string s)? Encoding.UTF8.GetBytes(s) : null;
+        if(data != null && _req.Method != "GET" && _req.Method != "HEAD") {  // PUT/PATCH/DELETE carry a body too
           _req.ContentType = _contentType??"application/x-www-form-urlencoded";
           _req.ContentLength = data.Length;
           using(var stream = _req.GetRequestStream()) {
@@ -102,48 +103,60 @@ namespace X13 {
       public ushort status { get; private set; }
       public string statusText { get; private set; }
 
-      private void RespCallback(IAsyncResult asynchronousResult) {
-        try {
-          _resp = (HttpWebResponse)_req.EndGetResponse(asynchronousResult);
-          status = (ushort)(int)_resp.StatusCode;
-          statusText = _resp.StatusDescription;
-          readyState = 2;
-          using(var responseStream = _resp.GetResponseStream()) {
-            using(var str = new StreamReader(responseStream, Encoding.UTF8)) {
-              responseText = str.ReadToEnd();
-            }
+      private static string ReadBody(HttpWebResponse resp) {
+        using(var responseStream = resp.GetResponseStream()) {
+          if(responseStream == null) {
+            return null;
           }
-          readyState = 4;
+          using(var str = new StreamReader(responseStream, Encoding.UTF8)) {
+            return str.ReadToEnd();
+          }
+        }
+      }
+      private void RespCallback(IAsyncResult asynchronousResult) {
+        // this runs on a ThreadPool thread: the blocking IO belongs here, but the readyState
+        // transitions below call into script, so they are handed to the main tick thread
+        ushort st = 0;
+        string stText = null, body = null;
+        try {
+          var resp = (HttpWebResponse)_req.EndGetResponse(asynchronousResult);
+          _resp = resp;
+          st = (ushort)(int)resp.StatusCode;
+          stText = resp.StatusDescription;
+          body = ReadBody(resp);
         }
         catch(WebException e) {
           Log.Debug("XMLHttpRequest({0}) - [{1}] {2}", _req.RequestUri, e.Status, e.ToString());
           // If server returned an HTTP error status, the real response is available
           // in the WebException.Response. Extract status code/text and body when present
-          try {
-            if(e.Response is HttpWebResponse errResp) {
-              _resp = errResp;
-              status = (ushort)(int)errResp.StatusCode;
-              statusText = errResp.StatusDescription;
-              readyState = 2;
-              using(var responseStream = errResp.GetResponseStream()) {
-                if(responseStream != null) {
-                  using(var str = new StreamReader(responseStream, Encoding.UTF8)) {
-                    responseText = str.ReadToEnd();
-                  }
-                }
-              }
-              readyState = 4;
-              return;
+          var errResp = e.Response as HttpWebResponse;
+          if(errResp != null) {
+            _resp = errResp;
+            st = (ushort)(int)errResp.StatusCode;
+            stText = errResp.StatusDescription;
+            try {
+              body = ReadBody(errResp);
             }
+            catch(Exception ex2) {
+              Log.Debug("XMLHttpRequest({0}) - error reading error response: {1}", _req.RequestUri, ex2.Message);
+            }
+          } else {
+            stText = e.Status.ToString();  // non-HTTP failure, status stays 0
           }
-          catch(Exception ex2) {
-            Log.Debug("XMLHttpRequest({0}) - error reading error response: {1}", _req.RequestUri, ex2.Message);
-          }
-          // Fallback for non-HTTP errors
-          readyState = 4;
-          status = 0;
-          statusText = e.Status.ToString();
         }
+        catch(Exception ex) {
+          Log.Warning("XMLHttpRequest({0}) - {1}", _req.RequestUri, ex.Message);
+          stText = ex.Message;
+        }
+        JsExtLib.Post(() => {
+          status = st;
+          statusText = stText;
+          if(st != 0) {
+            readyState = 2;  // headers received; skipped when the request never reached a server
+          }
+          responseText = body;
+          readyState = 4;
+        });
       }
       #region IDisposable Member
       public void Dispose() {
@@ -161,26 +174,48 @@ namespace X13 {
       public TimerContainer next;
       public JSC.Context ctx;
       public double idx;
+      public bool cancelled;
     }
     private static TimerContainer _timer;
+    // the timer whose callback is running right now: it is already unlinked from _timer,
+    // so ClearTimeout has to look at it separately to catch a timer clearing itself
+    private static TimerContainer _firing;
     private static long _timerCnt;
-    private static void AddTimer(TimerContainer tc) {
-      TimerContainer cur = _timer, prev = null;
-      while(cur != null && cur.to < tc.to) {
-        prev = cur;
-        cur = prev.next;
+    // guards _timer/_firing: setTimeout & friends are reachable from any thread
+    private static readonly object _timerLock = new object();
+    // actions handed over to the main tick thread, see Post
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<Action> _completions = new System.Collections.Concurrent.ConcurrentQueue<Action>();
+
+    /// <summary>Queues an action to be executed on the main tick thread.</summary>
+    /// <remarks>Script callbacks that originate on a ThreadPool thread must not touch the
+    /// shared NiL.JS context directly - they go through here instead.</remarks>
+    internal static void Post(Action act) {
+      if(act != null) {
+        _completions.Enqueue(act);
       }
-      tc.next = cur;
-      if(prev == null) {
-        _timer = tc;
-      } else {
-        prev.next = tc;
+    }
+    private static void AddTimer(TimerContainer tc) {
+      lock(_timerLock) {
+        TimerContainer cur = _timer, prev = null;
+        while(cur != null && cur.to < tc.to) {
+          prev = cur;
+          cur = prev.next;
+        }
+        tc.next = cur;
+        if(prev == null) {
+          _timer = tc;
+        } else {
+          prev.next = tc;
+        }
       }
     }
     private static JSC.JSValue SetTimeout(JSC.JSValue func, int to) {
       return SetTimer(func, to, 0, null);
     }
     private static JSC.JSValue SetInterval(JSC.JSValue func, int interval) {
+      if(interval < 1) {
+        interval = 1;  // a zero period would degrade the interval into a one-shot timer
+      }
       return SetTimer(func, interval, interval, null);
     }
     private static JSC.JSValue SetAlarm(JSC.JSValue func, JSC.JSValue time) {
@@ -194,7 +229,10 @@ namespace X13 {
     public static JSC.JSValue SetTimer(JSC.JSValue func, int to, int interval, JSC.Context ctx) {
       JSL.Function f;
       double idx = -1;
-      if(((f = func as JSL.Function) != null || (f = func.Value as JSL.Function)!=null) && to>0) {
+      if((f = func as JSL.Function) != null || (f = func.Value as JSL.Function)!=null) {
+        if(to < 0) {
+          to = 0;   // setTimeout(f, 0) and negative delays fire on the next tick, they are not dropped
+        }
         idx = Interlocked.Increment(ref _timerCnt);
         Interlocked.CompareExchange(ref _timerCnt, 1, ((long)1<<52)-1);
         AddTimer(new TimerContainer { func = f, to = DateTime.Now.AddMilliseconds(to), interval = interval, ctx = ctx, idx=idx });
@@ -217,18 +255,24 @@ namespace X13 {
     }
 
     public static void ClearTimeout(JSC.Context ctx) {
-      TimerContainer t=_timer, tp=null;
-      while(t != null) {
-        if(t.ctx == ctx) {
-          if(tp == null) {
-            _timer = t.next;
-          } else {
-            tp.next = t.next;
-          }
-        } else {
-          tp = t;
+      lock(_timerLock) {
+        if(_firing != null && _firing.ctx == ctx) {
+          _firing.cancelled = true;
         }
-        t = t.next;
+        TimerContainer t=_timer, tp=null;
+        while(t != null) {
+          if(t.ctx == ctx) {
+            t.cancelled = true;
+            if(tp == null) {
+              _timer = t.next;
+            } else {
+              tp.next = t.next;
+            }
+          } else {
+            tp = t;
+          }
+          t = t.next;
+        }
       }
     }
     public static void ClearTimeout(JSC.JSValue oi) {
@@ -236,38 +280,73 @@ namespace X13 {
         return;
       }
       var idx = (int)oi;
-      TimerContainer t = _timer, tp = null;
-      while(t != null) {
-        if((long)t.idx == (long)idx) {
-          if(tp == null) {
-            _timer = t.next;
-          } else {
-            tp.next = t.next;
-          }
-        } else {
-          tp = t;
+      lock(_timerLock) {
+        if(_firing != null && (long)_firing.idx == (long)idx) {
+          _firing.cancelled = true;
         }
-        t = t.next;
+        TimerContainer t = _timer, tp = null;
+        while(t != null) {
+          if((long)t.idx == (long)idx) {
+            t.cancelled = true;
+            if(tp == null) {
+              _timer = t.next;
+            } else {
+              tp.next = t.next;
+            }
+          } else {
+            tp = t;
+          }
+          t = t.next;
+        }
       }
     }
 
     internal static void Tick() {
+      Action act;
+      while(_completions.TryDequeue(out act)) {
+        try {
+          act();
+        }
+        catch(Exception ex) {
+          Log.Warning("JsExtLib.Tick(completion) - {0}", ex.Message);
+        }
+      }
+
       var now = DateTime.Now;
-      while(_timer != null && _timer.to <= now) {
-        TimerContainer cur = _timer;
+      while(true) {
+        TimerContainer cur;
+        lock(_timerLock) {
+          if(_timer == null || _timer.to > now) {
+            break;
+          }
+          cur = _timer;
+          // unlink before running the callback: the callback may add or clear timers, and a
+          // container that is still linked could otherwise end up in the list twice
+          _timer = cur.next;
+          cur.next = null;
+          _firing = cur;
+        }
         try {
           cur.func.Call(cur.func.Context.ThisBind, new JSC.Arguments());
         }
         catch(Exception ex) {
           Log.Warning("JsTimer.Tick - {0}", ex.Message);
         }
-        _timer = cur.next;
-        if(cur.interval > 0) {
-          cur.to = now.AddMilliseconds(cur.interval);
-          AddTimer(cur);
-        } else if(cur.interval == int.MinValue) {
-          cur.to = cur.to.AddDays(1);
-          AddTimer(cur);
+        finally {
+          // clearing _firing, reading cancelled and rescheduling have to be one atomic step,
+          // otherwise a ClearTimeout from another thread lands in the gap and is lost
+          lock(_timerLock) {
+            _firing = null;
+            if(!cur.cancelled) {
+              if(cur.interval > 0) {
+                cur.to = now.AddMilliseconds(cur.interval);
+                AddTimer(cur);
+              } else if(cur.interval == int.MinValue) {
+                cur.to = cur.to.AddDays(1);
+                AddTimer(cur);
+              }
+            }
+          }
         }
       }
     }
@@ -342,17 +421,17 @@ namespace X13 {
       }
       public override Encoding Encoding { get { return Encoding.UTF8; } }
       public override void WriteLine(string msg) {
-        Log.onWrite(_ll, msg);
+        Log.onWrite(_ll, "{0}", msg);  // msg is arbitrary script text, never a format string
       }
     }
     #endregion Log
 
     public static bool IsArray(JSC.JSValue value) {
-      if(value == null || value.ValueType != JSC.JSValueType.Object || value.Value == null) {
+      if(!value.IsObject()) {
         return false;
       }
       try {
-        return JSL.Array.isArray(new JSC.Arguments() { value }).As<bool>();
+        return JSL.Array.isArray(new JSC.Arguments() { value }).AsBool(false);
       }
       catch {
         return false;
@@ -362,17 +441,34 @@ namespace X13 {
     #region AQuery
     public static Func<string[], DateTime, int, DateTime, JSL.Array> AQuery { get; set; }
     private static Task<JSL.Array> AQueryJS(JSC.JSValue topicsJS, JSC.JSValue beginJS, int count, JSC.JSValue endJS) {
-      string[] topics;
-      if(topicsJS.ValueType == JSC.JSValueType.String) {
-        topics = new string[1];
-        topics[0] =  topicsJS.As<string>();
-      } else {
-        topics = topicsJS.Select(kv => kv.Value.As<string>()).ToArray();
+      var query = AQuery;
+      if(query == null) {  // no archive provider registered, i.e. PersistentStorage is disabled
+        throw new InvalidOperationException("Arch.Query - no archive provider available");
       }
-      DateTime begin = (beginJS.Value as JSL.Date).ToDateTime();
-      DateTime end = (endJS!=null && endJS.ValueType==JSC.JSValueType.Date)?(endJS.Value as JSL.Date).ToDateTime():DateTime.MinValue;
+      if(topicsJS == null || !topicsJS.Defined) {
+        throw new ArgumentException("Arch.Query(topics, begin, count, end) - topics is required");
+      }
+      string[] topics;
+      if(topicsJS.Is<string>()) {
+        topics = new string[1];
+        topics[0] = topicsJS.AsString(null);
+      } else {
+        // JsLib.OfString, not As<string>(): As<string>() coerces, and on JSValue.Null it yields the
+        // four-character string "null", which then travelled on as a topic path. Undefined yields
+        // C# null instead, so the two empty values are not even symmetrical - a null check on the
+        // result would still have let "null" through as data.
+        topics = topicsJS.Select(kv => kv.Value.AsString(null)).ToArray();
+        if(topics.Any(z => string.IsNullOrEmpty(z))) {
+          throw new ArgumentException("Arch.Query(topics, begin, count, end) - every topic must be a non-empty string");
+        }
+      }
+      if(!(beginJS != null && beginJS.Value is JSL.Date beginDate)) {
+        throw new ArgumentException("Arch.Query(topics, begin, count, end) - begin must be a Date");
+      }
+      DateTime begin = beginDate.ToDateTime();
+      DateTime end = (endJS!=null && endJS.Is(JSC.JSValueType.Date))?(endJS.Value as JSL.Date).ToDateTime():DateTime.MinValue;
       //Log.Debug("AQuery([{0}], {1:HHmmss}, {2}, {3:HHmmss})", string.Join(", ", topics), begin, count, end);
-      return Task.Run(() => AQuery(topics, begin, count, end));
+      return Task.Run(() => query(topics, begin, count, end));
     }
     #endregion AQuery
   }

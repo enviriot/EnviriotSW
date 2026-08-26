@@ -52,8 +52,10 @@ namespace X13.MQTT {
       }
       var act = this.Owner.GetField("Action");
       
-      JSC.JSValue txt;
-      if(act==null || !act.Any(z => z.Value.ValueType==JSC.JSValueType.Object && (txt=z.Value["name"]).ValueType == JSC.JSValueType.String && (txt.Value as string) == "MQTT.Reconnect")) {
+      // JsLib.IsObject, not ValueType==Object: the latter is TRUE for JSValue.Null (the null sits
+      // in Value, not in ValueType), so an Action entry that is literally null passed the guard
+      // and the z.Value["name"] below threw a TypeError, taking the whole registration with it.
+      if(act==null || !act.Any(z => z.Value.IsObject() && z.Value.AsString("name", null) == "MQTT.Reconnect")) {
         int i;
         JSL.Array act_n;
         if(act==null) {
@@ -76,6 +78,8 @@ namespace X13.MQTT {
     private bool ReadFlag(string path, bool def) {
       bool rv;
       var v1 = this.Owner.GetField(path);
+      // Deliberately a raw ValueType test, NOT AsBool(def): the else branch SEEDS the field with
+      // the default, and a reader with a default cannot tell "not set" from "set to the default".
       if(v1.ValueType==JSC.JSValueType.Boolean) {
          rv = (bool)v1;
       } else {

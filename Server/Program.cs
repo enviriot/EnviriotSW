@@ -6,6 +6,8 @@ using System.ComponentModel.Composition.Hosting;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Text;
 using System.Threading;
 
@@ -40,15 +42,25 @@ namespace X13 {
       }
       Directory.SetCurrentDirectory(path);
       if(flag != 1) {
-        if(!CSWindowsServiceRecoveryProperty.Win32.AttachConsole(-1))  // Attach to a parent process console
-          CSWindowsServiceRecoveryProperty.Win32.AllocConsole(); // Alloc a new console if none available
+        // Attach to a parent process console, alloc a new one if none available
+        if(!CSWindowsServiceRecoveryProperty.Win32.AttachConsole(-1) && !CSWindowsServiceRecoveryProperty.Win32.AllocConsole()) {
+          Log.Debug("no console available - {0}", Marshal.GetLastWin32Error());
+        }
       }
         int p = (int)Environment.OSVersion.Platform;
       _isLinux = (p == 4) || (p == 6) || (p == 128);
 
       if(flag == 0) {
         var srv = new Program(cfgPath);
-        if(srv.Start()) {
+        bool started;
+        try {
+          started = srv.Start();
+        }
+        catch(Exception ex) {
+          Log.Error("{0}", ex.ToString());
+          started = false;
+        }
+        if(started) {
           Console.ForegroundColor = ConsoleColor.Green;
           Console.WriteLine("Press Enter to Exit");
           Console.ResetColor();
@@ -69,23 +81,47 @@ namespace X13 {
           Log.Error("{0}", ex.ToString());
         }
 
-      } else if(flag == 2) {
+      } else if(flag == 2 || flag == 3) {
+        if(!IsElevated()) {
+          Console.ForegroundColor = ConsoleColor.Magenta;
+          Console.WriteLine("{0} the {1} service requires administrator rights.", flag == 2 ? "Installing" : "Removing", HAServer.SERVICE_NAME);
+          Console.WriteLine("Restart this command from an elevated console.");
+          Console.ResetColor();
+          Environment.ExitCode = CSWindowsServiceRecoveryProperty.Win32.ERROR_ACCESS_DENIED;
+          return;
+        }
         try {
-          HAServer.InstallService(name);
+          if(flag == 2) {
+            HAServer.InstallService(name);
+          } else {
+            HAServer.UninstallService(name);
+          }
         }
         catch(Exception ex) {
           Log.Error("{0}", ex.ToString());
-        }
-      } else if(flag == 3) {
-        try {
-          HAServer.UninstallService(name);
-        }
-        catch(Exception ex) {
-          Log.Error("{0}", ex.ToString());
+          Environment.ExitCode = 1;  // otherwise a failed install is indistinguishable from success
         }
       }
     }
     public static bool IsLinux { get { return _isLinux; } }
+
+    /// <summary>True when the process can talk to the SCM as an administrator.</summary>
+    /// <remarks>Errs towards true: the SCM call itself reports a precise error, so a failed or
+    /// inapplicable check must never be the thing that blocks the operation.</remarks>
+    private static bool IsElevated() {
+      if(_isLinux) {
+        return true;  // no UAC, and the SCM path does not apply there anyway
+      }
+      try {
+        using(var id = WindowsIdentity.GetCurrent()) {
+          return new WindowsPrincipal(id).IsInRole(WindowsBuiltInRole.Administrator);
+        }
+      }
+      catch(Exception ex) {
+        Log.Warning("IsElevated - {0}", ex.Message);
+        return true;
+      }
+    }
 
     private Mutex _singleInstance;
     private Thread _thread;
@@ -141,11 +177,19 @@ namespace X13 {
       if(!IsLinux) {
         int cpuCnt = System.Environment.ProcessorCount;
         if(cpuCnt > 1) {
-          int r = CSWindowsServiceRecoveryProperty.Win32.SetThreadAffinityMask(CSWindowsServiceRecoveryProperty.Win32.GetCurrentThread(), 1 << (cpuCnt - 1));
+          var mask = (UIntPtr)AffinityMask(cpuCnt, IntPtr.Size * 8);
+          if(CSWindowsServiceRecoveryProperty.Win32.SetThreadAffinityMask(CSWindowsServiceRecoveryProperty.Win32.GetCurrentThread(), mask) == UIntPtr.Zero) {
+            Log.Warning("SetThreadAffinityMask(0x{0:X}) failed - {1}", (ulong)mask, Marshal.GetLastWin32Error());
+          }
         }
       }
-      InitPlugins();
-      StartPlugins();
+      if(!InitPlugins() || !StartPlugins()) {
+        StopPlugins();
+        Log.Error("Fatal plugin startup failure, stopping server");
+        Log.Finish();
+        Environment.Exit(1);
+        return;
+      }
 
       _tickTimer = new Timer(Tick, null, 100, 15);  // Tick = 1000/64 = 15.625 mS
       int i;
@@ -209,6 +253,21 @@ namespace X13 {
       //sw.Stop();
       StopPlugins();
     }
+    /// <summary>Affinity mask selecting the last logical CPU.</summary>
+    /// <remarks>The shift must happen in 64-bit arithmetic: C# masks the shift count of an int
+    /// to 5 bits, so the old `1 &lt;&lt; (cpuCnt - 1)` silently produced 1 at 33 CPUs and
+    /// int.MinValue at 64. The bit index is clamped to the pointer width because a mask wider
+    /// than UIntPtr cannot be passed (and would throw on a 32-bit process).</remarks>
+    internal static ulong AffinityMask(int cpuCnt, int pointerBits) {
+      int bit = cpuCnt - 1;
+      if(bit < 0) {
+        bit = 0;
+      }
+      if(bit > pointerBits - 1) {
+        bit = pointerBits - 1;
+      }
+      return 1UL << bit;
+    }
     private void Tick(object o) {
       _tick.Set();
     }
@@ -237,6 +296,7 @@ namespace X13 {
     private IEnumerable<Lazy<IPlugModul, IPlugModulData>> _impModules;
 #pragma warning restore 649
     private IPlugModul[] _modules;
+    private readonly List<IPlugModul> _started = new List<IPlugModul>();
 
     private bool LoadPlugins() {
       string path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -255,7 +315,7 @@ namespace X13 {
       _impModules = _impModules.OrderBy(z => z.Metadata.priority).ToArray();
       return true;
     }
-    private void InitPlugins() {
+    private bool InitPlugins() {
       string pName;
       foreach(var i in _impModules) {
         if(!i.Value.enabled) {
@@ -268,11 +328,12 @@ namespace X13 {
         }
         catch(Exception ex) {
           Log.Error("Init plugin {0} failure - {1}", pName, ex.ToString());
-          //i.Value.enabled = false;
+          return false;
         }
       }
+      return true;
     }
-    private void StartPlugins() {
+    private bool StartPlugins() {
       string pName;
       foreach(var i in _impModules) {
         if(!i.Value.enabled) {
@@ -281,27 +342,27 @@ namespace X13 {
         pName = i.Metadata.name ?? i.Value.GetType().FullName;
         try {
           i.Value.Start();
+          _started.Add(i.Value);
           Log.Debug("plugin {0} Started", pName);
         }
-        //catch(ThreadAbortException) {
-        //  Log.Error("Start plugin {0} aborted", pName);
-        //}
         catch(Exception ex) {
           Log.Error("Start plugin {0} failure - {1}", pName, ex.ToString());
-          //i.Value.enabled = false;
+          return false;
         }
       }
-      _modules = _impModules.Where(z => z.Value.enabled).Select(z => z.Value).ToArray();
+      _modules = _started.ToArray();
+      return true;
     }
     private void StopPlugins() {
-      foreach(var i in _modules.Reverse()) {
+      for(int i = _started.Count - 1; i >= 0; i--) {
         try {
-          i.Stop();
+          _started[i].Stop();
         }
         catch(Exception ex) {
-          Log.Error("Stop plugin {0} failure - {1}", i.GetType().FullName, ex.ToString());
+          Log.Error("Stop plugin {0} failure - {1}", _started[i].GetType().FullName, ex.ToString());
         }
       }
+      _started.Clear();
     }
     #endregion Plugins
   }

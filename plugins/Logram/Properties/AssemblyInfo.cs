@@ -16,3 +16,8 @@ using System.Runtime.InteropServices;
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 [assembly: Guid("54a8f051-59cf-473e-919d-bee35808dfb1")]
+
+// Everything in this plugin is internal, so without this the test project could reference the
+// assembly and still see nothing - which is exactly why the LoVariable.Tick1 fix shipped with
+// no automated test. Same declaration Server/Properties/AssemblyInfo.cs carries.
+[assembly: InternalsVisibleTo("X13.Tests")]

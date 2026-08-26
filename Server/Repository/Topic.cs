@@ -81,10 +81,11 @@ namespace X13.Repository {
       switch (value.ValueType) {
       case JSValueType.Object:
         if (value.Value == null) return "Null";
-        if (value.Value is X13.ByteArray || value.Value is X13.ByteArray) return "ByteArray";
+        // IsByteArray covers both representations: the JSValue itself and its .Value
+        if (X13.ByteArray.IsByteArray(value, out _)) return "ByteArray";
         return "Object";
       case JSValueType.String: {
-          string text = value.As<string>();
+          string text = value.AsString(null);
           if (text != null && text.StartsWith("¤VR")) return "Version";
           return "String";
         }
@@ -132,6 +133,9 @@ namespace X13.Repository {
         throw new ArgumentException(this._path + ".Move(" + nParent._path + ", " + nName + ") FAILED");
       }
       if (!_parent._children.TryRemove(this._name, out tmp)) {
+        // undo the add, otherwise the topic stays reachable under both parents; the
+        // conditional remove makes sure a concurrent writer's entry is left alone
+        ((ICollection<KeyValuePair<string, Topic>>)nParent._children).Remove(new KeyValuePair<string, Topic>(nName, this));
         Log.Warning("{0}.Move({1}, {2}) remove FAILED", this._path, nParent._path, nName);
         return;
       }
@@ -157,10 +161,10 @@ namespace X13.Repository {
       SubRec sb;
       bool exist = true;
       if (_subRecords == null) {
-        lock (this._sync) {
+        lock (this._sync) {  // must be the same lock object as Topic.I.Subscribe uses
           if (_subRecords == null) {
             var srs = new List<SubRec>();
-            _subRecords = srs;  // PVS V3054. Potentially unsafe double-checked locking.
+            _subRecords = srs;  // _subRecords is volatile, so the publish is ordered
           }
         }
       }
@@ -188,15 +192,7 @@ namespace X13.Repository {
       return _state ?? JSValue.Null;
     }
     public void SetState(JSValue val, Topic prim = null) {
-      var c = Perform.Create(this, val, prim);
-      _repo.DoCmd(c, false);
-      if (val != null && val.ValueType == JSValueType.Date) {
-        string editor = JsLib.OfString(GetField("editor"), null);
-        if (string.IsNullOrWhiteSpace(editor)) {
-          c = Perform.Create(this, "editor", "Date", prim);
-          _repo.DoCmd(c, false);
-        }
-      }
+      _repo.DoCmd(Perform.Create(this, val, prim), false);
     }
 
     public JSValue GetField(string fPath) {
@@ -209,44 +205,47 @@ namespace X13.Repository {
       var ps = fPath.Split(Bill.delmiterObj, StringSplitOptions.RemoveEmptyEntries);
       JSValue val = _manifest;
       for (int i = 0; i < ps.Length; i++) {
-        if (val.ValueType != JSValueType.Object || val.Value == null) {
-          return JSValue.Undefined;
-        }
+        if (!val.IsObject()) return JSValue.Undefined;
         val = val.GetProperty(ps[i]);
       }
       return val;
     }
     public bool TrySetField(string fPath, JSValue value, Topic prim) {
-      if (string.IsNullOrEmpty(fPath)) {
-        return false;
-      }
-      var c = Perform.Create(this, fPath, value, prim);
-      _repo.DoCmd(c, false);
+      if (string.IsNullOrEmpty(fPath)) return false;
+      _repo.DoCmd(Perform.Create(this, fPath, value, prim), false);
       return true;
     }
     public void SetField(string fPath, JSValue value, Topic prim = null) {
-      if (!TrySetField(fPath, value, prim)) {
-        throw new ArgumentNullException("fPath");
-      }
+      if (!TrySetField(fPath, value, prim)) throw new ArgumentNullException("fPath");
     }
 
+    /// <summary>Reads the manifest's "attr" field; false when the manifest holds no usable value.</summary>
+    private bool TryGetAttr(out int attr) {
+      JSValue a;
+      if (!_manifest.IsObject() || !(a = _manifest["attr"]).IsNumber) {
+        attr = 0;
+        return false;
+      }
+      attr = (int)a;
+      return true;
+    }
     public bool CheckAttribute(Attribute mask, Attribute value = Attribute.None) {
       if (value == Attribute.None) {
         value = mask;
       }
-      JSValue attr;
-      if (_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
-        return false;
-      }
-      return ((int)attr & (int)mask) == (int)value;
+      int attr;
+      if (!TryGetAttr(out attr)) return false;
+      return (attr & (int)mask) == (int)value;
     }
     public void SetAttribute(Attribute value) {
-      JSValue attr;
-      if (_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
+      int old;
+      JSL.Number attr;
+      if (!TryGetAttr(out old)) {
         attr = new JSL.Number((int)value);
       } else {
-        int old = (int)attr;
-        if (value == Attribute.DB || value == Attribute.Config) {
+        // DB and Config are mutually exclusive; test the bit, not the whole value - real
+        // callers pass combined flags like Required|Readonly|Config
+        if ((value & Attribute.Saved) != Attribute.None) {
           old &= ~((int)Attribute.Saved);
         }
         attr = new JSL.Number((int)value | old);
@@ -255,11 +254,12 @@ namespace X13.Repository {
       _repo.DoCmd(c, false);
     }
     public void ClearAttribute(Attribute value) {
-      JSValue attr;
-      if (_manifest == null || _manifest.ValueType != JSValueType.Object || _manifest.Value == null || !(attr = _manifest["attr"]).IsNumber) {
+      int old;
+      JSL.Number attr;
+      if (!TryGetAttr(out old)) {
         attr = new JSL.Number((int)value);
       } else {
-        attr = new JSL.Number((int)attr & ~(int)value);
+        attr = new JSL.Number(old & ~(int)value);
       }
       var c = Perform.Create(this, "attr", attr, null);
       _repo.DoCmd(c, false);
@@ -290,16 +290,24 @@ namespace X13.Repository {
 
       private Topic _home;
       private bool _deep;
+      private bool _sorted;
 
-      public Bill(Topic home, bool deep) {
+      public Bill(Topic home, bool deep) : this(home, deep, true) {
+      }
+      /// <param name="sorted">false skips the per-node name ordering; only for callers that
+      /// do not care about order, e.g. Repo's remove cascade and subscribe fan-out.</param>
+      public Bill(Topic home, bool deep, bool sorted) {
         _home = home;
         _deep = deep;
+        _sorted = sorted;
       }
       public IEnumerator<Topic> GetEnumerator() {
         if (!_deep) {
           if (_home._children != null) {
-            foreach (var t in _home._children.OrderBy(z => z.Key)) {
-              yield return t.Value;
+            foreach (var t in _sorted ? _home._children.OrderBy(z => z.Key) : (IEnumerable<KeyValuePair<string, Topic>>)_home._children) {
+              if (!t.Value.disposed) {  // Remove() marks disposed at once, the unlink happens a tick later
+                yield return t.Value;
+              }
             }
           }
           yield break;
@@ -309,10 +317,14 @@ namespace X13.Repository {
           hist.Push(_home);
           do {
             cur = hist.Pop();
+            // _home is yielded even when disposed: Repo's remove cascade walks src.all and
+            // needs the just-removed topic itself to get its unlink Perform
             yield return cur;
             if (cur._children != null) {
-              foreach (var t in cur._children.OrderByDescending(z => z.Key)) {
-                hist.Push(t.Value);
+              foreach (var t in _sorted ? cur._children.OrderByDescending(z => z.Key) : (IEnumerable<KeyValuePair<string, Topic>>)cur._children) {
+                if (!t.Value.disposed) {  // a separately removed child cascades from its own Perform
+                  hist.Push(t.Value);
+                }
               }
             }
           } while (hist.Any());
@@ -361,7 +373,10 @@ namespace X13.Repository {
         }
         Topic next;
         if (path[0] == Bill.delmiter) {
-          if (path.StartsWith(home._path)) {
+          // the prefix must end on a real segment boundary, otherwise "/dev/light10/state"
+          // would resolve against home "/dev/light1" and address "0/state" under it
+          if (path.StartsWith(home._path)
+              && (home._path.Length == 1 || path.Length == home._path.Length || path[home._path.Length] == Bill.delmiter)) {
             path = path.Substring(home._path.Length);
           } else {
             home = Topic.root;
@@ -391,15 +406,17 @@ namespace X13.Repository {
           }
           if (next == null) {
             if (create) {
-              if (home._children.TryGetValue(pt[i], out next)) {
-                home = next;
-              } else {
-                next = new Topic(home, pt[i], fill);
-                home._children[pt[i]] = next;
+              // TryAdd decides the race: exactly one thread publishes its instance and emits
+              // the create Perform, the loser drops its candidate and takes the winner's
+              var candidate = new Topic(home, pt[i], fill);
+              if (home._children.TryAdd(pt[i], candidate)) {
+                next = candidate;
                 if (fill) {  // else the Perform(create) will be added in Fill()
                   var c = Perform.Create(next, Perform.E_Art.create, prim);
                   _repo.DoCmd(c, inter);
                 }
+              } else {
+                home._children.TryGetValue(pt[i], out next);
               }
             } else {
               return null;
@@ -467,7 +484,7 @@ namespace X13.Repository {
               sb = t._subRecords[i];
               if (((sb.mask & SubRec.SubMask.OnceOrAll) != SubRec.SubMask.None || ((sb.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children && sb.setTopic == t.parent))
                   && (cmd.Art != Perform.E_Art.changedState || (sb.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value)
-                  && (cmd.Art != Perform.E_Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals(JsLib.GetField(cmd.old_o as JSValue, sb.prefix ?? string.Empty), JsLib.GetField(t._manifest, sb.prefix ?? string.Empty))))
+                  && (cmd.Art != Perform.E_Art.changedField || ((sb.mask & SubRec.SubMask.Field) == SubRec.SubMask.Field && !object.ReferenceEquals((cmd.old_o as JSValue).Field(sb.prefix ?? string.Empty), t._manifest.Field(sb.prefix ?? string.Empty))))
                   ) {
                 try {
                   //Log.Debug("$ {0} <= {1}", sb.ToString(), cmd.ToString());
@@ -506,7 +523,17 @@ namespace X13.Repository {
       }
       public static void SubscribeByMove(Topic t) {
         if (t._subRecords != null) {
-          t._subRecords.RemoveAll(z => ((z.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children && z.setTopic != t) || (z.mask & SubRec.SubMask.All) == SubRec.SubMask.All);
+          lock (t._subRecords) {  // every other mutation of _subRecords is guarded the same way
+            // Only INHERITED records go, so SubscribeByCreation below can re-derive them from the
+            // new ancestors - hence the setTopic != t guard, which has to apply to both masks.
+            // It used to be missing on the All branch, which therefore also dropped the topic's
+            // OWN deep subscription; SubscribeByCreation walks t.parent upward and never restores
+            // that one, so a moved topic went permanently deaf - no move event, no create event
+            // for a new child, nothing. An open Logram document froze the moment its diagram, or
+            // any folder above it, was renamed.
+            t._subRecords.RemoveAll(z => z.setTopic != t
+              && (((z.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children) || ((z.mask & SubRec.SubMask.All) == SubRec.SubMask.All)));
+          }
         }
         SubscribeByCreation(t);
         if (t._children != null) {
@@ -519,7 +546,7 @@ namespace X13.Repository {
       public static void Subscribe(Topic t, SubRec sr) {
 
         if (t._subRecords == null) {
-          lock (t) {
+          lock (t._sync) {  // the instance Subscribe lazily creates the same field under _sync
             if (t._subRecords == null) {
               t._subRecords = new List<SubRec>();
             }

@@ -1,199 +1,55 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{B405DEF9-326F-4B01-B5FA-584CE7B5A513}</ProjectGuid>
     <OutputType>WinExe</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <TargetFramework>net48</TargetFramework>
     <RootNamespace>X13</RootNamespace>
     <AssemblyName>enviriot</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <TargetFrameworkProfile />
-    <PublishUrl>publish\</PublishUrl>
-    <Install>true</Install>
-    <InstallFrom>Disk</InstallFrom>
-    <UpdateEnabled>false</UpdateEnabled>
-    <UpdateMode>Foreground</UpdateMode>
-    <UpdateInterval>7</UpdateInterval>
-    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
-    <UpdatePeriodically>false</UpdatePeriodically>
-    <UpdateRequired>false</UpdateRequired>
-    <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>0</ApplicationRevision>
-    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
-    <IsWebBootstrapper>false</IsWebBootstrapper>
-    <UseApplicationTrust>false</UseApplicationTrust>
-    <BootstrapperEnabled>true</BootstrapperEnabled>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>..\Output\bin_d\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-    <RunCodeAnalysis>false</RunCodeAnalysis>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>..\Output\bin_r\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup>
     <StartupObject>X13.Program</StartupObject>
-  </PropertyGroup>
-  <PropertyGroup />
-  <PropertyGroup />
-  <PropertyGroup />
-  <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>logo48.ico</ApplicationIcon>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <OutputPath>..\Output\bin_d\</OutputPath>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <OutputPath>..\Output\bin_r\</OutputPath>
+    <DebugType>pdbonly</DebugType>
+  </PropertyGroup>
+
+  <!-- Was $(SolutionDir)VersionUpdate.exe $(ProjectDir): $(SolutionDir) is only defined when
+       MSBuild is handed the .sln, and $(ProjectDir) is not populated until the SDK's targets
+       are imported - i.e. after this body is evaluated - so both come from the reserved
+       property now. Unquoted on purpose: VersionUpdate.exe rejects a path without the
+       trailing separator, and a quoted trailing backslash would escape the quote for cmd. -->
   <PropertyGroup>
-    <ApplicationIcon>logo32.ico</ApplicationIcon>
+    <PreBuildEvent>$(MSBuildProjectDirectory)\..\VersionUpdate.exe $(MSBuildProjectDirectory)\ $(Configuration)</PreBuildEvent>
   </PropertyGroup>
+
+  <!-- base.xst is the repository seed PersistentStorage pulls out of this assembly by
+       manifest name ("X13.Repository.base.xst") when it starts against an empty database.
+       The SDK's default globs file an unknown extension under None, so naming it here is
+       what keeps it embedded - and the failure would only show up on a fresh install. -->
   <ItemGroup>
-    <Reference Include="NiL.JS, Version=2.6.1722.0, Culture=neutral, PublicKeyToken=fa941a7c2a4de689, processorArchitecture=MSIL">
-      <HintPath>..\packages\NiL.JS.2.6.1722\lib\net48\NiL.JS.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
+    <EmbeddedResource Include="Repository\base.xst" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NiL.JS" Version="2.6.1722" />
+  </ItemGroup>
+
+  <!-- Framework assemblies outside the set the SDK references implicitly for net48. -->
+  <ItemGroup>
     <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="System.Configuration.Install" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Management" />
-    <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
+    <Reference Include="System.Management" />
     <Reference Include="System.ServiceProcess" />
-    <Reference Include="System.Xml" />
-    <Reference Include="websocket-sharp, Version=1.0.2.59611, Culture=neutral, PublicKeyToken=5660b08a1845a91e, processorArchitecture=MSIL">
-      <HintPath>..\packages\WebSocketSharp.1.0.3-rc11\lib\websocket-sharp.dll</HintPath>
-    </Reference>
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="EsBroker\EsMessage.cs" />
-    <Compile Include="EsBroker\EsConnection.cs" />
-    <Compile Include="EsBroker\EsBrokerPl.cs" />
-    <Compile Include="EsBroker\EsSocketTCP.cs" />
-    <Compile Include="EsBroker\IEsSocket.cs" />
-    <Compile Include="IPlugModul.cs" />
-    <Compile Include="JsExtLib.cs" />
-    <Compile Include="JsLib.cs" />
-    <Compile Include="Repository\Perform.cs" />
-    <Compile Include="Repository\Repo.cs" />
-    <Compile Include="Repository\RPC.cs" />
-    <Compile Include="Repository\SubRec.cs" />
-    <Compile Include="Repository\Topic.cs" />
-    <Compile Include="HAServer.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Include="HAServer.Designer.cs">
-      <DependentUpon>HAServer.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Log.cs" />
-    <Compile Include="Program.cs" />
-    <Compile Include="Svc\ProjectInstaller.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Include="Svc\ProjectInstaller.Designer.cs">
-      <DependentUpon>ProjectInstaller.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Properties\VersionInfo.cs" />
-    <Compile Include="Svc\ServiceRecoveryProperty.cs" />
-    <Compile Include="Svc\Win32.cs" />
-    <Compile Include="WebUI\Host\Protocol.cs" />
-    <Compile Include="WebUI\Helpers\VidHelper.cs" />
-    <Compile Include="WebUI\Host\ViewSession.cs" />
-    <Compile Include="WebUI\Host\LogHandler.cs" />
-    <Compile Include="WebUI\Host\LogramWireRouter.cs" />
-    <Compile Include="WebUI\Host\LogramGraphController.cs" />
-    <Compile Include="WebUI\Host\LogramViewProvider.cs" />
-    <Compile Include="WebUI\Host\LogramPaletteBuilder.cs" />
-    <Compile Include="WebUI\Host\WorkspaceViewProvider.cs" />
-    <Compile Include="WebUI\Host\TopicTreeController.cs" />
-    <Compile Include="WebUI\Host\InspectorChildrenViewProvider.cs" />
-    <Compile Include="WebUI\Host\JsonTreeRowHelpers.cs" />
-    <Compile Include="WebUI\Host\StateTreeController.cs" />
-    <Compile Include="WebUI\Host\InspectorStateViewProvider.cs" />
-    <Compile Include="WebUI\Host\StateRpcDispatcher.cs" />
-    <Compile Include="WebUI\Host\ManifestTreeController.cs" />
-    <Compile Include="WebUI\Host\InspectorManifestViewProvider.cs" />
-    <Compile Include="WebUI\Host\ManifestRpcDispatcher.cs" />
-    <Compile Include="WebUI\Host\WorkspaceMenuBuilder.cs" />
-    <Compile Include="WebUI\Host\WorkspaceRpcDispatcher.cs" />
-    <Compile Include="WebUI\Host\WorkspaceRowProjector.cs" />
-    <Compile Include="WebUI\Host\WorkspaceExpansionTracker.cs" />
-    <Compile Include="WebUI\Host\CatalogViewProvider.cs" />
-    <Compile Include="WebUI\Helpers\EditorHelper.cs" />
-    <Compile Include="WebUI\Helpers\EnumHelper.cs" />
-    <Compile Include="WebUI\Host\IconResource.cs" />
-    <Compile Include="WebUI\Helpers\TopicDisplayValueFormatter.cs" />
-    <Compile Include="WebUI\Helpers\TypeHelper.cs" />
-    <Compile Include="WebUI\WebUiHost.cs" />
-    <Compile Include="WebUI\WebUiPl.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="app.config" />
-    <None Include="app.manifest" />
-    <EmbeddedResource Include="Repository\base.xst" />
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="HAServer.resx">
-      <DependentUpon>HAServer.cs</DependentUpon>
-      <SubType>Designer</SubType>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Svc\ProjectInstaller.resx">
-      <DependentUpon>ProjectInstaller.cs</DependentUpon>
-      <SubType>Designer</SubType>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="logo32.ico" />
-  </ItemGroup>
-  <ItemGroup>
-    <BootstrapperPackage Include=".NETFramework,Version=v4.0">
-      <Visible>False</Visible>
-      <ProductName>Microsoft .NET Framework 4 %28x86 and x64%29</ProductName>
-      <Install>true</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
-      <Visible>False</Visible>
-      <ProductName>.NET Framework 3.5 SP1 Client Profile</ProductName>
-      <Install>false</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
-      <Visible>False</Visible>
-      <ProductName>.NET Framework 3.5 SP1</ProductName>
-      <Install>false</Install>
-    </BootstrapperPackage>
-    <BootstrapperPackage Include="Microsoft.Windows.Installer.4.5">
-      <Visible>False</Visible>
-      <ProductName>Windows Installer 4.5</ProductName>
-      <Install>true</Install>
-    </BootstrapperPackage>
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <PropertyGroup>
-    <PreBuildEvent>$(SolutionDir)VersionUpdate.exe $(ProjectDir) $(ConfigurationName)</PreBuildEvent>
-  </PropertyGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+
 </Project>

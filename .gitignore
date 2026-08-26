@@ -4,12 +4,9 @@
 
 .vs/
 /Output/*
-!/Output/WebUI
-!/Output/WebUI/**
 !/Output/www
 !/Output/www/**
 bin/
 obj/
 /packages
 *.csproj.user
-/*.bat
