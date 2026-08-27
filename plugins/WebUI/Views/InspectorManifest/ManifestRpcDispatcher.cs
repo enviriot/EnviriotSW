@@ -16,23 +16,15 @@ namespace X13.WebUI {
       try {
         if(cmd == "delete") return ExecuteDelete(rootTopic, fieldPath, prim);
         if(cmd != null && cmd.StartsWith("add:", StringComparison.Ordinal)) return ExecuteAdd(rootTopic, fieldPath, cmd.Substring(4), args, prim);
-        if(cmd != null && cmd.StartsWith("action:", StringComparison.Ordinal)) return ExecuteAction(rootTopic, cmd.Substring(7));
+        // Root topic, not the field row - see StateRpcDispatcher for the rationale. Both panes and
+        // the tree now go through one implementation, so an action behaves the same wherever it
+        // was invoked from.
+        if(cmd != null && cmd.StartsWith("action:", StringComparison.Ordinal)) return TopicRpcDispatcher.ExecuteAction(rootTopic, cmd.Substring(7), args);
       }
       catch(Exception ex) {
         return ViewOpResult.Error("rpc_execution_failed", ex.Message);
       }
       return ViewOpResult.Error("rpc_command_unknown", "Unknown RPC command: " + cmd);
-    }
-
-    // See StateRpcDispatcher.ExecuteAction - same rationale, duplicated rather than
-    // shared because the two dispatchers otherwise share no Execute-level code path.
-    private static ViewOpResult ExecuteAction(Topic rootTopic, string actionName) {
-      JSC.JSValue action;
-      if(string.IsNullOrWhiteSpace(actionName) || !MenuBuilder.ResolveActionDescriptor(rootTopic, actionName, out action)) {
-        return ViewOpResult.Error("action_not_found", "Action not found: " + (actionName ?? "<null>"));
-      }
-      RPC.Call(actionName, new JSC.JSValue[] { new NiL.JS.BaseLibrary.String(rootTopic.path) });
-      return ViewOpResult.Success();
     }
 
     private static ViewOpResult ExecuteDelete(Topic rootTopic, string fieldPath, Topic prim) {

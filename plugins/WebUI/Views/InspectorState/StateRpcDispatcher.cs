@@ -14,25 +14,16 @@ namespace X13.WebUI {
       try {
         if(cmd == "delete") return ExecuteDelete(rootTopic, fieldPath, prim);
         if(cmd != null && cmd.StartsWith("add:", StringComparison.Ordinal)) return ExecuteAdd(rootTopic, fieldPath, cmd.Substring(4), args, prim);
-        if(cmd != null && cmd.StartsWith("action:", StringComparison.Ordinal)) return ExecuteAction(rootTopic, cmd.Substring(7));
+        // Always the document's own root topic, never the field row that hosts the button -
+        // mirrors ES's veDevicePLC.xaml.cs, which calls _stateT.Call(name, _stateT.path) where
+        // _stateT is the InValue's owning topic. Shared with the tree dispatcher so the rule about
+        // what reaches a handler cannot differ between the panes an action is invoked from.
+        if(cmd != null && cmd.StartsWith("action:", StringComparison.Ordinal)) return TopicRpcDispatcher.ExecuteAction(rootTopic, cmd.Substring(7), args);
       }
       catch(Exception ex) {
         return ViewOpResult.Error("rpc_execution_failed", ex.Message);
       }
       return ViewOpResult.Error("rpc_command_unknown", "Unknown RPC command: " + cmd);
-    }
-
-    // Inline action buttons (e.g. DevicePLC's Build/Run/Start/Stop) always target
-    // the document's own root topic regardless of which field row hosts the
-    // editor - mirrors ES's veDevicePLC.xaml.cs, which calls _stateT.Call(name,
-    // _stateT.path) where _stateT is the InValue's owning topic, not the row.
-    private static ViewOpResult ExecuteAction(Topic rootTopic, string actionName) {
-      JSC.JSValue action;
-      if(string.IsNullOrWhiteSpace(actionName) || !MenuBuilder.ResolveActionDescriptor(rootTopic, actionName, out action)) {
-        return ViewOpResult.Error("action_not_found", "Action not found: " + (actionName ?? "<null>"));
-      }
-      RPC.Call(actionName, new JSC.JSValue[] { new NiL.JS.BaseLibrary.String(rootTopic.path) });
-      return ViewOpResult.Success();
     }
 
     private static ViewOpResult ExecuteDelete(Topic rootTopic, string fieldPath, Topic prim) {

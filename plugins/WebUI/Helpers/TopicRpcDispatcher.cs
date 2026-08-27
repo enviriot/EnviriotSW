@@ -13,7 +13,7 @@ namespace X13.WebUI {
         if(cmd == "delete") return ExecuteDelete(topic, prim);
         if(cmd == "rename") return ExecuteRename(topic, args, prim);
         if(cmd == "paste") return ExecutePaste(topic, args, prim);
-        if(cmd != null && cmd.StartsWith("action:", StringComparison.Ordinal)) return ExecuteAction(topic, cmd.Substring(7));
+        if(cmd != null && cmd.StartsWith("action:", StringComparison.Ordinal)) return ExecuteAction(topic, cmd.Substring(7), args);
         if(cmd != null && cmd.StartsWith("add:", StringComparison.Ordinal)) return ExecuteAdd(topic, cmd.Substring(4), args, prim);
       }
       catch(Exception ex) {
@@ -101,7 +101,20 @@ namespace X13.WebUI {
       return ViewOpResult.Success();
     }
 
-    private static ViewOpResult ExecuteAction(Topic topic, string actionName) {
+    /// <summary>Runs an action the topic declares, and reports what it answered.</summary>
+    /// <remarks>Shared by all three dispatchers - the topic tree, the Inspector State pane and the
+    /// Inspector Manifest pane - so the same action cannot behave differently depending on which of
+    /// them invoked it. It used to be copied into each, and the copies drifted the moment an action
+    /// gained an answer: two of them went on reporting a fabricated ok.
+    /// <para>The declaration is the permission: only a name the topic (or its type) lists under
+    /// "Action" can be reached this way, so a client cannot invoke a registered handler that was
+    /// never offered to it. What the handler then does is its own business - this knows nothing
+    /// about any plugin, which is the whole point of routing through a declared name.</para>
+    /// <para>args is appended only when the caller supplied some. Handlers written against the
+    /// original one-argument shape check their arity - MQTT_SN's PlcBuildRpc and friends return
+    /// silently on anything but Length == 1 - so passing an unasked-for second element would make
+    /// those actions stop working while still reporting success.</para></remarks>
+    internal static ViewOpResult ExecuteAction(Topic topic, string actionName, JSC.JSValue args) {
       if(topic == null) {
         return ViewOpResult.Error("action_target_invalid", "Action target is invalid");
       }
@@ -109,8 +122,10 @@ namespace X13.WebUI {
       if(string.IsNullOrWhiteSpace(actionName) || !MenuBuilder.ResolveActionDescriptor(topic, actionName, out action)) {
         return ViewOpResult.Error("action_not_found", "Action not found: " + (actionName ?? "<null>"));
       }
-      RPC.Call(actionName, new JSC.JSValue[] { new JSL.String(topic.path) });
-      return ViewOpResult.Success();
+      JSC.JSValue[] rpcArgs = args != null && args.Defined
+        ? new JSC.JSValue[] { new JSL.String(topic.path), args }
+        : new JSC.JSValue[] { new JSL.String(topic.path) };
+      return PendingRpc.Begin(actionName, rpcArgs);
     }
 
     private static ViewOpResult ExecuteAdd(Topic topic, string key, JSC.JSValue args, Topic prim) {

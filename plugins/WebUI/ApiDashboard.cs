@@ -4,15 +4,18 @@ using System.Collections.Generic;
 using System.Net;
 using X13.Repository;
 using X13.WebUI.Helpers;
+using JSC = NiL.JS.Core;
 
 namespace X13.WebUI {
   // The dashboard protocol: tab separated text frames, carried over /api/dashboard.
   //
   //   in   P <path> <json>   publish; a json of "null" or empty removes the topic
   //        S <path>          subscribe; trailing /+ is children, trailing /# is the subtree
+  //        A <cid> <path> <action> [<json>]  invoke an action the topic declares
   //        C <user> <pass>   log on - refused, authentication is not implemented
   //   out  I <sid> <auth> <token>   handshake; token is what /api/archivist checks
   //        P <path> <json>   a value the client is subscribed to
+  //        A <cid> <json>    what that action answered: {"ok":true,"data":..} or {"ok":false,"error":..}
   //        C false           logon refused
   //
   // Split from the transport the same way ViewSession is: the WebSocketBehavior in WebUiHost
@@ -76,6 +79,9 @@ namespace X13.WebUI {
       case "S":
         if(sa.Length == 2) HandleSubscribe(sa[1]);
         break;
+      case "A":
+        if(sa.Length >= 4) HandleAction(sa[1], sa[2], sa[3], sa.Length > 4 ? sa[4] : null);
+        break;
       }
     }
 
@@ -102,6 +108,72 @@ namespace X13.WebUI {
       } else {
         Topic.root.Get(path, true, owner).SetState(JsLib.ParseJson(json), owner);
       }
+    }
+
+
+    /// <summary>Invokes an action the topic declares, and answers with what it reported.</summary>
+    /// <remarks>Two gates, and neither is new: the topic's manifest has to list the action -
+    /// TopicRpcDispatcher.ExecuteAction decides that, the same way it does for the IDE - and
+    /// CanWrite has to allow the topic. CanWrite rather than CanRead because invoking an action is
+    /// asking for a change, so it belongs behind the same declaration that lets this client publish
+    /// there at all. A dashboard page therefore reaches exactly what its own topics offer it.
+    /// <para>Unlike P and S, a refusal is answered instead of merely logged: the caller is holding
+    /// a promise, and silence would leave it pending for as long as the page is open. The ACL is
+    /// checked before the topic is looked up, so a client without rights cannot learn from the
+    /// answer whether the path exists.</para></remarks>
+    private void HandleAction(string cid, string path, string action, string argsJson) {
+      // No correlation id, nowhere to send the answer - and an action whose outcome cannot be
+      // reported is exactly what this whole frame exists to avoid.
+      if(string.IsNullOrEmpty(cid)) {
+        Log.Warning("dashboard {0}.action({1}) - no correlation id", _client.ip, path);
+        return;
+      }
+      if(string.IsNullOrEmpty(path) || !DashboardAcl.CanWrite(_client.ip, path)) {
+        Log.Warning("dashboard {0}.action({1}, {2}) - forbidden", _client.ip, path, action);
+        SendActionResult(cid, ViewOpResult.Error("action_forbidden", "Action is not allowed here"));
+        return;
+      }
+      Topic topic = Topic.root.Get(path, false);
+      if(topic == null) {
+        SendActionResult(cid, ViewOpResult.Error("topic_not_found", "Topic not found: " + path));
+        return;
+      }
+      JSC.JSValue args = JSC.JSValue.Undefined;
+      if(!string.IsNullOrEmpty(argsJson)) {
+        try {
+          args = JsLib.ParseJson(argsJson);
+        }
+        catch(Exception ex) {
+          SendActionResult(cid, ViewOpResult.Error("bad_json", ex.Message));
+          return;
+        }
+      }
+      _client.EnsureOwner();
+
+      ViewOpResult result = TopicRpcDispatcher.ExecuteAction(topic, action, args);
+      if(result != null && result.Continuation != null) {
+        // Same shape as ViewSession.HandleRpc: the plugin may answer from its own thread, and
+        // everything this session sends has to leave from the engine thread.
+        result.Continuation(final => _post(Label("action " + action), () => SendActionResult(cid, final)));
+        return;
+      }
+      SendActionResult(cid, result);
+    }
+
+    private void SendActionResult(string cid, ViewOpResult result) {
+      if(_disposed) return;
+      bool ok = result != null && result.Ok;
+      JSC.JSObject dto = JSC.JSObject.CreateObject();
+      dto["ok"] = ok;
+      if(ok) {
+        if(result.Data != null && result.Data.Defined) dto["data"] = result.Data;
+      } else {
+        dto["error"] = result == null ? "action_failed" : (result.ErrorCode ?? "action_failed");
+        dto["message"] = result == null ? "Action failed" : (result.ErrorMessage ?? "Action failed");
+      }
+      string json = JsLib.Stringify(dto);
+      _send(string.Concat("A\t", cid, "\t", json));
+      if(_verbose()) Log.Debug("dashboard.snd(A {0}, {1})", cid, json);
     }
 
     private void HandleSubscribe(string path) {

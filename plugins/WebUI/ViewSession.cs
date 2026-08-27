@@ -265,18 +265,45 @@ namespace X13.WebUI {
       _send(inspectorResponse);
     }
 
+    /// <summary>Runs one view command, answering now or later depending on what it returns.</summary>
+    /// <remarks>An action declared on a topic reaches a plugin, and a plugin's work does not have
+    /// to fit inside this call - a device round trip does not. So ExecuteRpc may answer with a
+    /// Pending result, and the response is assembled when the continuation fires, the same way
+    /// HandleLog assembles resp.log. Exactly one answer is guaranteed upstream: RPC.Call passes on
+    /// only the first, and PendingRpc supplies one on a deadline if the plugin never does.</remarks>
     public void HandleRpc(JSC.JSValue request) {
       string vid = request.AsString("vid", null);
       string cmd = request.AsString("cmd", null);
       ViewOpResult result = Run(request, vid, "view_rpc_failed", "View RPC failed", p => p.ExecuteRpc(vid, cmd, request.Field("args")));
       if(result == null) return;
 
+      if(result.Continuation != null) {
+        // Through Post even when the plugin answers inline: a handler is free to reply from its
+        // own worker thread, and everything this session sends has to leave from the engine
+        // thread. Paying one queue hop on the inline path is the price of not having two.
+        result.Continuation(final => Post("resp.rpc " + (cmd ?? "<null>"), () => SendRpcResult(request, final)));
+        return;
+      }
+      SendRpcResult(request, result);
+    }
+
+    // Reached from the pump for a deferred answer, so _disposed is live again here - the tab can
+    // close while a plugin is still working, and Dispose does not cancel what is already queued.
+    private void SendRpcResult(JSC.JSValue request, ViewOpResult result) {
+      if(_disposed) return;
+      if(result == null || !result.Ok) {
+        _send(Error(request,
+          result == null ? "view_rpc_failed" : (result.ErrorCode ?? "view_rpc_failed"),
+          result == null ? "View RPC failed" : (result.ErrorMessage ?? "View RPC failed")));
+        return;
+      }
+
       JSC.JSObject response = ResponseBase(request, ViewMessageTypes.RespRpc, true);
       if(result.Data != null && result.Data.Defined) response["data"] = result.Data;
       _send(response);
     }
 
-    // The only handler that answers from a callback rather than by returning: the LiteDB scan
+    // Answers from a callback rather than by returning, as HandleRpc's deferred path does: the LiteDB scan
     // behind req.log runs on lane B, so resp.log is assembled once it comes back. Validation
     // failures still answer inline, and BeginHistory guarantees exactly one call on the engine
     // thread - the client has no timeout, so an unanswered req.log would hang its promise for

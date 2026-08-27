@@ -8,8 +8,33 @@ window.wsBond = {
       wsBond.f.processInpPublish(path, val);
     }
   },
+  // Invokes an action the topic declares in its "Action" manifest entry, and resolves with what
+  // the plugin answered - which may be a device round trip away, so this is a promise and not a
+  // send. The cid is what pairs an answer with its call: the protocol carries no other
+  // correlator, and two identical invocations are indistinguishable by content alone.
+  action: function (path, name, args) {
+    return new Promise(function (resolve, reject) {
+      let ws = wsBond.ws;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        reject(new Error("not connected"));
+        return;
+      }
+      let cid = String(++wsBond.f.cid);
+      wsBond.f.pending[cid] = { resolve: resolve, reject: reject };
+      let frame = 'A\t' + cid + '\t' + path + '\t' + name;
+      if (args !== undefined) {
+        frame += '\t' + JSON.stringify(args);
+      }
+      ws.send(frame);
+    });
+  },
   f: {
     subscribes: {},
+    // Outstanding action calls, by correlation id. The server answers every one of them - it
+    // keeps a deadline for a plugin that never does - but a socket that dies takes the answer
+    // with it, and that is what rejectPending is for.
+    cid: 0,
+    pending: {},
     converters: {
       "format": class {
         constructor(fmt) { 
@@ -105,11 +130,43 @@ window.wsBond = {
         }
       }
     },
+    settle: function (cid, json) {
+      let p = wsBond.f.pending[cid];
+      if (!p) {
+        return;  // an answer to a call a reconnect has already rejected
+      }
+      delete wsBond.f.pending[cid];
+      let r;
+      try {
+        r = JSON.parse(json);
+      } catch (e) {
+        p.reject(new Error("malformed answer: " + json));
+        return;
+      }
+      if (r && r.ok) {
+        p.resolve(r.data);
+      } else {
+        p.reject(new Error((r && (r.message || r.error)) || "action failed"));
+      }
+    },
+    rejectPending: function (reason) {
+      let all = wsBond.f.pending;
+      wsBond.f.pending = {};
+      for (let cid in all) {
+        try {
+          all[cid].reject(new Error(reason));
+        } catch (e) {
+          console.error("rejectPending(" + cid + ") - " + e);
+        }
+      }
+    },
     onMessage: function (evt) {
       console.log(evt.data);
       let sa = evt.data.split('\t');
       if (sa[0] == "P" && sa.length > 2 && sa[2]) {
         wsBond.f.processInpPublish(sa[1], JSON.parse(sa[2]));
+      } else if (sa[0] == 'A' && sa.length > 2) {
+        wsBond.f.settle(sa[1], sa[2]);
       } else if (sa[0] == 'I' && sa.length >= 3) {
         document.cookie = 'sessionId=' + sa[1];
         // Fourth field is the token /api/archivist checks; it is per-connection and dies with it.
@@ -138,8 +195,8 @@ window.wsBond = {
         wsBond.ws = new WebSocket((window.location.protocol == "https:" ? "wss://" : "ws://") + window.location.host + "/api/dashboard");
         wsBond.ws.onopen = function (evt) {
           wsBond.ws.onmessage = wsBond.f.onMessage;
-          wsBond.ws.onclose = function (evt) { setTimeout(wsBond.f.createWS, 1500); };
-          wsBond.ws.onerror = function (evt) { setTimeout(wsBond.f.createWS, 1500); };
+          wsBond.ws.onclose = function (evt) { wsBond.f.rejectPending('disconnected'); setTimeout(wsBond.f.createWS, 1500); };
+          wsBond.ws.onerror = function (evt) { wsBond.f.rejectPending('disconnected'); setTimeout(wsBond.f.createWS, 1500); };
         };
         setTimeout(wsBond.f.createWS, 15000);
       }

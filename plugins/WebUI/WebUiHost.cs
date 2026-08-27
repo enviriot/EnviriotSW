@@ -681,6 +681,10 @@ namespace X13.WebUI {
           X13.Log.Error("WebUI pump: {0} failed - {1}", item.What ?? "<unlabelled>", ex.ToString());
         }
       }
+      // After the queue rather than before it: an answer that arrived during this pass is
+      // delivered by the work item that carries it, and only what is still outstanding after
+      // that has any business being timed out.
+      PendingRpc.Sweep();
     }
 
     /// <summary>Transport for the dashboard protocol; DashboardSession holds the protocol.</summary>
