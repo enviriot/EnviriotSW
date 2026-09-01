@@ -73,7 +73,7 @@ namespace X13.WebUI {
       }
       if(path == "/api/dashboard" || path == "/api/archivist") return false;
       // Static files: the IDE's own are the ones whose first segment starts with "ide" -
-      // ide.html, ide_app.js, ide_components/, ide_editors/, ide_icons/, ide_services/.
+      // ide.html and the ide/ tree (app.css, components/, editors/, icons/, services/).
       string relative = path.TrimStart('/');
       int slash = relative.IndexOf('/');
       string first = slash < 0 ? relative : relative.Substring(0, slash);

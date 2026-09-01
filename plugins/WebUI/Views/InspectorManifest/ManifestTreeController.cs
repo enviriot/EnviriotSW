@@ -74,7 +74,7 @@ namespace X13.WebUI {
         Kind = MenuItemKind.Item,
         Cmd = "delete",
         Text = "Delete",
-        Icon = "/ide_icons/cm_delete.png",
+        Icon = "/ide/icons/cm_delete.png",
         Enabled = !string.IsNullOrEmpty(fieldPath) && !isRequired,
         Willful = false,
       });
@@ -187,7 +187,7 @@ namespace X13.WebUI {
         // always resolves to Default/generic-object - no per-topic customization point at the
         // root, unlike State's root (which IS the topic).
         resolvedEditor = "Default";
-        icon = "/ide_icons/ty_obj.png";
+        icon = "/ide/icons/ty_obj.png";
         readonlyFlag = false;
       } else {
         string editor = JsonTreeRowHelpers.ResolveEditorName(schema, value);

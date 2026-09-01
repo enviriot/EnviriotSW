@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
 
 export class X13EditorSelector extends LitElement {
   static properties = {

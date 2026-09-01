@@ -1,5 +1,5 @@
 import { X13TreeDocumentBase, treeHeaderStyles } from './tree-view-shared.js';
-import { isDescendant } from '../ide_services/vid-helper.js';
+import { isDescendant } from '../services/vid-helper.js';
 
 const NAME_WIDTH_KEY = 'x13.workspace.nameWidth';
 const EXPANDED_KEY = 'x13.workspace.expanded';

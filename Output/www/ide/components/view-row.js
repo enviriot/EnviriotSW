@@ -1,6 +1,6 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
-import '../ide_editors/editor-host.js';
-import { getView } from '../ide_services/vid-helper.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
+import '../editors/editor-host.js';
+import { getView } from '../services/vid-helper.js';
 
 // Rows from the Inspector's State/Manifest trees get the editor host's "value" view
 // (multi-line-capable String/JS editors that auto-grow up to 70vh - see
@@ -155,7 +155,7 @@ export class X13ViewRow extends LitElement {
 
   render() {
     const row = this.row || {};
-    const icon = row.icon || '/ide_icons/ty_topic.png';
+    const icon = row.icon || '/ide/icons/ty_topic.png';
     const indentWidth = Math.max(0, Number(row.level) || 0) * 7;
     const isRoot = (Number(row.level) || 0) === 0;
     const editorView = resolveEditorView(row);
@@ -260,8 +260,8 @@ export class X13ViewRow extends LitElement {
   }
 
   #iconError(e) {
-    if(e.currentTarget.src.endsWith('/ide_icons/ty_topic.png')) return;
-    e.currentTarget.src = '/ide_icons/ty_topic.png';
+    if(e.currentTarget.src.endsWith('/ide/icons/ty_topic.png')) return;
+    e.currentTarget.src = '/ide/icons/ty_topic.png';
   }
 }
 

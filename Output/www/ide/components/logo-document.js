@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
 
 export class X13LogoDocument extends LitElement {
   static properties = {
@@ -40,7 +40,7 @@ export class X13LogoDocument extends LitElement {
     return html`
       <div class="segment-wheel">
         ${[0, 1, 2, 3, 4, 5].map((i) => html`
-          <img src="/ide_icons/segment.svg" style="transform: rotate(${360 - i * 60}deg)" class=${i < this.revealedSegments ? 'visible' : ''}>
+          <img src="/ide/icons/segment.svg" style="transform: rotate(${360 - i * 60}deg)" class=${i < this.revealedSegments ? 'visible' : ''}>
         `)}
       </div>`;
   }

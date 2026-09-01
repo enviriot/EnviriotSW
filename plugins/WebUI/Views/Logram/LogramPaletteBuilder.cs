@@ -105,7 +105,7 @@ namespace X13.WebUI {
         Kind = MenuItemKind.Item,
         Cmd = "delete",
         Text = "Delete",
-        Icon = "/ide_icons/cm_delete.png",
+        Icon = "/ide/icons/cm_delete.png",
         Hint = "Delete element",
         Enabled = canDelete,
         Willful = false,
@@ -126,7 +126,7 @@ namespace X13.WebUI {
     // skipped).
     internal static List<MenuItemDto> BuildPinMenu(Topic topic) {
       List<MenuItemDto> items = new List<MenuItemDto>();
-      items.Add(new MenuItemDto() { Kind = MenuItemKind.Item, Cmd = "open", Text = "Open", Icon = "/ide_icons/cm_open.png", Hint = "Open pin in Inspector", Enabled = true, Willful = false });
+      items.Add(new MenuItemDto() { Kind = MenuItemKind.Item, Cmd = "open", Text = "Open", Icon = "/ide/icons/cm_open.png", Hint = "Open pin in Inspector", Enabled = true, Willful = false });
       items.Add(new MenuItemDto() { Kind = MenuItemKind.Item, Cmd = "show-in-workspace", Text = "Show in Workspace", Hint = "Reveal pin in the Workspace tree", Enabled = true, Willful = false });
       items.Add(new MenuItemDto() { Kind = MenuItemKind.Separator, Enabled = true });
 
@@ -138,7 +138,7 @@ namespace X13.WebUI {
         Kind = MenuItemKind.Item,
         Cmd = "delete",
         Text = "Delete",
-        Icon = "/ide_icons/cm_delete.png",
+        Icon = "/ide/icons/cm_delete.png",
         Hint = "Delete pin",
         Enabled = !topic.CheckAttribute(Topic.Attribute.Required),
         Willful = false,

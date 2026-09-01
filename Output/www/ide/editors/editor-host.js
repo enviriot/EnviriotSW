@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
 import { DEFAULT_EDITOR_TAG, editorTagFor, normalizeEditorView, registeredEditorNames } from './editor-registry.js';
 
 export class X13EditorHost extends LitElement {

@@ -1,4 +1,4 @@
-import { LitElement, html, css, repeat } from '../lib/lit-all.min.js';
+import { LitElement, html, css, repeat } from '../../lib/lit-all.min.js';
 
 export class X13CatalogDocument extends LitElement {
   static properties = {

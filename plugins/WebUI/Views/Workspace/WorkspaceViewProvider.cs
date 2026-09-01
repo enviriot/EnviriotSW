@@ -15,7 +15,7 @@ namespace X13.WebUI {
     }
 
     // No Icon: this row names no topic to resolve one from, and the default an iconless row
-    // draws is the client's call (view-row.js `row.icon || '/ide_icons/ty_topic.png'`). Naming
+    // draws is the client's call (view-row.js `row.icon || '/ide/icons/ty_topic.png'`). Naming
     // the file here pinned this row to a value the client is free to change.
     private static ViewRowDto BuildWorkspaceRootRow(Topic root) {
       return new ViewRowDto() {

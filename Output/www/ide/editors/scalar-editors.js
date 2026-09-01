@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
 import { formatDefault, autoGrowTextarea } from './editor-format.js';
 
 export class X13ScalarTextEditor extends LitElement {

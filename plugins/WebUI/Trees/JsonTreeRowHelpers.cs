@@ -23,7 +23,7 @@ namespace X13.WebUI {
     }
 
     // Returns null when nothing resolved, and that is the answer the client wants: view-row.js
-    // already substitutes the same default twice over (`row.icon || '/ide_icons/ty_topic.png'`
+    // already substitutes the same default twice over (`row.icon || '/ide/icons/ty_topic.png'`
     // at :158, and again on the img's onerror at :263), so naming the file here only duplicated
     // the client's own decision on the server. Which default an unresolved row draws is a
     // display question and belongs to the side doing the drawing - the same split
@@ -44,11 +44,11 @@ namespace X13.WebUI {
           if(resolved != null) return resolved;
         } else {
           string semantic = IconResource.SemanticIconFileName(icon);
-          if(!string.IsNullOrWhiteSpace(semantic)) return "/ide_icons/" + semantic;
+          if(!string.IsNullOrWhiteSpace(semantic)) return "/ide/icons/" + semantic;
         }
       }
       string fallback = IconResource.SemanticIconFileName(fallbackKey);
-      return string.IsNullOrWhiteSpace(fallback) ? null : ("/ide_icons/" + fallback);
+      return string.IsNullOrWhiteSpace(fallback) ? null : ("/ide/icons/" + fallback);
     }
 
     internal static string DynamicIconName(string rootTopicPath, string fieldPath, string fallbackKey) {

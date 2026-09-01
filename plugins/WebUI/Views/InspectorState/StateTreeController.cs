@@ -72,7 +72,7 @@ namespace X13.WebUI {
         Kind = MenuItemKind.Item,
         Cmd = "delete",
         Text = "Delete",
-        Icon = "/ide_icons/cm_delete.png",
+        Icon = "/ide/icons/cm_delete.png",
         Enabled = !string.IsNullOrEmpty(fieldPath) && !isRequired,
         Willful = false,
       });

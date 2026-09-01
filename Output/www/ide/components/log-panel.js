@@ -1,5 +1,5 @@
-import { LitElement, html, css, repeat } from '../lib/lit-all.min.js';
-import { readBoolean } from '../ide_services/local-storage-utils.js';
+import { LitElement, html, css, repeat } from '../../lib/lit-all.min.js';
+import { readBoolean } from '../services/local-storage-utils.js';
 
 const SHOW_DEBUG_KEY = 'x13.logpanel.showDebug';
 const HISTORY_PAGE_SIZE = 50;

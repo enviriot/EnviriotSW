@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
 import './view-workspace.js';
 import './catalog-document.js';
 import './inspector-document.js';
@@ -6,13 +6,13 @@ import './logram-document.js';
 import './chart-document.js';
 import './logo-document.js';
 import './log-panel.js';
-import { WsClient } from '../ide_services/ws-client.js';
-import { ViewApi } from '../ide_services/view-api.js';
-import { ViewStore, CombinedViewStore } from '../ide_services/view-store.js';
-import { LogStore } from '../ide_services/log-store.js';
-import { clamp, readPositiveNumber, readBoolean } from '../ide_services/local-storage-utils.js';
-import { getTopicPath, getView } from '../ide_services/vid-helper.js';
-import { setApiToken } from '../ide_services/api-token.js';
+import { WsClient } from '../services/ws-client.js';
+import { ViewApi } from '../services/view-api.js';
+import { ViewStore, CombinedViewStore } from '../services/view-store.js';
+import { LogStore } from '../services/log-store.js';
+import { clamp, readPositiveNumber, readBoolean } from '../services/local-storage-utils.js';
+import { getTopicPath, getView } from '../services/vid-helper.js';
+import { setApiToken } from '../services/api-token.js';
 
 const WORKSPACE_WIDTH_KEY = 'x13.workspace.width';
 const DEFAULT_WORKSPACE_WIDTH = 420;
@@ -428,7 +428,7 @@ export class X13AppShell extends LitElement {
       vid: ROOT_VID,
       level: 0,
       expander: existingRoot?.expander || 0,
-      icon: existingRoot?.icon || '/ide_icons/ty_topic.png',
+      icon: existingRoot?.icon || '/ide/icons/ty_topic.png',
       name: existingRoot?.name || '',
       editor: 'ConnectionStatus',
       value: this.status,
@@ -533,7 +533,7 @@ export class X13AppShell extends LitElement {
         vid: rootVid,
         level: 0,
         expander: 1,
-        icon: '/ide_icons/ty_topic.png',
+        icon: '/ide/icons/ty_topic.png',
         name: opened.title || 'Catalog',
         editor: 'Default',
         value: opened.data?.uri || '',
@@ -560,7 +560,7 @@ export class X13AppShell extends LitElement {
 
   // The Chart document draws from two sources, and they answer different questions. Its history
   // comes over HTTP from /api/archivist, carrying the session token this.api's handshake already
-  // handed us (ide_services/api-token.js). What has happened since that answer comes from the
+  // handed us (ide/services/api-token.js). What has happened since that answer comes from the
   // `chart#` view opened here - one subscription to the topic's value (ChartViewProvider), whose
   // evnt.* land in stores.chart like any other document's rows.
   #setChartDocument(path, historyMode = 'push') {

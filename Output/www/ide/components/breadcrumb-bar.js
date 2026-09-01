@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
 import './context-menu.js';
 
 // The topic a document is rooted on, drawn as clickable path segments, plus the two things every

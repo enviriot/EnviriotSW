@@ -8,7 +8,7 @@ using X13.WebUI.Helpers;
 namespace X13.WebUI {
   internal static class IconResource {
     public const string ApiIconPrefix = "/api/icons/";
-    private const string SemanticIconPrefix = "/ide_icons/";
+    private const string SemanticIconPrefix = "/ide/icons/";
     private static readonly ConcurrentDictionary<string, byte[]> _dynamicIcons = new ConcurrentDictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
     public static byte[] TryGetIconContent(string apiPath) {
@@ -26,7 +26,7 @@ namespace X13.WebUI {
     /// <summary>The row's icon URL, or null when nothing resolved.</summary>
     /// <remarks>Null rather than a default: which icon an unresolved row draws is a display
     /// question and belongs to the side doing the drawing. view-row.js already answers it twice
-    /// over (`row.icon || '/ide_icons/ty_topic.png'`, and again on the img's onerror), so
+    /// over (`row.icon || '/ide/icons/ty_topic.png'`, and again on the img's onerror), so
     /// naming a file here only duplicated the client's own decision - and pinned it, since
     /// changing the client default would then no longer change these rows. Same split
     /// JsonTreeRowHelpers.ResolveMenuIcon has always used for menus.

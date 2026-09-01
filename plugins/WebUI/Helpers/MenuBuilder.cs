@@ -30,13 +30,13 @@ namespace X13.WebUI {
         Enabled = true,
         Willful = false,
         Children = new List<MenuItemDto>() {
-          MenuItem("open", "Open", "/ide_icons/cm_open.png", "Open topic", canOpen),
-          MenuItem("open-tab", "Open in new tab", "/ide_icons/cm_doc.png", "Open topic in new tab", canOpen),
-          MenuItem("copy-path", "Copy path", "/ide_icons/cm_path.png", "Copy topic path", canOpen),
-          MenuItem("rename", "Rename", "/ide_icons/cm_rename.png", "Rename topic", canModify),
-          MenuItem("cut", "Cut", "/ide_icons/cm_cut.png", "Cut topic", canModify),
-          MenuItem("paste", "Paste", "/ide_icons/cm_paste.png", "Paste topic", false),
-          MenuItem("delete", "Delete", "/ide_icons/cm_delete.png", "Delete topic", canModify),
+          MenuItem("open", "Open", "/ide/icons/cm_open.png", "Open topic", canOpen),
+          MenuItem("open-tab", "Open in new tab", "/ide/icons/cm_doc.png", "Open topic in new tab", canOpen),
+          MenuItem("copy-path", "Copy path", "/ide/icons/cm_path.png", "Copy topic path", canOpen),
+          MenuItem("rename", "Rename", "/ide/icons/cm_rename.png", "Rename topic", canModify),
+          MenuItem("cut", "Cut", "/ide/icons/cm_cut.png", "Cut topic", canModify),
+          MenuItem("paste", "Paste", "/ide/icons/cm_paste.png", "Paste topic", false),
+          MenuItem("delete", "Delete", "/ide/icons/cm_delete.png", "Delete topic", canModify),
         },
       };
     }
@@ -59,7 +59,7 @@ namespace X13.WebUI {
         Kind = MenuItemKind.Item,
         Cmd = "catalog",
         Text = "Catalog",
-        Icon = "/ide_icons/cm_catalog.png",
+        Icon = "/ide/icons/cm_catalog.png",
         Hint = "Open catalog",
         Enabled = true,
         Willful = false,
@@ -72,7 +72,7 @@ namespace X13.WebUI {
         Kind = MenuItemKind.Item,
         Cmd = "import",
         Text = "Import",
-        Icon = "/ide_icons/cm_import.png",
+        Icon = "/ide/icons/cm_import.png",
         Hint = "Import .xst file",
         Enabled = true,
         Willful = false,
@@ -86,7 +86,7 @@ namespace X13.WebUI {
         Kind = MenuItemKind.Item,
         Cmd = "export",
         Text = "Export",
-        Icon = "/ide_icons/cm_export.png",
+        Icon = "/ide/icons/cm_export.png",
         Hint = "Export topic to .xst file",
         Enabled = true,
         Willful = false,
@@ -105,7 +105,7 @@ namespace X13.WebUI {
         Kind = MenuItemKind.Item,
         Cmd = "chart",
         Text = "Chart",
-        Icon = "/ide_icons/cm_chart.svg",
+        Icon = "/ide/icons/cm_chart.svg",
         Hint = "Show archived history",
         Enabled = true,
         Willful = false,
@@ -399,7 +399,7 @@ namespace X13.WebUI {
           return IconResource.ResolveIconValue(icon, dynamicName) ?? ResolveFallbackIcon(fallbackKey);
         }
         string semanticIcon = IconResource.SemanticIconFileName(icon);
-        if(!string.IsNullOrWhiteSpace(semanticIcon)) return "/ide_icons/" + semanticIcon;
+        if(!string.IsNullOrWhiteSpace(semanticIcon)) return "/ide/icons/" + semanticIcon;
       }
       return ResolveFallbackIcon(fallbackKey);
     }
@@ -411,7 +411,7 @@ namespace X13.WebUI {
 
     private static string ResolveFallbackIcon(string fallbackKey) {
       string fallbackIcon = IconResource.SemanticIconFileName(fallbackKey);
-      return string.IsNullOrWhiteSpace(fallbackIcon) ? null : ("/ide_icons/" + fallbackIcon);
+      return string.IsNullOrWhiteSpace(fallbackIcon) ? null : ("/ide/icons/" + fallbackIcon);
     }
 
     private enum RcUse : ushort {

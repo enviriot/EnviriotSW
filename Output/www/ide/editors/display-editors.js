@@ -1,4 +1,4 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
 import { formatDefault } from './editor-format.js';
 
 class X13DisplayEditor extends LitElement {

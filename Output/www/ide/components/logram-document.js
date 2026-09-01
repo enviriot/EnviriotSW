@@ -1,4 +1,4 @@
-import { LitElement, html, css, svg } from '../lib/lit-all.min.js';
+import { LitElement, html, css, svg } from '../../lib/lit-all.min.js';
 import './context-menu.js';
 import './breadcrumb-bar.js';
 

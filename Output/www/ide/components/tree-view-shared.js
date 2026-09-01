@@ -1,9 +1,9 @@
-import { LitElement, html, css, repeat } from '../lib/lit-all.min.js';
+import { LitElement, html, css, repeat } from '../../lib/lit-all.min.js';
 import './view-row.js';
 import './context-menu.js';
-import { clamp, readPositiveNumber } from '../ide_services/local-storage-utils.js';
-import { getTopicPath } from '../ide_services/vid-helper.js';
-import { apiUrl } from '../ide_services/api-token.js';
+import { clamp, readPositiveNumber } from '../services/local-storage-utils.js';
+import { getTopicPath } from '../services/vid-helper.js';
+import { apiUrl } from '../services/api-token.js';
 
 export const MIN_VALUE_WIDTH = 110;
 export const CUT_CLIPBOARD_PREFIX = 'x13-webui-topic-cut:';

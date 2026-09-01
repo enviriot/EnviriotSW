@@ -1,9 +1,9 @@
-import { LitElement, html, css } from '../lib/lit-all.min.js';
-import '../lib/dygraph.min.js';
+import { LitElement, html, css } from '../../lib/lit-all.min.js';
+import '../../lib/dygraph.min.js';
 import './breadcrumb-bar.js';
-import { pickStep, snapWindow, planFetch, mergeRows, windowMoved } from '../components/graph-grid.js';
-import { apiUrl } from '../ide_services/api-token.js';
-import { readPositiveNumber } from '../ide_services/local-storage-utils.js';
+import { pickStep, snapWindow, planFetch, mergeRows, windowMoved } from '../../components/graph-grid.js';
+import { apiUrl } from '../services/api-token.js';
+import { readPositiveNumber } from '../services/local-storage-utils.js';
 
 // The other view of the same topic, for the bar's switch button (see breadcrumb-bar.js). Every
 // topic a Chart can be opened on has an Inspector side, so it is unconditional here.
@@ -113,7 +113,7 @@ export class X13ChartDocument extends LitElement {
       transform: translate(-50%, -50%);
     }
 
-    /* dygraph's own stylesheet. It has to live here rather than in ide_app.css: dygraph builds
+    /* dygraph's own stylesheet. It has to live here rather than in ide/app.css: dygraph builds
        its legend and axis labels inside this component's shadow root, which page CSS does not
        reach. Copied from index.css, where the dashboard pages carry the same block. */
     /* No .dygraph-legend rule: dygraph sets that class only on a legend div it created itself
