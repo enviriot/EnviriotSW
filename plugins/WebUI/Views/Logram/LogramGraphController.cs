@@ -556,10 +556,17 @@ namespace X13.WebUI {
       // outside the canvas) and without it A* was free to wander into negative and
       // arbitrarily distant coordinates: waypoints the client's SVG simply clips, found at
       // the cost of a search budget spent on cells that can never be part of a visible
-      // route. No margin cells beyond the box: the client sizes the canvas to its content on
-      // every render, so slack kept here would be slack it no longer draws.
+      // route. Exactly one margin cell, and only on the right: an output pin sits at
+      // X + WidthCells and is itself blocked (see BlockedCells), so a wire leaving the
+      // RIGHTMOST element has to step into the column past it - without that column every
+      // legal first step is out of bounds and the route fails. The client reserves the same
+      // column (#canvasSize's `+ 1`), or a route through it would be drawn outside the SVG
+      // viewport and clipped. No slack beyond that: the client sizes the canvas to its
+      // content on every render, so more kept here would be room it no longer draws. The
+      // mirror column on the left costs nothing to keep - it is simply cell 0, which
+      // MIN_LEFT_CELL/MinLeftCell forbid elements from occupying.
       foreach(ElementLayout l in layouts) {
-        pass.MaxX = Math.Max(pass.MaxX, l.X + l.WidthCells);
+        pass.MaxX = Math.Max(pass.MaxX, l.X + l.WidthCells + 1);
         pass.MaxY = Math.Max(pass.MaxY, l.Y + l.HeightCells);
       }
 
@@ -609,6 +616,16 @@ namespace X13.WebUI {
     // logram-document.js and fails the build when they disagree. internal for that test.
     internal const int MinCanvasCellsW = 20;
     internal const int MinCanvasCellsH = 14;
+
+    // Leftmost column a BLOCK may occupy - column 0 stays clear so a wire can reach an input
+    // pin, which sits on the element's own left edge (see ResolveWires' bounds comment and
+    // logram-document.js's MIN_LEFT_CELL, which clamps the client's own block placements).
+    // Variables are exempt and may sit flush against the edge: a variable's usual source is
+    // its binding to a topic outside the diagram, not a wire, and the left column is where
+    // such an input belongs - hence ExecuteAddVariable floors at 0 instead. The floor here is
+    // the server's own guard for the rpc arguments (see LogramViewProvider.ExecuteAddBlock),
+    // so a request built by hand cannot park a block in the column nothing can wire through.
+    internal const int MinLeftCell = 1;
 
     // The row-kind markers the client switches on (logram-document.js: #renderElement, the
     // element/canvas filters, the LogramPin skip). Named rather than inlined because the same

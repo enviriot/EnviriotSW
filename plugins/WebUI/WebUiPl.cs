@@ -1,8 +1,6 @@
 ///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
-using JSC = NiL.JS.Core;
 using System;
 using System.ComponentModel.Composition;
-using System.IO;
 using X13.Repository;
 using X13.WebUI.Helpers;
 using NiL.JS.Extensions;
@@ -12,51 +10,29 @@ namespace X13.WebUI {
   [ExportMetadata("priority", 10)]
   [ExportMetadata("name", "WebUI")]
   internal sealed class WebUiPl : IPlugModul {
-    // "local" resolves to the subnets of this machine's adapters, see NetworkAcl.
-    private const string DefaultTrustedNets = "local";
-
     private Topic _owner;
-    private Topic _verbose;
-    private Topic _trustedNets;
-    private Topic _trustedProxies;
+    private WebUiConfig _config;
     private WebUiHost _host;
-    private string _staticPath;
 
     public void Init() {
     }
 
     public void Start() {
-      {  // Ensure StaticPath topic exists and is configured
-        const string DefaultStaticPath = "..\\www";
-        Topic t = Owner.Get("StaticPath", true);
-        // Readonly so it is not changed by accident. It stays a free-form path on purpose:
-        // behind a proxy this legitimately points at a shared directory outside the install.
-        // Note this is a UI hint only - Readonly is not enforced on the commit path.
-        if(!t.CheckAttribute(Topic.Attribute.Readonly)) {
-          t.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-        }
-        // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-        // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet" from
-        // "set to the default", so the topic would never be created. See todo.md.
-        if(t.GetState().ValueType != JSC.JSValueType.String) {
-          t.SetState(DefaultStaticPath);
-        }
-        string configured = t.GetState().AsString(null);
-        _staticPath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, configured ?? DefaultStaticPath));
-      }
-      EnsureVerboseTopic();
-      EnsureAclTopics();
+      _config = new WebUiConfig(Owner);
+      _config.Start();
+      // Before the host too, and for a stronger reason than the ACL below: with no port open
+      // there is no live session yet, so every topic under /$YS/WebUI/clients is a leftover of
+      // a run that did not get to remove its own (see ClientSession.PurgeStale).
+      ClientSession.PurgeStale();
       // Before the host: the dashboard endpoint refuses every topic it has no rule for, so the
       // rules have to be in place by the time the first socket can arrive.
       DashboardAcl.Start();
-      _host = new WebUiHost(_staticPath, IsVerbose, TrustedNets, TrustedProxies);
+      _host = new WebUiHost(_config);
 
-      int configuredPort = 0;
-
-      Topic portTopic = Owner.Get("port", true);
-      // A read, not a seed - the topic was created by the Get above. AsInt keeps whatever default
-      // configuredPort already holds when the topic carries no integer.
-      configuredPort = portTopic.GetState().AsInt(configuredPort);
+      Topic portTopic = _config.PortTopic;
+      // A read, not a seed - the topic was created by the Get above. AsInt keeps the 0 that
+      // means "nothing configured" when the topic carries no integer.
+      int configuredPort = portTopic.GetState().AsInt(0);
 
       if(configuredPort >= 1 && configuredPort <= 65535) {
         if(TryStart(configuredPort)) return;
@@ -84,15 +60,17 @@ namespace X13.WebUI {
     public void Stop() {
       _host?.Stop();
       DashboardAcl.Stop();
+      _config?.Dispose();
     }
 
     public bool enabled {
       get {
         Topic t = Owner;
-        // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-        // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet" from
-        // "set to the default", so the topic would never be created. See todo.md.
-        if(t.GetState().ValueType != JSC.JSValueType.Boolean) {
+        // Is<bool>, NOT AsBool: this decides whether the config topic has to be CREATED and
+        // seeded, and a reader with a default cannot tell "not set yet" from "set to the
+        // default", so the topic would never be created. Is is the type test without the
+        // coercion - the same thing EnsureCfg does for every other setting here.
+        if(!t.GetState().Is<bool>()) {
           t.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           t.SetState(true);
           return true;
@@ -104,55 +82,6 @@ namespace X13.WebUI {
 
     private Topic Owner {
       get { return _owner ?? (_owner = Topic.root.Get("/$YS/WebUI", true)); }
-    }
-
-    private void EnsureVerboseTopic() {
-      _verbose = Owner.Get("verbose", true);
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet" from
-      // "set to the default", so the topic would never be created. See todo.md.
-      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
-#if DEBUG
-        _verbose.SetState(true);
-#else
-        _verbose.SetState(false);
-#endif
-      }
-    }
-
-    private bool IsVerbose() {
-      // A read, not a seed - so AsBool, unlike the ValueType tests in Init below.
-      return _verbose != null && _verbose.GetState().AsBool(false);
-    }
-
-    private void EnsureAclTopics() {
-      _trustedNets = Owner.Get("trustedNets", true);
-      if(string.IsNullOrWhiteSpace(_trustedNets.GetState().AsString(null))) {
-        _trustedNets.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
-        _trustedNets.SetState(DefaultTrustedNets);
-      }
-      _trustedProxies = Owner.Get("trustedProxies", true);
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet" from
-      // "set to the default", so the topic would never be created. See todo.md.
-      if(_trustedProxies.GetState().ValueType != JSC.JSValueType.String) {
-        // Empty by default: X-Real-IP is then ignored for access decisions entirely.
-        _trustedProxies.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
-        _trustedProxies.SetState(string.Empty);
-      }
-    }
-
-    // Read per check rather than cached at Start(), so editing the topic takes effect without
-    // a restart. NetworkAcl only re-parses when the string actually changed.
-    private string TrustedNets() {
-      string value = _trustedNets == null ? null : _trustedNets.GetState().AsString(null);
-      return string.IsNullOrWhiteSpace(value) ? DefaultTrustedNets : value;  // cleared => back to local
-    }
-
-    private string TrustedProxies() {
-      string value = _trustedProxies == null ? null : _trustedProxies.GetState().AsString(null);
-      return value ?? string.Empty;
     }
 
     private bool TryStart(int port) {

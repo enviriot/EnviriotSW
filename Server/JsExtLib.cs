@@ -438,6 +438,49 @@ namespace X13 {
       }
     }
 
+    #region Configuration
+    /// <summary>Seeds a config topic if it is missing, then keeps <paramref name="apply"/> current.</summary>
+    /// <param name="owner">The plugin's own topic, e.g. /$YS/WebUI.</param>
+    /// <param name="relativePath">Path below it, slashes allowed: "Static/verbose" creates the
+    /// group on the way. Intermediate topics need no attributes of their own - Repo.Export keeps
+    /// a parent whose children were exported, so a Config leaf carries its groups with it.</param>
+    /// <param name="attr">Attributes for the leaf when this call is the one that seeds it.</param>
+    /// <param name="apply">Called once before this returns, and again on every later change.</param>
+    /// <param name="defaultValue">Seeded only when the topic holds nothing of type
+    /// <typeparamref name="T"/> yet - a type test rather than a reader with a fallback, because
+    /// a reader cannot tell "not set" from "set to the default" and the topic would never be
+    /// created. A null default seeds nothing.</param>
+    /// <returns>The subscription. The caller owns it and must dispose it on shutdown.</returns>
+    /// <remarks>The immediate call is not redundant with the subscription: Subscribe does not
+    /// call back synchronously, it queues a subscribe Perform that Repo dispatches on its next
+    /// tick. A plugin that starts listening the moment its Start() returns would otherwise
+    /// answer the first requests from whatever its fields were initialised to.
+    ///
+    /// apply rather than a `ref T` parameter, which is what this wants to be: a ref cannot be
+    /// captured by the subscription's callback (CS1628), so a ref could only ever serve the
+    /// first read and nothing would carry the later ones.</remarks>
+    public static Repository.SubRec EnsureCfg<T>(Repository.Topic owner, string relativePath,
+                                                 Repository.Topic.Attribute attr, Action<T> apply, T defaultValue = default(T)) {
+      if(owner == null) throw new ArgumentNullException("owner");
+      if(apply == null) throw new ArgumentNullException("apply");
+      Repository.Topic topic = owner.Get(relativePath, true);
+      T value;
+      if(!topic.GetState().Is<T>()) {
+        topic.SetAttribute(attr);
+        topic.SetState(Context.ProxyValue(defaultValue), owner);
+        value = defaultValue;
+      } else {
+        value = topic.GetState().As<T>(); 
+      }
+      apply(value);
+      // Once is what makes the subscription see the subscribed topic's OWN state rather than
+      // only its children's. The value comes from sub.setTopic, not the captured topic, so the
+      // callback cannot outrun the assignment a caller might have made.
+      return topic.Subscribe(Repository.SubRec.SubMask.Once | Repository.SubRec.SubMask.Value,
+        (p, sub) => apply(sub.setTopic.GetState().As<T>()));
+    }
+    #endregion Configuration
+
     #region AQuery
     public static Func<string[], DateTime, int, DateTime, JSL.Array> AQuery { get; set; }
     private static Task<JSL.Array> AQueryJS(JSC.JSValue topicsJS, JSC.JSValue beginJS, int count, JSC.JSValue endJS) {

@@ -1,7 +1,17 @@
 import { LitElement, html, css, svg } from '../lib/lit-all.min.js';
 import './context-menu.js';
+import './breadcrumb-bar.js';
 
-const CELL = 16;
+// The other view of the same topic, for the bar's switch button. A Logram document is only ever
+// opened on a Logram-typed topic, so the Inspector side always exists and the button is constant.
+const INSPECTOR_VIEW = { label: 'Inspector', mode: 'inspector' };
+
+const CELL = 18;
+// How far a block's drawn body reaches above its first pin row and below its last one:
+// a hair under the half-cell the layout actually reserves, so two blocks placed on
+// adjacent rows keep a 2px seam between them instead of their edges touching and
+// reading as one shape.
+const BLOCK_EDGE = CELL / 2 - 1;
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 5;
 // Half a cell of white beyond the content on every side (#canvasSize). The SVG viewport
@@ -10,6 +20,20 @@ const MAX_SCALE = 5;
 // than the same line one cell further in.
 const CANVAS_PAD = CELL / 2;
 const MIN_CANVAS_CELLS = { w: 20, h: 14 };
+// The leftmost column a BLOCK may be placed in - column 0 is kept clear for wires. An
+// input pin sits ON its element's own left edge, so a wire reaching it has to occupy the
+// cell one to the left first, and the router calls x < 0 off-canvas
+// (LogramGraphController.IsBlocked): a block at column 0 gets no route in at all, only
+// the straight fallback line through whatever is in the way. The right edge gets the
+// same clearance from #canvasSize's spare column instead - there is no element to move
+// there, so the canvas simply grows. Vertically neither is needed: a wire approaches a
+// pin horizontally, and the rows above/below a pin are free canvas already.
+//
+// Variables are deliberately exempt and may sit flush against the edge: a variable is
+// how a diagram reaches a topic outside itself, its usual source is that binding rather
+// than a wire (nothing is drawn for a non-local source, see #renderWire), and the left
+// column is exactly where such an input belongs.
+const MIN_LEFT_CELL = 1;
 // Where the view comes to rest (#resetPan): the canvas's top-left corner sits this far in
 // from the panel's own corner. A pan offset and nothing more - the canvas itself carries no
 // margin, it is sized to its content.
@@ -24,6 +48,8 @@ const WIRE_CORNER_RADIUS = CELL / 2;
 
 export class X13LogramDocument extends LitElement {
   static properties = {
+    path: {},
+    rootName: {},
     api: { attribute: false },
     store: { attribute: false },
     rows: { attribute: false },
@@ -38,7 +64,14 @@ export class X13LogramDocument extends LitElement {
   };
 
   static styles = css`
-    :host { display: block; height: 100%; overflow: hidden; position: relative; width: 100%; }
+    :host { box-sizing: border-box; display: flex; flex-direction: column; height: 100%; width: 100%; }
+    /* The canvas box. position:relative and overflow:hidden moved here from :host when the
+       breadcrumb bar joined it above - .zoom-controls belong to the canvas, not to the document,
+       and would otherwise position against the bar as well and sit over it. Nothing else moved
+       with them: every coordinate this component computes comes from getBoundingClientRect or
+       elementFromPoint (see #toSvgPoint), which are client coordinates and do not care which
+       ancestor establishes the containing block. */
+    .body { flex: 1 1 auto; min-height: 0; overflow: hidden; position: relative; }
     .surface { user-select: none; }
     /* Base cursor is pointer (empty canvas, per #hitTest's own rules) - pan-in-progress
        (ctrl+drag, see #onSurfacePointerDown) overrides to grabbing; the four hoverable
@@ -75,7 +108,7 @@ export class X13LogramDocument extends LitElement {
        #hitTest (used for the actual click/menu/drag logic) does the exact math. */
     .pin-hit, .wire-hit, .element-hit, .block-body, .variable-body { cursor: default; }
     .pin-hit, .element-hit { fill: transparent; }
-    .wire-hit { fill: none; stroke: transparent; stroke-width: 16; }
+    .wire-hit { fill: none; stroke: transparent; stroke-width: 18; }
     .wire-draft { fill: none; pointer-events: none; stroke: #2563eb; stroke-dasharray: 4 3; stroke-width: 2; }
     .marquee { fill: rgba(37, 99, 235, 0.1); pointer-events: none; stroke: #2563eb; stroke-dasharray: 4 3; }
     .grid-bg { fill: #fff; stroke: #cfd8e3; }
@@ -84,6 +117,8 @@ export class X13LogramDocument extends LitElement {
 
   constructor() {
     super();
+    this.path = '/';
+    this.rootName = '';
     this.rows = [];
     this.scale = 2.5;
     this.#resetPan();
@@ -130,37 +165,41 @@ export class X13LogramDocument extends LitElement {
     const { pinsByParent, rowsByVid } = this.#sceneRows();
 
     return html`
-      <div class="viewport" @pointerdown=${this.#onSurfacePointerDown} @wheel=${this.#onWheel} @contextmenu=${this.#onSurfaceContextMenu}
-        @dragover=${this.#onSurfaceDragOver} @drop=${this.#onSurfaceDrop}>
-        <!-- The viewBox origin is negative by CANVAS_PAD, and that is the whole of how the
-             white field gets its half-cell on the top and left: content keeps drawing at its
-             own cell coordinates and nothing inside has to know. Width/height match the
-             viewBox, so the SVG's own scale stays 1 and .surface's CSS transform is still the
-             only zoom in play. -->
-        <svg class="surface" width=${width} height=${height} viewBox="${boxX} ${boxY} ${width} ${height}"
-          style="transform:translate(${this.tx}px,${this.ty}px) scale(${this.scale})">
-          <defs>
-            <!-- x/y=-8 shifts where each tile repeat lands, without moving the mark
-                 within its own tile (still centered at local 8,8, so nothing here
-                 needs overflow:visible) - net effect is the mark itself renders 8px
-                 up-left of where it used to, landing on the grid's actual corners
-                 (multiples of CELL, where element x/y=0 sits) instead of a cell's
-                 center. -->
-            <pattern id="grid-cross" x="-8" y="-8" width=${CELL} height=${CELL} patternUnits="userSpaceOnUse">
-              <path d="M 6.5 8 h 3 M 8 6.5 v 3" stroke="#dde2e8" stroke-opacity="0.6" stroke-width="1"></path>
-            </pattern>
-          </defs>
-          <rect class="grid-bg" x=${boxX} y=${boxY} width=${width} height=${height}></rect>
-          <rect class="grid-dots" x=${boxX} y=${boxY} width=${width} height=${height} fill="url(#grid-cross)"></rect>
-          ${elements.map((el) => this.#renderElement(el, pinsByParent.get(el.vid) || [], rowsByVid))}
-          ${this.wireDraft ? svg`<line class="wire-draft" x1=${this.wireDraft.originX} y1=${this.wireDraft.originY} x2=${this.wireDraft.x} y2=${this.wireDraft.y}></line>` : svg``}
-          ${this.marquee ? svg`<rect class="marquee" x=${this.marquee.x0} y=${this.marquee.y0} width=${this.marquee.x1 - this.marquee.x0} height=${this.marquee.y1 - this.marquee.y0}></rect>` : svg``}
-        </svg>
-      </div>
-      <div class="zoom-controls">
-        <button @click=${() => this.#zoomBy(1.2)} title="Zoom in">+</button>
-        <button @click=${() => this.#zoomBy(1 / 1.2)} title="Zoom out">-</button>
-        <button @click=${this.#resetView} title="Reset view">⟲</button>
+      <x13-breadcrumb-bar .path=${this.path} .rootName=${this.rootName} .currentMode=${'logram'}
+        .altView=${INSPECTOR_VIEW}></x13-breadcrumb-bar>
+      <div class="body">
+        <div class="viewport" @pointerdown=${this.#onSurfacePointerDown} @wheel=${this.#onWheel} @contextmenu=${this.#onSurfaceContextMenu}
+          @dragover=${this.#onSurfaceDragOver} @drop=${this.#onSurfaceDrop}>
+          <!-- The viewBox origin is negative by CANVAS_PAD, and that is the whole of how the
+               white field gets its half-cell on the top and left: content keeps drawing at its
+               own cell coordinates and nothing inside has to know. Width/height match the
+               viewBox, so the SVG's own scale stays 1 and .surface's CSS transform is still the
+               only zoom in play. -->
+          <svg class="surface" width=${width} height=${height} viewBox="${boxX} ${boxY} ${width} ${height}"
+            style="transform:translate(${this.tx}px,${this.ty}px) scale(${this.scale})">
+            <defs>
+              <!-- x/y=-CELL/2 shifts where each tile repeat lands, without moving the mark
+                   within its own tile (still centered at local CELL/2, so nothing here
+                   needs overflow:visible) - net effect is the mark itself renders half a
+                   cell up-left of where it used to, landing on the grid's actual corners
+                   (multiples of CELL, where element x/y=0 sits) instead of a cell's
+                   center. -->
+              <pattern id="grid-cross" x=${-CELL / 2} y=${-CELL / 2} width=${CELL} height=${CELL} patternUnits="userSpaceOnUse">
+                <path d="M ${CELL / 2 - 1.5} ${CELL / 2} h 3 M ${CELL / 2} ${CELL / 2 - 1.5} v 3" stroke="#dde2e8" stroke-opacity="0.6" stroke-width="1"></path>
+              </pattern>
+            </defs>
+            <rect class="grid-bg" x=${boxX} y=${boxY} width=${width} height=${height}></rect>
+            <rect class="grid-dots" x=${boxX} y=${boxY} width=${width} height=${height} fill="url(#grid-cross)"></rect>
+            ${elements.map((el) => this.#renderElement(el, pinsByParent.get(el.vid) || [], rowsByVid))}
+            ${this.wireDraft ? svg`<line class="wire-draft" x1=${this.wireDraft.originX} y1=${this.wireDraft.originY} x2=${this.wireDraft.x} y2=${this.wireDraft.y}></line>` : svg``}
+            ${this.marquee ? svg`<rect class="marquee" x=${this.marquee.x0} y=${this.marquee.y0} width=${this.marquee.x1 - this.marquee.x0} height=${this.marquee.y1 - this.marquee.y0}></rect>` : svg``}
+          </svg>
+        </div>
+        <div class="zoom-controls">
+          <button @click=${() => this.#zoomBy(1.2)} title="Zoom in">+</button>
+          <button @click=${() => this.#zoomBy(1 / 1.2)} title="Zoom out">-</button>
+          <button @click=${this.#resetView} title="Reset view">⟲</button>
+        </div>
       </div>
       ${this.menuState ? html`
         <x13-context-menu .items=${this.menuState.items} .x=${this.menuState.x} .y=${this.menuState.y}
@@ -170,13 +209,17 @@ export class X13LogramDocument extends LitElement {
   // The box the surface draws: the elements' own bounding box (x/y/width/height all in grid
   // cells, same units render() uses to draw them - see #renderBlock's comment on why they
   // stay in cells), floored at MIN_CANVAS_CELLS so a new/empty diagram isn't a sliver, plus
-  // CANVAS_PAD of white on every side. No `+ 1` on the right - a block's width already
-  // reaches its output pins (baked into WidthCells server-side, see
-  // LogramGraphController.BuildLayout) - and no spare margin beyond the pad either: this
-  // runs on every render, mid-drag included (see render()), so the canvas simply follows a
-  // block dragged or dropped past its current edge instead of keeping room in reserve for
-  // one. The server bounds its wire search by the same box (LogramGraphController.ResolveWires)
-  // - a route outside it would be clipped by the SVG viewport rather than drawn.
+  // CANVAS_PAD of white on every side, and one spare CELL past the rightmost element. That
+  // `+ 1` is wire room, not decoration: a block's width already reaches its output pins
+  // (baked into WidthCells server-side, see LogramGraphController.BuildLayout), so a wire
+  // leaving the rightmost block's output has to step into the column beyond it, and without
+  // that column the step is off-canvas and the route fails. MIN_LEFT_CELL keeps the mirror
+  // column free on the left. Nothing is added on the top or bottom (see MIN_LEFT_CELL) and
+  // no spare margin beyond that: this runs on every render, mid-drag included (see render()),
+  // so the canvas simply follows a block dragged or dropped past its current edge instead of
+  // keeping room in reserve for one. The server bounds its wire search by the same box
+  // (LogramGraphController.ResolveWires, which adds the same one column) - a route outside it
+  // would be clipped by the SVG viewport rather than drawn.
   #canvasSize(elements) {
     let rightCells = 0, bottomCells = 0;
     for(const el of elements) {
@@ -185,7 +228,7 @@ export class X13LogramDocument extends LitElement {
       rightCells = Math.max(rightCells, (el.x || 0) + w);
       bottomCells = Math.max(bottomCells, (el.y || 0) + h);
     }
-    const widthCells = Math.max(MIN_CANVAS_CELLS.w, rightCells);
+    const widthCells = Math.max(MIN_CANVAS_CELLS.w, rightCells + 1);
     const heightCells = Math.max(MIN_CANVAS_CELLS.h, bottomCells);
     return { x: -CANVAS_PAD, y: -CANVAS_PAD, width: widthCells * CELL + 2 * CANVAS_PAD, height: heightCells * CELL + 2 * CANVAS_PAD };
   }
@@ -228,11 +271,13 @@ export class X13LogramDocument extends LitElement {
     const bodyTop = (el.y || 0) * CELL;
     const width = (el.width || 2) * CELL;
     const height = (el.height || 2) * CELL;
-    // Drawn top is nudged 8px above the pin-anchor box (bodyTop, which stays tied to
-    // the server layout so wires keep landing on the pin dots) - height is left as-is,
-    // so the drawn bottom shifts up those same 8px off its own natural edge. Purely a
-    // visual trim on top of the server layout, which stays untouched.
-    const visualTop = bodyTop - 8;
+    // Drawn top is nudged BLOCK_EDGE above the pin-anchor box (bodyTop, which stays tied
+    // to the server layout so wires keep landing on the pin dots), and the drawn height
+    // gives up the missing pixel at each end - so the body ends BLOCK_EDGE past its last
+    // pin row too, symmetric. Purely a visual trim on top of the server layout, which
+    // stays untouched.
+    const visualTop = bodyTop - BLOCK_EDGE;
+    const visualHeight = height - 2 * (CELL / 2 - BLOCK_EDGE);
     const wires = [];
     const pinNodes = pins.map((pin) => {
       const isInput = pin.pinDirection === 'in';
@@ -253,7 +298,7 @@ export class X13LogramDocument extends LitElement {
       <g @dblclick=${() => this.#openInInspector(el.vid)}>
         <rect class="element-hit" x=${x} y=${bodyTop - height / 2} width=${width} height=${height}></rect>
         ${wires}
-        <rect class="block-body ${isSelected ? 'selected' : ''}" x=${x} y=${visualTop} width=${width} height=${height} rx="3">
+        <rect class="block-body ${isSelected ? 'selected' : ''}" x=${x} y=${visualTop} width=${width} height=${visualHeight} rx="3">
           <title>${el.name}</title>
         </rect>
         ${el.icon ? svg`<image class="block-icon" href=${el.icon} x=${x + width / 2 - 7} y=${visualTop} width="16" height="16"></image>` : svg``}
@@ -270,7 +315,7 @@ export class X13LogramDocument extends LitElement {
     const x = (el.x || 0) * CELL;
     const anchorY = (el.y || 0) * CELL;
     const width = (el.width || 2) * CELL;
-    const bodyHeight = (el.height || 1) * CELL - 3;
+    const bodyHeight = (el.height || 1) * CELL - 2 * (CELL / 2 - BLOCK_EDGE);
     const bodyY = anchorY - bodyHeight / 2;
     const wires = el.sourceVid ? [this.#renderWire(el, x, anchorY, rowsByVid)] : [];
     const isSelected = this.#isElementSelected(el.vid);
@@ -562,6 +607,9 @@ export class X13LogramDocument extends LitElement {
     const canvasVid = this.rows.find((row) => row.editor === 'LogramCanvas')?.vid;
     if(!canvasVid) return;
     const p = this.#toSvgPoint(e.clientX, e.clientY);
+    // Floored at 0, not MIN_LEFT_CELL: this drop creates a variable, and those are exempt
+    // (see the constant) - dropping a topic against the left edge is the normal way to put
+    // a diagram's input where it reads as one.
     const left = Math.max(0, Math.floor(p.x / CELL));
     const top = Math.max(0, Math.round(p.y / CELL));
     try {
@@ -595,7 +643,7 @@ export class X13LogramDocument extends LitElement {
     const canvasVid = this.rows.find((row) => row.editor === 'LogramCanvas')?.vid;
     if(!canvasVid) return;
     const p = this.#toSvgPoint(e.clientX, e.clientY);
-    const left = Math.max(0, Math.floor(p.x / CELL));
+    const left = Math.max(MIN_LEFT_CELL, Math.floor(p.x / CELL));
     const top = Math.max(0, Math.round(p.y / CELL));
     try {
       const { items } = await this.api.menu(canvasVid);
@@ -770,11 +818,13 @@ export class X13LogramDocument extends LitElement {
       for(const vid of vids) {
         const row = this.rows.find((r) => r.vid === vid);
         if(!row) continue;
-        // Clamped like both drop handlers above: a drag past the top/left edge would otherwise
+        // Clamped like both drop handlers above: a drag past the top edge would otherwise
         // store a negative coordinate, which puts the element outside the canvas the server
         // routes inside (LogramGraphController.IsBlocked) and aliases its routing-grid cells.
+        // A block's left stops one column earlier still, at MIN_LEFT_CELL; a variable's
+        // does not - it may sit flush against the edge (see the constant's own comment).
         const top = Math.max(0, (row.y || 0) + roundDy);
-        const left = Math.max(0, (row.x || 0) + roundDx);
+        const left = Math.max(row.editor === 'LogramBlock' ? MIN_LEFT_CELL : 0, (row.x || 0) + roundDx);
         this.api.commit(vid, { top, left }).catch((error) => console.warn('logram req.commit failed', vid, error));
       }
     };

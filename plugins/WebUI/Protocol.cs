@@ -47,11 +47,16 @@ namespace X13.WebUI {
     // e.g. InspectorChildrenViewProvider uses it to give a DevicePLC document's "src"
     // child topic the multi-line/auto-growing JS editor even though it's a Children row.
     public string EditorView;
-    // True when the topic's resolved manifest.type is Core/Logram - lets the
-    // frontend decide, synchronously from an already-loaded row (no extra round
-    // trip), whether to default a newly opened document to the Logram view and
-    // whether to show the Inspector/Logram toggle at all. See LogramViewProvider.
-    public bool IsLogram;
+    // The topic's other view, if it has one: "logram" for a Core/Logram topic, "chart" for one
+    // the archivist keeps history for, null for an ordinary topic. Tells the breadcrumb bar of
+    // the document rooted on this topic which button to offer - and is therefore set on ROOT rows
+    // only (see RowProjector.ResolveAltView for why it is not worth carrying on every row).
+    //
+    // One field rather than a flag per view, because a topic only ever has one alternative to
+    // offer and the choice between them belongs on this side: Logram wins, since a Logram topic
+    // carries no state of its own and is unlikely to be archived - and if one ever is, its
+    // diagram is still the more useful of the two.
+    public string AltView;
   }
 
   internal enum MenuItemKind {

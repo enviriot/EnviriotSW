@@ -19,18 +19,20 @@ namespace X13.WebUI {
   internal sealed class WebUiHost : IDisposable {
     private readonly string _staticPath;
     private readonly string _staticPathWithSeparator;
-    private readonly Func<bool> _verbose;
-    private readonly Func<string> _trustedNets;
-    private readonly Func<string> _trustedProxies;
+    // One object rather than the five delegates this used to take. They were all reads of the
+    // same configuration, each one a repository walk on a hot path; WebUiConfig holds the
+    // current values and keeps them current by subscription, so what arrives here is a field
+    // read. It also gives the three verbose flags one place to be explained: they are three
+    // different questions - "which files are being fetched", "what is the editor saying",
+    // "what is a dashboard saying" - that one switch used to answer all at once.
+    private readonly WebUiConfig _config;
     private static WebUiHost _instance;  // WSBehavior is constructed by the server, not by us
     private HttpServer _server;
 
-    public WebUiHost(string staticPath, Func<bool> verbose, Func<string> trustedNets = null, Func<string> trustedProxies = null) {
-      _staticPath = Path.GetFullPath(staticPath);
+    public WebUiHost(WebUiConfig config) {
+      _config = config;
+      _staticPath = Path.GetFullPath(config.StaticPath);
       _staticPathWithSeparator = _staticPath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ? _staticPath : _staticPath + Path.DirectorySeparatorChar;
-      _verbose = verbose ?? (() => false);
-      _trustedNets = trustedNets ?? (() => "local");
-      _trustedProxies = trustedProxies ?? (() => string.Empty);
       _instance = this;
     }
 
@@ -41,7 +43,7 @@ namespace X13.WebUI {
     /// and the filter has to apply to the forwarded address, otherwise proxying would bypass
     /// the ACL entirely.</remarks>
     private IPAddress EffectiveClient(IPAddress socketPeer, Func<string, string> header) {
-      if(socketPeer == null || !NetworkAcl.IsInSpec(socketPeer, _trustedProxies())) {
+      if(socketPeer == null || !NetworkAcl.IsInSpec(socketPeer, _config.TrustedProxies)) {
         return socketPeer;
       }
       IPAddress forwarded;
@@ -56,7 +58,7 @@ namespace X13.WebUI {
     /// favicon.ico - have to be reachable from wherever a dashboard is opened. Otherwise the
     /// per-topic grant would be pointless, since the page carrying it could not be loaded.</remarks>
     private bool IsAllowed(IPAddress effectiveClient, string path) {
-      return !IsIdeSurface(path) || NetworkAcl.IsAllowed(effectiveClient, _trustedNets());
+      return !IsIdeSurface(path) || NetworkAcl.IsAllowed(effectiveClient, _config.TrustedNets);
     }
 
     /// <summary>Everything that belongs to the IDE rather than to a dashboard.</summary>
@@ -84,12 +86,12 @@ namespace X13.WebUI {
         _server = server;
         server.OnGet += OnGet;
         server.OnPost += OnPost;
-        server.AddWebSocketService<WSBehavior>("/api/ide", delegate () { return new WSBehavior(_verbose); });
-        server.AddWebSocketService<DashboardBehavior>("/api/dashboard", delegate () { return new DashboardBehavior(_verbose); });
+        server.AddWebSocketService<WSBehavior>("/api/ide", delegate () { return new WSBehavior(() => _config.VerboseIde); });
+        server.AddWebSocketService<DashboardBehavior>("/api/dashboard", delegate () { return new DashboardBehavior(() => _config.VerboseDashboard); });
         server.Start();
         // Bound to every interface, not just loopback - say so, and say what limits access.
         // The limit named here is the IDE's; the dashboard is open and gated per topic instead.
-        Log.Info("WebUI listening on all interfaces, port {0}, from {1}; IDE access limited to [{2}]", port, _staticPath, _trustedNets());
+        Log.Info("WebUI listening on all interfaces, port {0}, from {1}; IDE access limited to [{2}]", port, _staticPath, _config.TrustedNets);
         return true;
       }
       catch (Exception ex) {
@@ -111,8 +113,8 @@ namespace X13.WebUI {
     public void Dispose() {
       Stop();
     }
-    private bool IsVerbose() {
-      return _verbose();
+    private bool IsStaticVerbose() {
+      return _config.VerboseStatic;
     }
     private void OnGet(object sender, HttpRequestEventArgs e) {
       IPAddress client = EffectiveClient(e.Request.RemoteEndPoint?.Address, n => e.Request.Headers[n]);
@@ -143,7 +145,7 @@ namespace X13.WebUI {
         }
         TryWriteStatus(e.Response, HttpStatusCode.InternalServerError);
       }
-      if(IsVerbose()) Log.Debug("{0} GET {1} - {2}", FormatRemoteEndPoint(remoteEndPoint), path, (HttpStatusCode)e.Response.StatusCode);
+      if(IsStaticVerbose()) Log.Debug("{0} GET {1} - {2}", FormatRemoteEndPoint(remoteEndPoint), path, (HttpStatusCode)e.Response.StatusCode);
     }
     private void ServeGet(HttpRequestEventArgs e, string path) {
       if(path == "/api/archivist") {
@@ -237,7 +239,7 @@ namespace X13.WebUI {
       // branch in every case the protocol was built for; checking each would put a scan of the
       // rule set on a request that already costs a store round trip. The gap is real and
       // deliberate: paths from different branches ride in on the first path's grant.
-      if(!ArchivistAccessAllowed(client, query.Topics[0], _trustedNets())) {
+      if(!ArchivistAccessAllowed(client, query.Topics[0], _config.TrustedNets)) {
         Log.Warning("WebUI archivist {0} refused for {1}", FormatAddress(client), query.Topics[0]);
         WriteResponse(response, HttpStatusCode.Forbidden);
         return;

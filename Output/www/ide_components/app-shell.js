@@ -2,6 +2,7 @@ import { LitElement, html, css } from '../lib/lit-all.min.js';
 import './view-workspace.js';
 import './catalog-document.js';
 import './inspector-document.js';
+import './logram-document.js';
 import './chart-document.js';
 import './logo-document.js';
 import './log-panel.js';
@@ -10,7 +11,7 @@ import { ViewApi } from '../ide_services/view-api.js';
 import { ViewStore, CombinedViewStore } from '../ide_services/view-store.js';
 import { LogStore } from '../ide_services/log-store.js';
 import { clamp, readPositiveNumber, readBoolean } from '../ide_services/local-storage-utils.js';
-import { getTopicPath } from '../ide_services/vid-helper.js';
+import { getTopicPath, getView } from '../ide_services/vid-helper.js';
 import { setApiToken } from '../ide_services/api-token.js';
 
 const WORKSPACE_WIDTH_KEY = 'x13.workspace.width';
@@ -25,6 +26,17 @@ const DEFAULT_LOG_HEIGHT = 220;
 const MIN_LOG_HEIGHT = 80;
 const MAX_LOG_HEIGHT = 700;
 const COLLAPSED_LOG_HEIGHT = 28;
+
+// The three server-side views an Inspector document opens as one - each with its own controller
+// and its own evnt.* stream, always opened and closed together. Table-driven because opening,
+// closing, packet routing and the root-deleted check below all need these same three vids, and
+// each of them used to spell the trio out for itself.
+const INSPECTOR_PANES = ['inspstate', 'inspmanifest', 'inspchildren'];
+// vid-views whose rows belong to the active document rather than to the Workspace tree. NOT
+// document types, which is a different namespace: 'logram' is one side of an Inspector document,
+// while 'catalog' and 'chart' happen to name a document and a view alike. A vid naming anything
+// not listed here still falls through to the Workspace store, as it always has.
+const DOCUMENT_VID_VIEWS = new Set([...INSPECTOR_PANES, 'logram', 'catalog', 'chart']);
 
 export class X13AppShell extends LitElement {
   static properties = {
@@ -102,6 +114,12 @@ export class X13AppShell extends LitElement {
     this.logCollapsed = readBoolean(LOG_COLLAPSED_KEY, true);
     this.workspaceReveal = null;
     this.pendingRestore = null;
+    // Bumped by every document swap, so an auto-resolve still in flight can tell that its answer
+    // is no longer wanted - see #openAuto.
+    this.navToken = 0;
+    // An auto-resolve is out and nothing is on screen yet. Only matters on a cold start, where
+    // there is no previous document to keep showing and the logo would otherwise flash.
+    this.navPending = false;
     this.onPopState = (e) => this.#onPopState(e);
   }
 
@@ -161,175 +179,186 @@ export class X13AppShell extends LitElement {
     this.#applyRestore(restore);
   }
 
+  // A descriptor is the one shape a URL, a history entry and a pending restore all reduce to:
+  // {mode, path}, where mode names the document to open and null means "ask the server which one
+  // this topic opens as". Opening one is the only way any of the three becomes a document.
   #applyRestore(restore) {
     if(!restore) return;
-    if(restore.view === 'inspector') this.#setInspectorDocument(restore.path, restore.isLogram, restore.forceMode);
-    else if(restore.view === 'catalog') this.#openCatalog(ROOT_VID, { pushHistory: false });
-    else if(restore.view === 'chart') this.#setChartDocument(restore.path);
-  }
-
-  // Only ONE of Inspector/Logram is ever open at a time (see #openInspectorPanes/
-  // #openLogram and #toggleDocumentView, below) - loading both up front would mean
-  // paying for the full Logram diagram payload, or the full children list, for a
-  // subView that's never shown, since a document only ever displays one or the
-  // other. isLogram is an optional hint (from the row that triggered navigation -
-  // see #onWorkspaceMenuCommand) used to pick which side to load immediately,
-  // without waiting on a round trip: when known true or false, the matching side
-  // opens straight away. When left undefined (breadcrumb clicks to an ancestor,
-  // parent-on-delete navigation, URL restore all only have a path) - and forceMode
-  // isn't pinning the view either - #openAuto asks the server to resolve Core/Logram
-  // itself via req.open{view:null} and open exactly the right side in one round
-  // trip, rather than opening Inspector speculatively and switching after the fact.
-  // forceMode:'inspector' (from ?mode=inspector) skips resolution entirely and
-  // always shows Inspector, even for a Logram-typed topic.
-  // Closes whichever side of the previous document was actually open first, so
-  // expansion state/subscriptions don't outlive it - this is what makes Inspector's
-  // expand state document-scoped rather than session-scoped like Workspace's.
-  #setInspectorDocument(path, isLogram, forceMode = null) {
-    if(this.activeDocument?.view === 'inspector') {
-      this.#closeInspectorPanes(this.activeDocument);
-      this.#closeLogram(this.activeDocument);
+    if(restore.mode === 'catalog') {
+      this.#openCatalog(ROOT_VID, 'none');
+      return;
     }
-
-    const forcedInspector = forceMode === 'inspector';
-    const useAuto = !forcedInspector && isLogram === undefined;
-    const resolvedIsLogram = forcedInspector ? false : !!isLogram;
-
-    this.activeDocument = {
-      view: 'inspector',
-      path,
-      forceMode,
-      stateStore: useAuto ? new ViewStore() : null,
-      manifestStore: useAuto ? new ViewStore() : null,
-      childrenStore: useAuto ? new ViewStore() : null,
-      logramStore: new ViewStore(),
-      store: null,
-      isLogram: useAuto ? undefined : resolvedIsLogram,
-      inspectorOpened: false,
-      logramOpened: false,
-      subView: useAuto ? undefined : (resolvedIsLogram ? 'logram' : 'inspector'),
-    };
-
-    if(useAuto) this.#openAuto(path);
-    else if(resolvedIsLogram) this.#openLogram(path);
-    else this.#openInspectorPanes(path);
+    // A mode that survived into the URL was named outright by whoever wrote it - that is the only
+    // reason it is there rather than being left to the server's own resolve.
+    this.#navigate(restore.path, restore.mode, { requested: restore.mode !== null, history: 'none' });
   }
 
-  // Single round trip for the "don't know yet" case: server resolves Core/Logram
-  // (one field read) and opens exactly that one side, pushing its evnt.add rows
-  // before resp.open arrives - the pre-created stateStore/manifestStore/childrenStore
-  // above exist precisely so those rows land correctly no matter which side wins,
-  // since #onMessage routes them by vid prefix as soon as they arrive, ahead of this
-  // promise resolving (see ViewSession.HandleOpenAuto on the server).
-  async #openAuto(path) {
-    const doc = this.activeDocument;
-    if(!doc || doc.path !== path || !this.api) return;
+  // The one place a document is swapped. Closing whatever the previous one had open belongs here
+  // rather than at each call site (it used to be three verbatim copies, plus a fourth inlined in
+  // #openAuto), and so does putting the URL and history entry in step with what is now on screen.
+  //
+  // 'none' is for a swap that must not add to the history: restoring the document the URL already
+  // names, and #adoptAltView's correction, which lands on the same address anyway. Every
+  // other swap - including the bar's switch button - is a place you can go Back from.
+  //
+  // Only for swaps - installing a different document object whose open panes differ. Changing a
+  // field of the document in place does NOT go through here (it would close the panes that
+  // document still has open); see #openInspectorPanes and the reactivity note on #openLogram.
+  #setDocument(doc, historyMode = 'push') {
+    this.navToken++;
+    this.navPending = false;
+    this.#closeDocument(this.activeDocument);
+    this.activeDocument = doc;
+    if(historyMode !== 'push') return;
+    const descriptor = documentDescriptor(doc);
+    history.pushState(descriptorState(descriptor), '', descriptorUrl(descriptor));
+  }
+
+  // Closes exactly what the document actually had open, reading its own flags - so a caller can
+  // hand it the document being navigated AWAY FROM after this.activeDocument was reassigned. This
+  // is what makes Inspector's expand state document-scoped rather than session-scoped like
+  // Workspace's: the backend controller feeding those panes is disposed along with the document.
+  #closeDocument(doc) {
+    if(!doc || !this.api) return;
+    if(doc.inspectorOpened) for(const pane of INSPECTOR_PANES) this.#closeVid(`${pane}#${doc.path}`);
+    if(doc.logramOpened) this.#closeVid(`logram#${doc.path}`);
+    if(doc.chartOpened) this.#closeVid(`chart#${doc.path}`);
+  }
+
+  #closeVid(vid) {
+    this.api.close(vid).catch((error) => console.warn('req.close failed', vid, error));
+  }
+
+  // Every navigation to a topic goes through here. mode names the document to open - 'inspector',
+  // 'logram', 'chart' - or is null for "let the server decide", which #openAuto asks outright
+  // (see ViewSession.HandleOpenAuto) and which is the normal case: opening from Workspace, a
+  // breadcrumb click to an ancestor, parent-on-delete, a bare URL. A non-null mode comes only
+  // from somewhere that genuinely knows better than the resolve would - ?mode= in the URL, or
+  // the bar's switch button naming the view you are switching TO.
+  //
+  // `requested` marks a mode the user named outright, as both of those do. It is what keeps
+  // #adoptAltView from overruling a deliberate choice of Inspector on a Logram-typed topic, and
+  // what eventually pins that choice into the URL - see documentDescriptor for why only that one
+  // combination is expressible there at all.
+  //
+  // `altView` carries over what the caller already knows about the topic's other view - only the
+  // switch button does, by standing on that other view. Undefined means "nobody knows yet",
+  // which is not the same as null, "this topic has none".
+  #navigate(path, mode, { requested = false, altView = undefined, history: historyMode = 'push' } = {}) {
+    if(!path) return;
+    if(mode === 'chart') {
+      this.#setChartDocument(path, historyMode);
+      return;
+    }
+    if(mode === 'logram') {
+      this.#setLogramDocument(path, historyMode);
+      return;
+    }
+    if(mode === 'inspector') {
+      this.#setInspectorDocument(path, {
+        requestedMode: requested ? 'inspector' : null,
+        altView,
+      }, historyMode);
+      return;
+    }
+    this.#openAuto(path, historyMode);
+  }
+
+  // A new tab gets the plain topic URL and resolves the document for itself - the mode the click
+  // happened to carry is deliberately dropped, so a link opened this way behaves like any other
+  // bare topic address.
+  #openInNewTab(path) {
+    if(!path) return;
+    window.open(descriptorUrl({ mode: null, path }), '_blank');
+  }
+
+  // Asks the server which document this topic is and installs that one - see
+  // ViewSession.HandleOpenAuto, which resolves Core/Logram from one field read and answers BEFORE
+  // opening the side it resolved to. That order is what lets this wait: the answer names the
+  // document, so the right one can be built and every row of it lands there, with no half-open
+  // document standing in for an answer that has not arrived.
+  //
+  // Nothing is swapped until then, so the previous document stays on screen for the one round trip
+  // rather than being replaced by an empty stand-in - and stays live, since it is #setDocument
+  // below that closes it.
+  async #openAuto(path, historyMode) {
+    if(!this.api) return;
+    const token = ++this.navToken;
+    // Only visible on a cold start; every other navigation has a document to keep showing.
+    this.navPending = !this.activeDocument;
+    this.requestUpdate();
     try {
       const result = await this.api.open(path, null);
-      const isLogram = result?.view === 'logram';
-      if(this.activeDocument !== doc) {
-        // Navigated away while resolving - the server already opened this side (see
-        // ViewSession.HandleOpenAuto) before we knew which one it'd be, and neither
-        // #closeInspectorPanes nor #closeLogram fired for it back when we left (both
-        // inspectorOpened/logramOpened were still false). Close it now so it doesn't
-        // linger server-side.
-        if(isLogram) this.api.close(`logram#${path}`).catch((error) => console.warn('req.close failed', `logram#${path}`, error));
-        else {
-          this.api.close(`inspstate#${path}`).catch((error) => console.warn('req.close failed', `inspstate#${path}`, error));
-          this.api.close(`inspmanifest#${path}`).catch((error) => console.warn('req.close failed', `inspmanifest#${path}`, error));
-          this.api.close(`inspchildren#${path}`).catch((error) => console.warn('req.close failed', `inspchildren#${path}`, error));
-        }
+      // Navigated somewhere else while the answer was in flight. The server has opened this side
+      // by now, or is about to, and nothing on screen refers to it - close it directly, since no
+      // document was ever installed to carry the flags #closeDocument reads.
+      if(token !== this.navToken) {
+        if(result?.view === 'logram') this.#closeVid(`logram#${path}`);
+        else for(const pane of INSPECTOR_PANES) this.#closeVid(`${pane}#${path}`);
         return;
       }
-      this.activeDocument = {
-        ...doc,
-        isLogram,
-        subView: isLogram ? 'logram' : 'inspector',
-        inspectorOpened: !isLogram,
-        logramOpened: isLogram,
-        store: isLogram ? null : new CombinedViewStore([doc.stateStore, doc.manifestStore, doc.childrenStore]),
-      };
+      if(result?.view === 'logram') this.#setLogramDocument(path, historyMode);
+      else this.#setInspectorDocument(path, { requestedMode: null, altView: undefined }, historyMode);
     }
     catch(error) {
       console.warn('req.open (auto) failed', path, error);
+      if(token === this.navToken) {
+        this.navPending = false;
+        this.requestUpdate();
+      }
     }
   }
 
-  // Creates fresh per-document stores for the Inspector's State, Manifest and
-  // Children root trees (mirrors #openCatalog's per-navigation ViewStore) - one
-  // ViewStore per view so each keeps receiving only its own evnt.* packets (see
-  // #onMessage), combined into a single list for rendering via CombinedViewStore -
-  // the array order (state, manifest, children) fixes their on-screen order,
-  // matching ES's InspectorForm (state -> Manifest -> children in one ListView).
-  // Always builds fresh stores, even when re-opening the same path after a
-  // toggle-away - the backend's TopicTreeController instance from the previous
-  // open was disposed on close and loses its diff state, so a stale local store
-  // could be left with rows that no longer exist server-side and never get an
-  // evnt.del to clear them.
+  // altView is the topic's other view, as the server names it on the document's own root row
+  // ("logram", "chart" or nothing) - it decides which button the bar offers, and, for "logram",
+  // whether this document is expressible in the URL at all (see documentDescriptor). It normally
+  // stays undefined until that root row arrives and #adoptAltView picks it up; only the switch
+  // button, which stands on the other view already, can hand it over up front.
+  #setInspectorDocument(path, { requestedMode, altView }, historyMode = 'push') {
+    const stores = {};
+    for(const pane of INSPECTOR_PANES) stores[pane] = new ViewStore();
+    this.#setDocument({
+      view: 'inspector',
+      path,
+      requestedMode,
+      stores,
+      store: combinedInspectorStore(stores),
+      altView,
+      inspectorOpened: false,
+      logramOpened: false,
+    }, historyMode);
+    this.#openInspectorPanes(path);
+  }
+
+  #setLogramDocument(path, historyMode = 'push') {
+    const store = new ViewStore();
+    this.#setDocument({
+      view: 'logram',
+      path,
+      stores: { logram: store },
+      store,
+      inspectorOpened: false,
+      logramOpened: false,
+    }, historyMode);
+    this.#openLogram(path);
+  }
+
+  // The State, Manifest and Children roots are three separate server-side views opened as one.
+  // Their header rows are not synthesised here: the first req.expand on a root the session has not
+  // seen creates the controller, and creating it sends the root row (TreeViewProviderBase
+  // .GetOrCreateOwner -> SendControllerRoot), so the client would only be drawing a placeholder for
+  // the one round trip until the real row replaced it - which the auto path above never did.
+  //
+  // Sets inspectorOpened in place rather than replacing the document: nothing #renderContent reads
+  // changes here, and #closeDocument reads the flag off whatever object is current by then.
   #openInspectorPanes(path) {
     const doc = this.activeDocument;
     if(!doc || doc.path !== path || doc.inspectorOpened || !this.api) return;
-
-    const stateVid = `inspstate#${path}`;
-    const stateStore = new ViewStore();
-    stateStore.add({
-      vid: stateVid,
-      level: 0,
-      expander: 1,
-      icon: '/ide_icons/ty_topic.png',
-      name: 'State',
-      editor: 'Default',
-      value: null,
-      readonly: true,
-    });
-
-    const manifestVid = `inspmanifest#${path}`;
-    const manifestStore = new ViewStore();
-    manifestStore.add({
-      vid: manifestVid,
-      level: 0,
-      expander: 1,
-      icon: '/ide_icons/ty_obj.png',
-      name: 'Manifest',
-      editor: 'Default',
-      value: null,
-      readonly: true,
-    });
-
-    const childrenVid = `inspchildren#${path}`;
-    const childrenStore = new ViewStore();
-    childrenStore.add({
-      vid: childrenVid,
-      level: 0,
-      expander: 1,
-      icon: '/ide_icons/ty_topic.png',
-      name: 'Children',
-      editor: 'Default',
-      value: null,
-      readonly: true,
-    });
-
-    this.activeDocument = {
-      ...doc,
-      stateStore,
-      manifestStore,
-      childrenStore,
-      store: new CombinedViewStore([stateStore, manifestStore, childrenStore]),
-      inspectorOpened: true,
-    };
-    this.api.expand(stateVid, true).catch((error) => console.warn('inspector initial req.expand failed', stateVid, error));
-    this.api.expand(manifestVid, true).catch((error) => console.warn('inspector initial req.expand failed', manifestVid, error));
-    this.api.expand(childrenVid, true).catch((error) => console.warn('inspector initial req.expand failed', childrenVid, error));
-  }
-
-  #closeInspectorPanes(doc) {
-    if(!doc?.inspectorOpened || !this.api) return;
-    const previousStateVid = `inspstate#${doc.path}`;
-    const previousManifestVid = `inspmanifest#${doc.path}`;
-    const previousChildrenVid = `inspchildren#${doc.path}`;
-    this.api.close(previousStateVid).catch((error) => console.warn('req.close failed', previousStateVid, error));
-    this.api.close(previousManifestVid).catch((error) => console.warn('req.close failed', previousManifestVid, error));
-    this.api.close(previousChildrenVid).catch((error) => console.warn('req.close failed', previousChildrenVid, error));
+    doc.inspectorOpened = true;
+    for(const pane of INSPECTOR_PANES) {
+      const vid = `${pane}#${path}`;
+      this.api.expand(vid, true).catch((error) => console.warn('inspector initial req.expand failed', vid, error));
+    }
   }
 
   #openLogram(path) {
@@ -341,33 +370,38 @@ export class X13AppShell extends LitElement {
     });
   }
 
-  // Mirrors #closeInspectorPanes - takes the document explicitly (rather than
-  // always reading this.activeDocument) so callers can close what's being
-  // navigated AWAY FROM after this.activeDocument has already been reassigned.
-  #closeLogram(doc) {
-    if(!doc?.logramOpened || !this.api) return;
-    this.api.close(`logram#${doc.path}`).catch((error) => console.warn('req.close failed', `logram#${doc.path}`, error));
-  }
-
-  // Safety net, not the primary path anymore: #openAuto resolves Core/Logram before
-  // ever opening Inspector, so the auto-switch branch below only fires if Inspector
-  // was opened with an isLogram:false hint that turns out to be stale. Under
-  // forceMode:'inspector' (?mode=inspector, or the toggle's forced override) the
-  // view must stay put - but isLogram itself still needs to become true so
-  // inspector-document.js's Inspector/Logram toggle button shows up at all; without
-  // this, ?mode=inspector on a Logram-typed topic would land with no way back to
-  // Logram short of editing the URL by hand.
-  #maybeAdoptLogramHint(vid, message) {
+  // The Children root row is the open document's own topic, and the only row that carries
+  // altView - so this is where the document normally learns what else that topic can be shown
+  // as. It also keeps arriving: the server re-sends the row when the topic's fields change, so
+  // turning archiving on or off, or retyping a topic to Core/Logram, takes the button with it
+  // while the document stays open.
+  //
+  // Finding out the topic is Logram-typed is the one case that can mean the WRONG document is
+  // open: unless Inspector was asked for outright, the server's own resolve would have opened
+  // Logram, so correcting it is an ordinary swap to that document - which is the whole point of
+  // Logram being a document rather than a sub-view: the correction is a navigation, not a mutation
+  // of something already on screen.
+  //
+  // Under a requested 'inspector' the document stays put, and this is also the moment its address
+  // becomes expressible: until the Logram side is known to exist, an Inspector document is just
+  // what a bare topic URL opens, so only now does ?mode=inspector have to be written into it (see
+  // documentDescriptor).
+  #adoptAltView(vid, message) {
     const doc = this.activeDocument;
-    if(!doc || doc.view !== 'inspector' || doc.isLogram) return;
-    if(vid !== `inspchildren#${doc.path}` || !message.isLogram) return;
-    if(doc.forceMode) {
-      this.activeDocument = { ...doc, isLogram: true };
+    if(!doc || doc.view !== 'inspector' || vid !== `inspchildren#${doc.path}`) return;
+    // Only when the packet actually carries the key: an evnt.upd names just what changed, so a
+    // row updated for some other reason must not be read as "this topic has no other view".
+    if(!Object.prototype.hasOwnProperty.call(message, 'altView')) return;
+    const altView = message.altView || null;
+    if(altView === doc.altView) return;
+    if(altView === 'logram' && doc.requestedMode !== 'inspector') {
+      this.#setLogramDocument(doc.path, 'none');
       return;
     }
-    this.#closeInspectorPanes(doc);
-    this.activeDocument = { ...doc, isLogram: true, subView: 'logram', inspectorOpened: false };
-    this.#openLogram(doc.path);
+    const adopted = { ...doc, altView };
+    this.activeDocument = adopted;
+    const descriptor = documentDescriptor(adopted);
+    history.replaceState(descriptorState(descriptor), '', descriptorUrl(descriptor));
   }
 
   #requestDocument(restore) {
@@ -407,56 +441,61 @@ export class X13AppShell extends LitElement {
       this.logStore.applyLog(message);
       return;
     }
-    if(message.type === 'evnt.add' || message.type === 'evnt.upd' || message.type === 'evnt.del') {
-      const vid = String(message.vid || '');
-      if(vid.startsWith('catalog#')) this.activeDocument?.store?.applyPacket(message);
-      else if(vid.startsWith('inspstate#')) this.activeDocument?.stateStore?.applyPacket(message);
-      else if(vid.startsWith('inspmanifest#')) this.activeDocument?.manifestStore?.applyPacket(message);
-      else if(vid.startsWith('inspchildren#')) {
-        this.activeDocument?.childrenStore?.applyPacket(message);
-        if(message.type !== 'evnt.del') this.#maybeAdoptLogramHint(vid, message);
-      }
-      else if(vid.startsWith('logram#')) this.activeDocument?.logramStore?.applyPacket(message);
-      else this.store.applyPacket(message);
-      if(message.type === 'evnt.del') this.#onDocumentRootDeleted(vid);
-    }
+    if(message.type !== 'evnt.add' && message.type !== 'evnt.upd' && message.type !== 'evnt.del') return;
+    const vid = String(message.vid || '');
+    const view = getView(vid);
+    // Each of the document's trees keeps receiving only its own packets, which is what lets
+    // CombinedViewStore render several of them as one list without them interfering.
+    if(DOCUMENT_VID_VIEWS.has(view)) this.activeDocument?.stores?.[view]?.applyPacket(message);
+    else this.store.applyPacket(message);
+    if(view === 'inspchildren' && message.type !== 'evnt.del') this.#adoptAltView(vid, message);
+    if(message.type === 'evnt.del') this.#onDocumentRootDeleted(vid);
   }
 
-  // The topic backing the open Inspector document was deleted elsewhere (e.g. from
-  // Workspace) - its State/Manifest/Children controller detected the removal of its
-  // own root and pushed evnt.del for that root vid (see TopicTreeController /
-  // StateTreeController / ManifestTreeController's HandleRootRemoved), rather than
-  // just a row disappearing from within an already-open tree. Navigate to the parent
-  // topic instead of leaving the document open on something that no longer exists.
-  // All three controllers detect the same deletion independently and each send their
-  // own evnt.del, but only the first one still matches activeDocument.path - once
-  // #navigateInspector below reassigns it to the parent, the other two no longer do,
-  // so this naturally fires exactly once without extra guard bookkeeping.
+  // The topic backing the open document was deleted elsewhere (e.g. from Workspace) - its
+  // controller detected the removal of its own root and pushed evnt.del for that root vid (see
+  // TopicTreeController / StateTreeController / ManifestTreeController's HandleRootRemoved),
+  // rather than just a row disappearing from within an already-open tree. Navigate to the parent
+  // topic instead of leaving the document open on something that no longer exists. An Inspector
+  // document's three controllers detect the same deletion independently and each send their own
+  // evnt.del, but only the first one still matches the open document's path - once #navigate below
+  // reassigns it to the parent, the other two no longer do, so this fires exactly once without
+  // extra guard bookkeeping.
   #onDocumentRootDeleted(vid) {
-    if(this.activeDocument?.view !== 'inspector') return;
-    const path = this.activeDocument.path;
-    const isOwnRoot = vid === `inspstate#${path}` || vid === `inspmanifest#${path}` || vid === `inspchildren#${path}` || vid === `logram#${path}`;
+    const doc = this.activeDocument;
+    if(doc?.view !== 'inspector' && doc?.view !== 'logram' && doc?.view !== 'chart') return;
+    // Exact vid equality, not the vid's topic path: a field row (inspstate#/A/B#f) names the very
+    // same topic as the root it hangs under, and its removal is not the document's removal.
+    const isOwnRoot = [...INSPECTOR_PANES, 'logram', 'chart'].some((view) => vid === `${view}#${doc.path}`);
     if(!isOwnRoot) return;
-    const parentPath = path === '/' ? '/' : (path.split('/').slice(0, -1).join('/') || '/');
-    this.#navigateInspector(parentPath, false);
+    const parentPath = doc.path === '/' ? '/' : (doc.path.split('/').slice(0, -1).join('/') || '/');
+    this.#navigate(parentPath, null);
   }
 
 
   #renderContent() {
-    if(this.activeDocument?.view === 'catalog') {
-      return html`<x13-catalog-document .api=${this.api} .document=${this.activeDocument} .store=${this.activeDocument.store}></x13-catalog-document>`;
+    const doc = this.activeDocument;
+    if(doc?.view === 'catalog') {
+      return html`<x13-catalog-document .api=${this.api} .document=${doc} .store=${doc.store}></x13-catalog-document>`;
     }
-    if(this.activeDocument?.view === 'inspector') {
-      return html`<x13-inspector-document .path=${this.activeDocument.path} .rootName=${this.serverName}
-        .api=${this.api} .store=${this.activeDocument.store}
-        .isLogram=${this.activeDocument.isLogram} .subView=${this.activeDocument.subView} .logramStore=${this.activeDocument.logramStore}
-        @segment-command=${this.#onSegmentCommand} @view-toggle=${this.#toggleDocumentView}></x13-inspector-document>`;
+    if(doc?.view === 'inspector') {
+      return html`<x13-inspector-document .path=${doc.path} .rootName=${this.serverName}
+        .api=${this.api} .store=${doc.store} .altView=${doc.altView || null}
+        @segment-command=${this.#onSegmentCommand}></x13-inspector-document>`;
     }
-    if(this.activeDocument?.view === 'chart') {
-      return html`<x13-chart-document .path=${this.activeDocument.path} .rootName=${this.serverName}
+    if(doc?.view === 'logram') {
+      return html`<x13-logram-document .path=${doc.path} .rootName=${this.serverName}
+        .api=${this.api} .store=${doc.store}
+        @segment-command=${this.#onSegmentCommand}></x13-logram-document>`;
+    }
+    if(doc?.view === 'chart') {
+      return html`<x13-chart-document .path=${doc.path} .rootName=${this.serverName} .store=${doc.stores.chart}
         @segment-command=${this.#onSegmentCommand}></x13-chart-document>`;
     }
-    if(this.pendingRestore) return html``;
+    // Nothing to show yet, but something is coming: the URL named a document and the session is
+    // still connecting (pendingRestore), or its resolve is in flight (navPending). The logo is
+    // for an empty shell, not for a document that is one round trip away.
+    if(this.pendingRestore || this.navPending) return html``;
     return html`<x13-logo-document></x13-logo-document>`;
   }
 
@@ -464,166 +503,134 @@ export class X13AppShell extends LitElement {
     const row = e.detail?.row;
     const cmd = e.detail?.cmd;
     if(!row?.vid) return;
-    if(cmd === 'open' || cmd === 'open-tab') {
-      this.#navigateInspector(getTopicPath(row.vid), cmd === 'open-tab', !!row.isLogram);
+    // Always through the server's own resolve: it opens the right side in the same round trip
+    // (ViewSession.HandleOpenAuto), so a hint carried on the row would only let the client
+    // duplicate a decision already made for it - and would have to be kept on every row of the
+    // tree to be available here. The document learns what else its topic can be shown as from
+    // its own root row, which is the one row that carries it.
+    if(cmd === 'open') {
+      this.#navigate(getTopicPath(row.vid), null);
+      return;
+    }
+    if(cmd === 'open-tab') {
+      this.#openInNewTab(getTopicPath(row.vid));
       return;
     }
     if(cmd === 'chart') {
-      this.#openChart(getTopicPath(row.vid));
+      this.#navigate(getTopicPath(row.vid), 'chart');
       return;
     }
     if(cmd === 'catalog') this.#openCatalog(row.vid);
   }
 
-  // Toggling now behaves like navigating to the same path with the opposite
-  // isLogram hint: close whichever side is open, open the other - matches
-  // #setInspectorDocument in never keeping both sides loaded at once. This trades
-  // an instant flip for one more round trip per toggle, in exchange for not paying
-  // for the unseen side's data (and live subscription) for as long as the document
-  // stays open. Switching to Inspector here is always the *forced* override (the
-  // toggle only ever shows on a Logram-typed doc, whose resolved default is Logram -
-  // see inspector-document.js render), so it's recorded as forceMode:'inspector' and
-  // mirrored into the URL (?mode=inspector) via replaceState, same shape #navigateInspector
-  // uses - a reload or shared link then reopens on Inspector instead of re-resolving
-  // back to Logram. Switching back to Logram clears the override, restoring the
-  // resolved default.
-  #toggleDocumentView() {
-    const doc = this.activeDocument;
-    if(doc?.view !== 'inspector') return;
-    if(doc.subView === 'logram') {
-      this.#closeLogram(doc);
-      const forceMode = 'inspector';
-      this.activeDocument = { ...doc, subView: 'inspector', logramOpened: false, forceMode };
-      this.#openInspectorPanes(doc.path);
-      history.replaceState({ inspectorPath: doc.path, forceMode }, '', pathToDocumentUrl(doc.path, forceMode));
-    }
-    else {
-      this.#closeInspectorPanes(doc);
-      const forceMode = null;
-      this.activeDocument = { ...doc, subView: 'logram', inspectorOpened: false, logramStore: new ViewStore(), forceMode };
-      this.#openLogram(doc.path);
-      history.replaceState({ inspectorPath: doc.path, forceMode }, '', pathToDocumentUrl(doc.path, forceMode));
-    }
-  }
-
-  async #openCatalog(vid, { pushHistory = true } = {}) {
+  async #openCatalog(vid, historyMode = 'push') {
     if(!this.api) return;
-    if(this.activeDocument?.view === 'inspector') {
-      this.#closeInspectorPanes(this.activeDocument);
-      this.#closeLogram(this.activeDocument);
-    }
     try {
-      const document = await this.api.open(vid, 'catalog');
-      document.store = new ViewStore();
-      document.store.add({
-        vid: document.vid || 'catalog#/',
+      const opened = await this.api.open(vid, 'catalog');
+      const rootVid = opened.vid || 'catalog#/';
+      const store = new ViewStore();
+      store.add({
+        vid: rootVid,
         level: 0,
         expander: 1,
         icon: '/ide_icons/ty_topic.png',
-        name: document.title || 'Catalog',
+        name: opened.title || 'Catalog',
         editor: 'Default',
-        value: document.data?.uri || '',
+        value: opened.data?.uri || '',
         readonly: true,
-        info: document.data?.uri || '',
+        info: opened.data?.uri || '',
         downloadEnabled: false,
         removeEnabled: false,
       });
-      this.activeDocument = document;
-      if(pushHistory) history.pushState({ mode: 'catalog' }, '', '/ide.html/?mode=catalog');
-      this.api.expand(document.vid || 'catalog#/', true)
-        .catch((error) => console.warn('catalog initial req.expand failed', document.vid, error));
+      this.#setDocument({
+        view: 'catalog',
+        vid: rootVid,
+        title: opened.title,
+        data: opened.data,
+        stores: { catalog: store },
+        store,
+      }, historyMode);
+      this.api.expand(rootVid, true)
+        .catch((error) => console.warn('catalog initial req.expand failed', rootVid, error));
     }
     catch(error) {
       console.warn('req.open catalog failed', vid, error);
     }
   }
 
-  // The Chart document has no server side at all: its data comes over HTTP from
-  // /api/archivist, carrying the session token this.api's handshake already handed us
-  // (ide_services/api-token.js), so there is no req.open to make and nothing to close
-  // afterwards - which is also why #onDocumentRootDeleted has no chart case. Closing the
-  // previous document's panes is still ours to do, exactly as #openCatalog does it.
-  #openChart(path) {
+  // The Chart document draws from two sources, and they answer different questions. Its history
+  // comes over HTTP from /api/archivist, carrying the session token this.api's handshake already
+  // handed us (ide_services/api-token.js). What has happened since that answer comes from the
+  // `chart#` view opened here - one subscription to the topic's value (ChartViewProvider), whose
+  // evnt.* land in stores.chart like any other document's rows.
+  #setChartDocument(path, historyMode = 'push') {
     if(!path) return;
-    this.#setChartDocument(path);
-    history.pushState({ chartPath: path }, '', pathToDocumentUrl(path, 'chart'));
-  }
-
-  #setChartDocument(path) {
-    if(this.activeDocument?.view === 'inspector') {
-      this.#closeInspectorPanes(this.activeDocument);
-      this.#closeLogram(this.activeDocument);
-    }
-    this.activeDocument = { view: 'chart', path };
+    const doc = { view: 'chart', path, stores: { chart: new ViewStore() }, chartOpened: true };
+    this.#setDocument(doc, historyMode);
+    this.api?.open(`chart#${path}`, 'chart').catch((error) => {
+      console.warn('req.open chart failed', path, error);
+      // The archive half still works without it; only the live tail is lost, and saying so here
+      // keeps #closeDocument from closing a view the server never opened.
+      if(this.activeDocument === doc) doc.chartOpened = false;
+    });
   }
 
   #onSegmentCommand(e) {
-    const { cmd, path, isLogram } = e.detail || {};
+    const { cmd, path, mode } = e.detail || {};
     if(!path) return;
     if(cmd === 'copy-path') {
       navigator.clipboard.writeText(path).catch((error) => console.warn('clipboard write failed', error));
       return;
     }
-    // From a Logram pin's "Show in Workspace" (logram-document.js #showInWorkspace) -
-    // a new object every time (even for the same path) so x13-view-workspace's
-    // updated() sees a change and re-reveals, e.g. after the row scrolled out of view.
+    // From a Logram pin's "Show in Workspace" (logram-document.js #showInWorkspace) - a new object
+    // every time (even for the same path) so x13-view-workspace's updated() sees a change and
+    // re-reveals, e.g. after the row scrolled out of view.
     if(cmd === 'show-in-workspace') {
       this.workspaceReveal = { path, token: Date.now() };
       return;
     }
-    // isLogram arrives as undefined for ancestor segments (see inspector-document.js
-    // #emit) - pass it through as-is rather than coercing to false, so #navigateInspector
-    // can tell "known not a Logram" apart from "don't know yet" and route the latter
-    // through #openAuto instead of guessing Inspector.
-    this.#navigateInspector(path, cmd === 'open-tab', isLogram);
-  }
-
-  #navigateInspector(path, newTab, isLogram, forceMode = null) {
-    const url = pathToDocumentUrl(path, forceMode);
-    if(newTab) {
-      window.open(url, '_blank');
+    if(cmd === 'open-tab') {
+      this.#openInNewTab(path);
       return;
     }
-    this.#setInspectorDocument(path, isLogram, forceMode);
-    history.pushState({ inspectorPath: path, forceMode }, '', url);
+    // The bar's switch button: the other view of the topic already on screen. A named choice, so
+    // it survives into the URL where it has to (see documentDescriptor), and an ordinary history
+    // entry, so Back returns to the view you switched away from.
+    //
+    // Standing on the Logram document is itself proof that the topic has a Logram side, which is
+    // the one thing the Inspector document it opens could not otherwise know until inspchildren
+    // says so - see #adoptAltView.
+    if(cmd === 'switch-view') {
+      this.#navigate(path, mode, { requested: true, altView: this.activeDocument?.view === 'logram' ? 'logram' : undefined });
+      return;
+    }
+    // mode arrives as undefined for ancestor segments (see breadcrumb-bar.js #emit) - pass it
+    // through as-is rather than defaulting to Inspector, so #navigate can tell "known" apart from
+    // "don't know yet" and route the latter through #openAuto's resolve.
+    this.#navigate(path, mode === undefined ? null : mode);
   }
 
+  // Runs before the connection exists, so it only records what to open and normalises the address
+  // bar; #onConnected hands the descriptor to #applyRestore once there is a session to open it in.
   #restoreFromLocation() {
-    const mode = new URLSearchParams(location.search).get('mode');
-    if(mode === 'catalog') {
-      this.pendingRestore = { view: 'catalog' };
-      history.replaceState({ mode: 'catalog' }, '', '/ide.html/?mode=catalog');
-      return;
-    }
-    const path = topicPathFromLocation(location.pathname);
-    if(!path) return;
-    if(mode === 'chart') {
-      this.pendingRestore = { view: 'chart', path };
-      history.replaceState({ chartPath: path }, '', location.pathname + location.search);
-      return;
-    }
-    const forceMode = mode === 'inspector' ? 'inspector' : null;
-    this.pendingRestore = { view: 'inspector', path, forceMode };
-    history.replaceState({ inspectorPath: path, forceMode }, '', location.pathname + location.search);
+    const descriptor = descriptorFromLocation();
+    if(!descriptor) return;
+    this.pendingRestore = descriptor;
+    history.replaceState(descriptorState(descriptor), '', descriptorUrl(descriptor));
   }
 
   #onPopState(e) {
-    if(e.state?.inspectorPath) {
-      this.#requestDocument({ view: 'inspector', path: e.state.inspectorPath, forceMode: e.state.forceMode || null });
+    const descriptor = descriptorOfState(e.state);
+    if(descriptor) {
+      this.#requestDocument(descriptor);
       return;
     }
-    if(e.state?.chartPath) {
-      this.#requestDocument({ view: 'chart', path: e.state.chartPath });
-      return;
-    }
-    if(e.state?.mode === 'catalog') {
-      this.#requestDocument({ view: 'catalog' });
-      return;
-    }
+    // Back past the first document of this tab: nothing to show, and nothing should stay open
+    // server-side for it either.
     this.pendingRestore = null;
+    this.#closeDocument(this.activeDocument);
     this.activeDocument = null;
   }
-
   #onEditorCommit(e) {
     const vid = e.detail?.vid;
     if(!vid || !this.api) return;
@@ -633,9 +640,9 @@ export class X13AppShell extends LitElement {
     });
   }
 
-  // Mirrors #onEditorCommit for editors that need to trigger a req.rpc command
-  // against their own row instead of (or alongside) committing a value - e.g. the
-  // DevicePLC editor's inline Build/Run/Start/Stop buttons (view:'value' only).
+  // Mirrors #onEditorCommit for editors that need to trigger a req.rpc command against their own
+  // row instead of (or alongside) committing a value - e.g. the DevicePLC editor's inline
+  // Build/Run/Start/Stop buttons (view:'value' only).
   #onEditorRpc(e) {
     const { vid, cmd } = e.detail || {};
     if(!vid || !cmd || !this.api) return;
@@ -686,13 +693,63 @@ export class X13AppShell extends LitElement {
 
 customElements.define('x13-app-shell', X13AppShell);
 
-// The URL of a document rooted on a topic: /ide.html/<path>, plus ?mode= for the cases the path
-// alone cannot tell apart. 'inspector' pins the Inspector view of a Logram-typed topic, whose
-// resolved default would be Logram; 'chart' names a different document on the same topic.
-function pathToDocumentUrl(path, mode = null) {
-  const segments = String(path || '/').split('/').filter(Boolean).map(encodeURIComponent);
+// The pane stores rendered as one list. The array order fixes their on-screen order (state ->
+// Manifest -> children), matching ES's InspectorForm, which showed all three in one ListView.
+function combinedInspectorStore(stores) {
+  return new CombinedViewStore(INSPECTOR_PANES.map((pane) => stores[pane]));
+}
+
+// A descriptor - {mode, path} - is the single form URL, history entry and open document all
+// convert to and from, so the address bar and what is on screen cannot drift apart: #setDocument
+// writes both from the document it installs, and page load / popstate read them back into the very
+// same shape #applyRestore opens.
+//
+// mode null means "whatever this topic opens as" and is therefore what a bare topic URL carries.
+// Logram maps to it: a Logram document is what the server resolves a Logram-typed topic to, so
+// pinning ?mode=logram would only restate the default. Inspector maps to it too, and keeps mapping
+// to it until BOTH halves of the exception hold - it was asked for outright, and the topic really
+// does have a Logram side for the resolve to have preferred. Until the second half is known, an
+// Inspector document is simply what a bare topic URL opens, and saying ?mode=inspector would put a
+// pin in the address of every ordinary topic anyone ever switched to Inspector from a Chart.
+// #adoptAltView is what learns the second half, and rewrites the address when it does.
+function documentDescriptor(doc) {
+  if(doc.view === 'catalog') return { mode: 'catalog' };
+  if(doc.view === 'chart') return { mode: 'chart', path: doc.path };
+  if(doc.view === 'inspector' && doc.requestedMode === 'inspector' && doc.altView === 'logram') return { mode: 'inspector', path: doc.path };
+  return { mode: null, path: doc.path };
+}
+
+// The state SHAPE is deliberately the one earlier builds wrote: history.state survives a reload,
+// so a tab opened before Logram became a document of its own still has to go Back correctly.
+function descriptorState(descriptor) {
+  if(descriptor.mode === 'catalog') return { mode: 'catalog' };
+  if(descriptor.mode === 'chart') return { chartPath: descriptor.path };
+  return { inspectorPath: descriptor.path, forceMode: descriptor.mode === 'inspector' ? 'inspector' : null };
+}
+
+function descriptorOfState(state) {
+  if(state?.chartPath) return { mode: 'chart', path: state.chartPath };
+  if(state?.mode === 'catalog') return { mode: 'catalog' };
+  if(state?.inspectorPath) return { mode: state.forceMode === 'inspector' ? 'inspector' : null, path: state.inspectorPath };
+  return null;
+}
+
+// /ide.html/<path>, plus ?mode= for what the path alone cannot say. Catalog is rooted on no topic
+// and is named by ?mode= alone.
+function descriptorUrl(descriptor) {
+  if(descriptor.mode === 'catalog') return '/ide.html/?mode=catalog';
+  const segments = String(descriptor.path || '/').split('/').filter(Boolean).map(encodeURIComponent);
   const base = segments.length ? `/ide.html/${segments.join('/')}` : '/ide.html/';
-  return mode === 'inspector' || mode === 'chart' ? `${base}?mode=${mode}` : base;
+  return descriptor.mode ? `${base}?mode=${descriptor.mode}` : base;
+}
+
+function descriptorFromLocation() {
+  const mode = new URLSearchParams(location.search).get('mode');
+  if(mode === 'catalog') return { mode: 'catalog' };
+  const path = topicPathFromLocation(location.pathname);
+  if(!path) return null;
+  if(mode === 'chart') return { mode: 'chart', path };
+  return { mode: mode === 'inspector' ? 'inspector' : null, path };
 }
 
 function topicPathFromLocation(pathname) {

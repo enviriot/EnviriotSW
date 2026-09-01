@@ -185,7 +185,7 @@ namespace X13.WebUI {
       string name = NextName(diagram, prefix);
 
       int top = Math.Max(0, args.AsInt("top", 0));
-      int left = Math.Max(0, args.AsInt("left", 0));
+      int left = Math.Max(LogramGraphController.MinLeftCell, args.AsInt("left", 0));
 
       JSC.JSValue manifestSrc = descState["manifest"];
       JSC.JSValue manifest = manifestSrc.IsObject() ? JsLib.Clone(manifestSrc) : JSC.JSObject.CreateObject();
@@ -227,6 +227,8 @@ namespace X13.WebUI {
 
       string name = NextVariableName(diagram, source);
 
+      // No MinLeftCell floor here, unlike ExecuteAddBlock: variables are exempt from it and
+      // may sit flush against the left edge (see the constant).
       int top = Math.Max(0, args.AsInt("top", 0));
       int left = Math.Max(0, args.AsInt("left", 0));
 

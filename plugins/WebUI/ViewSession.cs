@@ -23,6 +23,7 @@ namespace X13.WebUI {
     private readonly InspectorStateViewProvider _inspectorState;
     private readonly InspectorManifestViewProvider _inspectorManifest;
     private readonly LogramViewProvider _logram;
+    private readonly ChartViewProvider _chart;
     private readonly LogHandler _log;
     private readonly List<IViewProvider> _providers;
 
@@ -56,6 +57,7 @@ namespace X13.WebUI {
       _inspectorState = new InspectorStateViewProvider(_send, _targets, Post, prim);
       _inspectorManifest = new InspectorManifestViewProvider(_send, _targets, Post, prim);
       _logram = new LogramViewProvider(_send, Post, prim);
+      _chart = new ChartViewProvider(_send, Post);
       _log = new LogHandler(sendQuiet, Post);
       _providers = new List<IViewProvider>();
       _providers.Add(_workspace);
@@ -64,6 +66,7 @@ namespace X13.WebUI {
       _providers.Add(_inspectorState);
       _providers.Add(_inspectorManifest);
       _providers.Add(_logram);
+      _providers.Add(_chart);
 
       _handlers = new SortedList<string, Action<JSC.JSValue>>(StringComparer.Ordinal);
       _handlers[ViewMessageTypes.ReqHello] = HandleHello;
@@ -215,12 +218,29 @@ namespace X13.WebUI {
       _send(response);
     }
 
-    // Resolves Core/Logram itself (one field read - see LogramViewProvider.Open)
-    // instead of asking the frontend to guess a view#-prefixed vid up front. Opens
-    // exactly one side and pushes its evnt.add rows before responding, same as the
-    // explicit-view path above would for whichever side wins - the losing side is
-    // never touched, so a large Logram's children are never fetched just to be
-    // discarded, and a plain topic's Logram graph never gets built for nothing.
+    /// <summary>Auto-open: resolves which document the topic is, answers, then opens it.</summary>
+    /// <remarks>Resolving Core/Logram here (one field read - see LogramViewProvider.Open) rather
+    /// than asking the frontend to guess a view#-prefixed vid up front means exactly one side is
+    /// ever opened: the losing side is never touched, so a large Logram's children are never
+    /// fetched just to be discarded, and a plain topic's Logram graph never gets built for nothing.
+    /// <para>The answer goes out BEFORE that side is opened, which is the opposite of the
+    /// explicit-view path above and is the whole point. Rows sent ahead of the answer would reach
+    /// a client that does not yet know which document it is looking at, forcing it to guess one to
+    /// hold them - and to visibly correct itself when the answer disagreed. Answering first, the
+    /// client builds the right document and every row lands in it: resp.open resolves its promise
+    /// in a microtask of the frame that delivered it, so the continuation runs before the socket
+    /// can deliver the first row.</para>
+    /// <para>The cost is that a failure to open can no longer be reported as this request's
+    /// answer. It is logged instead. Everything that can be checked cheaply - the path, the topic,
+    /// its type - is checked before the answer goes out, so what remains is a view failing to open
+    /// a topic that exists and is of the right type.</para>
+    /// <para>For the same reason the answer here carries no "data": it is assembled before the
+    /// view that would supply it has run, so the three fields below are everything it can say.
+    /// Nothing reachable this way returns any today - LogramViewProvider.Open answers with
+    /// view/vid/title alone, and Catalog is never opened from here - but a view that starts to
+    /// would lose it silently. The answer then belongs in its own packet: moving this one back
+    /// after the open would put the rows ahead of it again, which is the very thing the ordering
+    /// above exists to prevent.</para></remarks>
     private void HandleOpenAuto(JSC.JSValue request, string path) {
       if(string.IsNullOrEmpty(path)) {
         _send(Error(request, "view_target_not_found", "View target not found: <null>"));
@@ -232,20 +252,20 @@ namespace X13.WebUI {
         return;
       }
       bool isLogram = string.Equals(topic.GetField("type").AsString(null), "Core/Logram", StringComparison.Ordinal);
+      string logramVid = "logram#" + path;
+
+      JSC.JSObject response = ResponseBase(request, ViewMessageTypes.RespOpen, true);
+      response["view"] = isLogram ? "logram" : "inspector";
+      response["vid"] = isLogram ? logramVid : path;
+      response["title"] = topic.name ?? string.Empty;
+      _send(response);
 
       if(isLogram) {
-        string logramVid = "logram#" + path;
         ViewOpResult result = _logram.Open(logramVid, "logram");
         if(result == null || !result.Ok) {
-          _send(Error(request, result == null ? "view_open_failed" : (result.ErrorCode ?? "view_open_failed"), result == null ? "View open failed" : (result.ErrorMessage ?? "View open failed")));
-          return;
+          X13.Log.Warning("WebUI WS#{0} auto-open({1}) - {2}", _sessionId, logramVid,
+            result == null ? "no result" : (result.ErrorMessage ?? result.ErrorCode ?? "failed"));
         }
-        JSC.JSObject response = ResponseBase(request, ViewMessageTypes.RespOpen, true);
-        response["view"] = result.View ?? "logram";
-        response["vid"] = result.Vid ?? logramVid;
-        response["title"] = result.Title ?? string.Empty;
-        if(result.Data != null && result.Data.Defined) response["data"] = result.Data;
-        _send(response);
         return;
       }
 
@@ -254,15 +274,8 @@ namespace X13.WebUI {
       ViewOpResult childrenResult = _inspectorChildren.Expand("inspchildren#" + path, true);
       bool allOk = stateResult != null && stateResult.Ok && manifestResult != null && manifestResult.Ok && childrenResult != null && childrenResult.Ok;
       if(!allOk) {
-        _send(Error(request, "view_open_failed", "View open failed: " + path));
-        return;
+        X13.Log.Warning("WebUI WS#{0} auto-open({1}) - one of the Inspector panes failed to open", _sessionId, path);
       }
-
-      JSC.JSObject inspectorResponse = ResponseBase(request, ViewMessageTypes.RespOpen, true);
-      inspectorResponse["view"] = "inspector";
-      inspectorResponse["vid"] = path;
-      inspectorResponse["title"] = topic.name ?? string.Empty;
-      _send(inspectorResponse);
     }
 
     /// <summary>Runs one view command, answering now or later depending on what it returns.</summary>

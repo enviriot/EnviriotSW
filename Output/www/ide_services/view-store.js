@@ -37,7 +37,7 @@ export class ViewStore {
     if(!patch || !patch.vid) return;
     const index = this.rows.findIndex((row) => row.vid === patch.vid);
     if(index < 0) return;
-    const allowed = ['expander', 'icon', 'editor', 'value', 'readonly', 'isLogram', 'options', 'editorView', 'info', 'srcVer', 'actVer', 'downloadEnabled', 'removeEnabled',
+    const allowed = ['expander', 'icon', 'editor', 'value', 'readonly', 'altView', 'options', 'editorView', 'info', 'srcVer', 'actVer', 'downloadEnabled', 'removeEnabled',
       'x', 'y', 'width', 'height', 'pins', 'pinDirection', 'pinIndex', 'sourceVid', 'sourceLocal', 'sourcePath', 'trace', 'color', 'displayValue'];
     const next = { ...this.rows[index] };
     for(const key of allowed) {
@@ -117,7 +117,7 @@ function normalizeRow(row) {
     editor: row.editor || 'Default',
     value: Object.prototype.hasOwnProperty.call(row, 'value') ? row.value : '',
     readonly: !!row.readonly,
-    isLogram: !!row.isLogram,
+    ...(Object.prototype.hasOwnProperty.call(row, 'altView') ? { altView: row.altView } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'options') ? { options: row.options } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'editorView') ? { editorView: row.editorView } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'info') ? { info: row.info } : {}),

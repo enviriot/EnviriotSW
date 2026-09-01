@@ -1,5 +1,6 @@
 ///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -59,6 +60,29 @@ namespace X13.WebUI.Helpers {
       _owner.SetState(_host);
       StartHostLookup();
       return _owner;
+    }
+
+    /// <summary>Removes every session topic left behind by a previous run. Engine thread.</summary>
+    /// <remarks>Dispose already removes a session's own topic, so a client that disconnects
+    /// cleanly leaves nothing behind - but a kill, a crash and even an ordinary shutdown all
+    /// miss it: WebUiPl.Stop closes the sockets, and the disposal their OnClose queues is never
+    /// pumped (Tick has stopped, and Repo.Stop exports the config rather than dispatching what
+    /// is left in the queue).
+    ///
+    /// Those topics then come BACK on the next start, which is what makes them pile up instead
+    /// of merely outliving one run. The state does not survive - EnsureOwner clears Saved, so
+    /// LiteDB_Pl drops the state row - but a topic's MANIFEST is written whatever its
+    /// attributes are, and Load recreates a topic for every manifest row it finds. One dead run
+    /// adds its clients to the ones the run before it left.
+    ///
+    /// Called from WebUiPl.Start before the host opens its port: no socket can be open yet, so
+    /// everything under clients is by definition stale and nothing live is swept up with it.</remarks>
+    internal static void PurgeStale() {
+      Topic clients = Topic.root.Get(ClientsPath, false);
+      if(clients == null) return;
+      // Materialized: Remove marks the topic disposed and queues the removal, and walking the
+      // live child collection while doing that is the kind of thing that works until it does not.
+      foreach(Topic stale in clients.children.ToArray()) stale.Remove();
     }
 
     /// <summary>Resolves the peer's name off the engine thread, then renames the topic.</summary>

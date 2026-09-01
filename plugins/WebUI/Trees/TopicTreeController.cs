@@ -185,15 +185,12 @@ namespace X13.WebUI {
           OptionsKey = template.OptionsKey,
           Options = template.Options,
           EditorView = template.EditorView,
-          // Computed from the topic directly, not template.IsLogram - root row
-          // templates (BuildWorkspaceRootRow/BuildChildrenRootRow) are generic
-          // placeholder builders that don't know about Logram at all, so they never
-          // set it, and the root row would always incorrectly report false otherwise.
-          // This matters concretely: the Children tree's root row represents the
-          // currently-open document's own topic, so opening a Logram diagram FROM
-          // there (e.g. re-clicking its own "Children" header) needs this to be
-          // right, same as any other row - see RowProjector.BuildTopicRow.
-          IsLogram = string.Equals(topic.GetField("type").AsString(null), "Core/Logram", StringComparison.Ordinal),
+          // The only row that carries it, and the only one that needs to: a tree's root row is
+          // the open document's own topic, and the breadcrumb bar of that document is the sole
+          // reader. Computed from the topic rather than the template, because the root row
+          // templates (BuildWorkspaceRootRow/BuildChildrenRootRow) are generic placeholder
+          // builders that know nothing about views and would leave it null.
+          AltView = RowProjector.ResolveAltView(topic),
         };
       }
       ViewRowDto row = _rowProjector.BuildTopicRow(topic);
@@ -259,6 +256,17 @@ namespace X13.WebUI {
         // to be handled before it, not folded into the existing remove branch.
         if(perform.Art == Perform.E_Art.remove && perform.src == _rootTopic && sub.setTopic == _rootTopic) {
           HandleRootRemoved();
+          return;
+        }
+
+        // The root's OWN fields changing - observable for the same reason the removal above is,
+        // and rejected by the same child-focused guard just below, so it has to be handled here
+        // too. It matters because the root row carries AltView, which is read from exactly those
+        // fields (RowProjector.ResolveAltView): without this, turning archiving on, or retyping a
+        // topic to Core/Logram, would leave the open document's own breadcrumb button describing
+        // what the topic used to be until someone navigated away and back.
+        if(perform.Art == Perform.E_Art.changedField && perform.src == _rootTopic && sub.setTopic == _rootTopic) {
+          SendUpd(_rootTopic, null);
           return;
         }
         if(perform.src.parent != sub.setTopic) return;
@@ -362,7 +370,7 @@ namespace X13.WebUI {
       if(!string.IsNullOrEmpty(row.Editor) && row.Editor != "Default") dto["editor"] = row.Editor;
       if(!JsonTreeRowHelpers.IsDefaultValue(row.Value)) dto["value"] = row.Value;
       if(row.Readonly) dto["readonly"] = row.Readonly;
-      if(row.IsLogram) dto["isLogram"] = row.IsLogram;
+      if(!string.IsNullOrEmpty(row.AltView)) dto["altView"] = row.AltView;
       if(row.Options != null) dto["options"] = row.Options;
       if(!string.IsNullOrEmpty(row.EditorView)) dto["editorView"] = row.EditorView;
       _send(dto);
@@ -399,8 +407,11 @@ namespace X13.WebUI {
         dto["readonly"] = row.Readonly;
         changed = true;
       }
-      if(previous == null || previous.IsLogram != row.IsLogram) {
-        dto["isLogram"] = row.IsLogram;
+      if(previous == null || !JsonTreeRowHelpers.StringEquals(previous.AltView, row.AltView)) {
+        // Empty rather than omitted when it goes away: an update carries only what changed, so a
+        // missing key would leave the client holding the previous answer - the topic having just
+        // stopped being archived is exactly when the button has to disappear.
+        dto["altView"] = row.AltView ?? string.Empty;
         changed = true;
       }
       if(previous == null || !JsonTreeRowHelpers.StringEquals(previous.OptionsKey, row.OptionsKey)) {

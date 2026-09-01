@@ -1,8 +1,13 @@
 import { LitElement, html, css } from '../lib/lit-all.min.js';
 import '../lib/dygraph.min.js';
+import './breadcrumb-bar.js';
 import { pickStep, snapWindow, planFetch, mergeRows, windowMoved } from '../components/graph-grid.js';
 import { apiUrl } from '../ide_services/api-token.js';
 import { readPositiveNumber } from '../ide_services/local-storage-utils.js';
+
+// The other view of the same topic, for the bar's switch button (see breadcrumb-bar.js). Every
+// topic a Chart can be opened on has an Inspector side, so it is unconditional here.
+const INSPECTOR_VIEW = { label: 'Inspector', mode: 'inspector' };
 
 const PERIOD_KEY = 'x13.chart.period';
 const HOUR = 60 * 60 * 1000;
@@ -24,9 +29,11 @@ const DEFAULT_PERIOD = DAY;
 const POINTS = 500;
 const MARGIN = 0.5;
 const QUERY_DEBOUNCE_MS = 50;
-// How often the chart looks at whether it has fallen behind "now". Not a poll of the topic: it
-// does anything at all only while the view is parked at the right-hand edge (see #tick).
-const TAIL_INTERVAL_MS = 10000;
+// Below this the window is too narrow to be worth sliding after a live sample, and above it a
+// sample landing within this fraction of a span past the right edge counts as "the user is
+// watching the live end". Both are x13-graph's numbers (components/graph.js updateData).
+const LIVE_MIN_SPAN_MS = 15000;
+const LIVE_EDGE_FRACTION = 1 / 50;
 
 // The Chart document: one topic's archived history, opened from the "Chart" entry the server
 // puts in a tree's context menu for topics whose Arch.enable is on (MenuBuilder.cs).
@@ -43,48 +50,18 @@ export class X13ChartDocument extends LitElement {
   static properties = {
     path: {},
     rootName: {},
+    // The live tail: a one-row store fed by the `chart#` view (ChartViewProvider). Not
+    // `{type: ...}` - the shell hands over the object itself, as it does for every other
+    // document's stores.
+    store: { attribute: false },
     period: { type: Number },
     message: {},
   };
 
   static styles = css`
     :host { box-sizing: border-box; display: flex; flex-direction: column; height: 100%; width: 100%; }
-    /* Wraps, as inspector-document's bar does: a deep path in a narrow pane has to grow the bar
-       downwards, never push it sideways past the pane. The legend does not take part - it shrinks
-       to nothing instead (min-width:0 below), so the line it sits on cannot be broken by whatever
-       value happens to be under the cursor, which would make the bar - and with it the chart -
-       change height on every mouse move. */
-    .bar {
-      align-items: center;
-      background: #f3f6fa;
-      border-bottom: 1px solid #cfd8e3;
-      display: flex;
-      flex: 0 0 auto;
-      flex-wrap: wrap;
-      font-size: 13px;
-      gap: 2px;
-      padding: 6px 10px;
-    }
-    .segment {
-      background: transparent;
-      border: 1px solid transparent;
-      border-radius: 0px;
-      color: #1f2937;
-      cursor: default;
-      font: inherit;
-      padding: 3px 6px;
-    }
-    .segment:hover {
-      background: #e8f1ff;
-      border-color: #8ab4f8;
-    }
-    .segment.current {
-      font-weight: 600;
-    }
-    .sep {
-      color: #9aa7b6;
-      padding: 0 1px;
-    }
+    /* Slotted into x13-breadcrumb-bar. min-width:0 is what lets it shrink to nothing instead of
+       wrapping the bar - see the bar's own comment on why that matters here. */
     .legend {
       color: #243447;
       flex: 1 1 auto;
@@ -189,6 +166,7 @@ export class X13ChartDocument extends LitElement {
     super();
     this.path = '/';
     this.rootName = '';
+    this.store = null;
     this.period = readPositiveNumber(PERIOD_KEY, DEFAULT_PERIOD);
     this.message = '';
     this.g = null;
@@ -200,31 +178,21 @@ export class X13ChartDocument extends LitElement {
     this.data = [];
     this.reqTimer = null;
     this.reqCtl = null;
-    this.tailTimer = null;
     this.observer = null;
     this.redrawing = false;
     this.seriesPath = null;
+    this.unsubscribe = null;
   }
 
   render() {
-    const segments = this.#segments();
     return html`
-      <div class="bar">
-        ${segments.map((segment, index) => html`
-          ${index > 0 ? html`<span class="sep">/</span>` : html``}
-          <button
-            type="button"
-            class="segment ${index === segments.length - 1 ? 'current' : ''}"
-            @click=${() => this.#emit('open', segment.path)}>
-            ${segment.name || '/'}
-          </button>
-        `)}
+      <x13-breadcrumb-bar .path=${this.path} .rootName=${this.rootName} .altView=${INSPECTOR_VIEW}>
         <div class="legend"></div>
         <select class="period" @change=${this.#onPeriodChange}>
           ${PERIODS.map((item) => html`
             <option value=${item.value} ?selected=${item.value === this.period}>${item.text}</option>`)}
         </select>
-      </div>
+      </x13-breadcrumb-bar>
       <div class="plot">
         <div class="canvas"></div>
         ${this.message ? html`<div class="note">${this.message}</div>` : html``}
@@ -235,7 +203,6 @@ export class X13ChartDocument extends LitElement {
     this.#createGraph();
     this.observer = new ResizeObserver(() => this.#resize());
     this.observer.observe(this.renderRoot.querySelector('.plot'));
-    this.tailTimer = setInterval(() => this.#tick(), TAIL_INTERVAL_MS);
   }
 
   // The shell reuses one element across navigations (app-shell.js #renderContent renders the
@@ -243,15 +210,29 @@ export class X13ChartDocument extends LitElement {
   // labels, cache and window all belong to the topic, not to the component. Compared against
   // seriesPath rather than changed.has('path'): the first render also "changes" path, and
   // firstUpdated has already built the graph on it by the time this runs.
-  updated() {
+  updated(changed) {
     if(this.g && this.path !== this.seriesPath) this.#resetSeries();
+    if(changed.has('store')) this.#subscribeStore();
+  }
+
+  // One row, and the only thing wanted from it is that it changed: ChartViewProvider sends a
+  // packet per sample without diffing, so every notification is a sample - including one that
+  // repeats the previous value.
+  #subscribeStore() {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    if(!this.store) return;
+    this.unsubscribe = this.store.subscribe((rows) => {
+      const row = rows[0];
+      if(row) this.#onLiveValue(row.value);
+    });
   }
 
   disconnectedCallback() {
     clearTimeout(this.reqTimer);
-    clearInterval(this.tailTimer);
     this.reqTimer = null;
-    this.tailTimer = null;
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     this.reqCtl?.abort();
     this.reqCtl = null;
     this.observer?.disconnect();
@@ -316,29 +297,6 @@ export class X13ChartDocument extends LitElement {
     return parts.length ? parts[parts.length - 1] : '/';
   }
 
-  #segments() {
-    const parts = String(this.path || '/').split('/').filter(Boolean);
-    const segments = [{ name: this.rootName, path: '/' }];
-    let current = '';
-    for(const part of parts) {
-      current += `/${part}`;
-      segments.push({ name: part, path: current });
-    }
-    return segments;
-  }
-
-  // The same event inspector-document.js raises from its breadcrumb, so app-shell.js
-  // #onSegmentCommand routes it without having to know a Chart document exists. isLogram stays
-  // undefined on purpose - a chart knows nothing about the topic's type, and undefined is what
-  // sends the shell through its single-round-trip resolve instead of guessing Inspector.
-  #emit(cmd, path) {
-    this.dispatchEvent(new CustomEvent('segment-command', {
-      bubbles: true,
-      composed: true,
-      detail: { cmd, path, isLogram: undefined },
-    }));
-  }
-
   #onPeriodChange(e) {
     const value = Number(e.target.value);
     if(!Number.isFinite(value) || value <= 0) return;
@@ -367,32 +325,44 @@ export class X13ChartDocument extends LitElement {
     this.g.resize(plot.clientWidth, plot.clientHeight);
   }
 
-  // Keeps the right-hand edge on "now" while the user is looking at the live end, and does
-  // nothing once they pan into the past - there is no new data to the left. A live subscription
-  // would be the obvious alternative, but the IDE has no way to subscribe to a topic outside an
-  // open tree, and the re-query path is here regardless.
-  #tick() {
-    if(document.hidden || !this.g) return;
-    const now = Date.now();
-    const span = this.range[1] - this.range[0];
-    if(now - this.range[1] > span * MARGIN) return;
-    this.range = [now - span, now];
-    // Pulling the cache's right-hand boundary back one step is what makes this a refresh rather
-    // than a scroll. Without it planFetch answers "already covered" - the fetched margin runs
-    // well past now - and the window would slide along showing nothing new. What sits at that
-    // boundary is a bucket that stopped at "now" instead of at the end of its interval, so it
-    // has to be asked for again; mergeRows lets the newer copy win the tie.
-    if(this.cache) {
-      const tail = Math.max(this.cache.from, this.range[1] - this.cache.step);
-      if(tail < this.cache.to) this.cache.to = tail;
+  // A sample straight off the subscription, drawn the moment it arrives - the same bargain
+  // x13-graph's updateData strikes, and deliberately the whole of it.
+  //
+  // What this does NOT do is touch the cache. The cache records which span has been answered by
+  // the archive and on which grid, and a live sample is neither: it sits at the instant it
+  // arrived, not on the server's bucket boundary. Letting it move that boundary would tell
+  // planFetch a span had been fetched when it had not, and mergeRows would then merge an
+  // off-grid row into grid rows. So the live tail lives in this.data alone and the next archive
+  // answer replaces it wholesale (#applyRows) - by which time the archive holds those samples
+  // properly, bucketed.
+  //
+  // The x-coordinate is the time the value reached the browser, not the time it was sampled;
+  // neither this transport nor the dashboard's carries a timestamp. The engine coalesces
+  // repeated writes to one topic inside its 15.625 ms tick (Repo.EnquePerf / Perform.EqualsGr),
+  // so at most one sample per tick arrives to be stamped.
+  #onLiveValue(value) {
+    if(typeof value !== 'number' || !isFinite(value) || !this.g) return;
+    const stamp = new Date();
+    this.data.push([stamp, value]);
+    const options = { file: this.data };
+    const range = this.g.xAxisRange();
+    const span = range[1] - range[0];
+    // Follow the live edge only while the user is standing at it. Panned into the past by more
+    // than a fiftieth of a span, the window stays where it was put - there is nothing new to the
+    // left, and moving it under the reader would be the rudest thing this chart could do.
+    if(span > LIVE_MIN_SPAN_MS && (stamp.getTime() - range[1]) < span * LIVE_EDGE_FRACTION) {
+      // Assigned before updateOptions, not after: the redraw re-enters #onDraw, which compares
+      // against this.range - stale here would read as a user pan and queue an archive request
+      // for every sample.
+      this.range = [range[0] + (stamp.getTime() - range[1]), stamp.getTime()];
+      options.dateWindow = this.range;
     }
-    this.g.updateOptions({ dateWindow: this.range });
-    this.#requestQuery();
+    this.g.updateOptions(options);
   }
 
   #onDraw(me, initial) {
-    // updateOptions inside drawCallback re-enters it; without the guard #tick's window shift
-    // would recurse through here and queue a request per frame.
+    // updateOptions inside drawCallback re-enters it; without the guard #onLiveValue's window
+    // shift would recurse through here and queue a request per sample.
     if(initial || this.redrawing) return;
     this.redrawing = true;
     const range = me.xAxisRange();

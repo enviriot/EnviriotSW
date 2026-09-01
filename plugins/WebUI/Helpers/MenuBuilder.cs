@@ -94,17 +94,13 @@ namespace X13.WebUI {
     }
 
     /// <summary>"Chart" - the topic's archived history, for topics the archivist actually keeps.</summary>
-    /// <remarks>Read here rather than pushed to the client as a row flag (the way IsLogram is):
-    /// a Workspace/Children row carries no manifest at all, and an "is archived" flag would have
-    /// to be recomputed and diffed on every row of every tree just so one menu could branch on
-    /// it - while the menu is already built server-side, one topic at a time, with the field in
-    /// hand.
-    /// <para>As&lt;bool&gt;(), not AsBool(false): JS truthiness, the same reading that decides
-    /// whether the topic is archived at all (ArchivistPl.SubFunc, ArchRetention.IsOrphan), so
-    /// "enable": 1 counts as on here exactly as it does there. Offering a chart for a topic the
-    /// archivist ignores would be worse than offering nothing.</para></remarks>
+    /// <remarks>Offered from the menu regardless of what the row's AltView says, and that is the
+    /// point of the two being separate: AltView names the ONE view a breadcrumb button can
+    /// offer, and Logram wins it, so a Logram topic that is also archived would otherwise have
+    /// no route to its chart at all. The menu is built server-side, one topic at a time, with
+    /// the field already in hand - see RowProjector.IsArchived for how it is read.</remarks>
     private static void AddChartMenuItem(Topic topic, List<MenuItemDto> items) {
-      if(topic == null || !topic.GetField("Arch.enable").As<bool>()) return;
+      if(!RowProjector.IsArchived(topic)) return;
       items.Add(new MenuItemDto() {
         Kind = MenuItemKind.Item,
         Cmd = "chart",
