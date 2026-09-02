@@ -13,7 +13,6 @@ using System.Threading;
 namespace X13.Periphery {
   internal class TWI : IMsExt {
     private readonly Topic _owner;
-    private readonly Topic _verbose;
     private readonly Action<byte[]> _pub;
     private readonly SubRec _deviceChangedsSR;
     private readonly List<TwiDevice> _devs;
@@ -25,19 +24,6 @@ namespace X13.Periphery {
       this._pub = pub;
       this._devs = new List<TwiDevice>();
       this._reqs = new Queue<TwiPack>();
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-      // from "set to the default", so the topic would never be created.
-      this._verbose = Topic.root.Get("/$YS/TWI/verbose");
-      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-#if DEBUG
-        _verbose.SetState(true);
-#else
-        _verbose.SetState(false);
-#endif
-      }
-
       _flag = 1;
       _deviceChangedsSR = this._owner.Subscribe(SubRec.SubMask.Children | SubRec.SubMask.Field, "type", DeviceChanged);
       if(Verbose) {
@@ -45,9 +31,10 @@ namespace X13.Periphery {
       }
     }
 
+    /// <summary>/$YS/TWI/verbose, declared once by the plugin rather than per bus.</summary>
     public bool Verbose {
       get {
-        return _verbose != null && (bool)_verbose.GetState();
+        return MQTT_SNPl.verboseTwi;
       }
     }
 

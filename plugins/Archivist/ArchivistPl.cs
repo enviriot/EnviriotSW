@@ -27,11 +27,21 @@ namespace X13.Archivist {
     private readonly AutoResetEvent _tick;
     private ArchStore _store;
     private Topic _owner;
+    private IDisposable _allSub;
+    private Func<string[], DateTime, int, DateTime, JSL.Array> _aQuery;
     private Thread _tr;
-    private bool _terminate;
+    private volatile bool _terminate;
     private int _rrIdx;
     private DateTime _nextHotRebuild;
     private DateTime _nextRawRebuild;
+    /// <summary>Set /$YS/Archivist/verbose to have every query logged with its cost.</summary>
+    /// <remarks>Read through a subscription rather than on each query: AQuery runs on pool threads,
+    /// and walking the tree for a config flag on every request is exactly the sort of per-request
+    /// work this rework exists to remove.
+    /// <para>As&lt;bool&gt;() and not AsBool(false) - JS truthiness, the same choice the other plugins
+    /// make for their verbose flags, so a flag set to 1 from a script is not silently ignored.</para></remarks>
+    internal bool verbose;
+    private SubRec _verboseSR;
 
     public ArchivistPl() : this(DEFAULT_DIR) {
     }
@@ -44,7 +54,6 @@ namespace X13.Archivist {
 
     #region IPlugModul Members
     public void Init() {
-      _owner = Topic.root.Get(OWNER_PATH, true);
       _store = new ArchStore(Path.GetFullPath(_dir));
     }
 
@@ -59,11 +68,16 @@ namespace X13.Archivist {
       _nextRawRebuild = NextNightly(DateTime.UtcNow);
       _tr.Start();
       _tick.WaitOne();   // the store is open before the first sample can arrive
-      SeedVerbose();
-      Topic.Subscribe(SubFunc);
+      _verboseSR = JsExtLib.EnsureCfg(Owner, "verbose", Topic.Attribute.Required | Topic.Attribute.Config, v => verbose = v, false);
+      _allSub = Topic.Subscribe(SubFunc);
       // Bound here rather than in the constructor: MEF does not order construction, but it does
       // order Start by priority, so this reliably takes over from the state store.
-      JsExtLib.AQuery = AQuery;
+      // Kept in a field as well: Stop has to recognise its own delegate, and a method group
+      // written out a second time is a different object - equal by Delegate.Equals, but only
+      // because that compares target and method rather than references. Holding the one instance
+      // says what is meant without relying on that.
+      _aQuery = AQuery;
+      JsExtLib.AQuery = _aQuery;
     }
 
     public void Tick() {
@@ -72,11 +86,37 @@ namespace X13.Archivist {
       }
     }
 
+    /// <summary>Both ways in are shut before the store they lead to is closed.</summary>
+    /// <remarks>Two entry points outlive this plugin unless they are taken down here, and they
+    /// arrive by different routes: SubFunc from the repository on the engine thread, AQuery from
+    /// whatever pool thread is serving a chart. Closing the store first would leave both pointing
+    /// at it - AQuery in particular reaches a store that has just become null.</remarks>
     public void Stop() {
+      IDisposable allSub = _allSub;
+      _allSub = null;
+      if(allSub != null) {
+        allSub.Dispose();
+      }
+      // Only if it is still ours: another archive provider taking over would have replaced it,
+      // and clearing that would disable a store still running.
+      if(_aQuery != null && ReferenceEquals(JsExtLib.AQuery, _aQuery)) {
+        JsExtLib.AQuery = null;
+      }
+      _aQuery = null;
+      // EnsureCfg hands ownership of the subscription to the caller.
+      if(_verboseSR != null) {
+        _verboseSR.Dispose();
+        _verboseSR = null;
+      }
       _terminate = true;
       _tick.Set();
       if(_tr != null && !_tr.Join(5000)) {
-        _tr.Abort();
+        // Abandoned rather than aborted, for the reason spelled out in LiteDB_Pl.Stop: the thread
+        // can only be stuck inside LiteDB, an abort there is what makes a file need recovery, and
+        // the store and the wait handle must not be disposed while it may still be using them.
+        // ThreadM closes the store itself on the way out if it ever gets there.
+        Log.Error("Archivist worker did not stop within 5 s; leaving the store open - it will be recovered on the next start");
+        return;
       }
       var s = Interlocked.Exchange(ref _store, null);
       if(s != null) {
@@ -85,42 +125,20 @@ namespace X13.Archivist {
       _tick.Dispose();
     }
 
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+
     public bool enabled {
       get {
-        var en = Topic.root.Get(OWNER_PATH, true);
-        // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-        // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet" from
-        // "set to the default", so the topic would never be created.
-        if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
-          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-          en.SetState(true);
+        // Is<bool>, NOT AsBool/AsString: this decides whether the config topic has to be CREATED
+        // and seeded. A reader with a default cannot tell "not set yet" from "set to the
+        // default", so the topic would never be created.
+        if(!Owner.GetState().Is<bool>()) {
+          Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          Owner.SetState(true);
           return true;
         }
-        return (bool)en.GetState();
+        return (bool)Owner.GetState();
       }
-      set {
-        Topic.root.Get(OWNER_PATH, true).SetState(value);
-      }
-    }
-    /// <summary>Set /$YS/Archivist/verbose to have every query logged with its cost.</summary>
-    /// <remarks>Read through a subscription rather than on each query: AQuery runs on pool threads,
-    /// and walking the tree for a config flag on every request is exactly the sort of per-request
-    /// work this rework exists to remove.
-    /// <para>As&lt;bool&gt;() and not AsBool(false) - JS truthiness, the same choice the other plugins
-    /// make for their verbose flags, so a flag set to 1 from a script is not silently ignored.</para></remarks>
-    internal bool verbose;
-    private SubRec _verboseSR;
-
-    private void SeedVerbose() {
-      var vT = _owner.Get("verbose", true, _owner);
-      // Deliberately a raw ValueType test: this decides whether the topic has to be CREATED, and a
-      // reader with a default cannot tell "not set yet" from "set to the default".
-      if(vT.GetState().ValueType != JSC.JSValueType.Boolean) {
-        vT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
-        vT.SetState(false);
-      }
-      _verboseSR = vT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value,
-        (p, s) => verbose = _verboseSR.setTopic != null && _verboseSR.setTopic.GetState().As<bool>());
     }
 
     #endregion IPlugModul Members
@@ -132,7 +150,7 @@ namespace X13.Archivist {
     /// old code did: the field is user-editable, so enable set to 1 or to a non-empty string still
     /// means yes. AsBool is strict and would silently turn those off.</remarks>
     private void SubFunc(Perform p) {
-      if(p.Art != Perform.E_Art.changedState || p.src == null || p.Prim == _owner) {
+      if(p.Art != Perform.E_Art.changedState || p.src == null || p.Prim == Owner) {
         return;
       }
       if(!p.src.GetField("Arch.enable").As<bool>()) {

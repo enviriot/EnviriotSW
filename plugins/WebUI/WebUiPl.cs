@@ -10,6 +10,7 @@ namespace X13.WebUI {
   [ExportMetadata("priority", 10)]
   [ExportMetadata("name", "WebUI")]
   internal sealed class WebUiPl : IPlugModul {
+    private const string OWNER_PATH = "/$YS/WebUI";
     private Topic _owner;
     private WebUiConfig _config;
     private WebUiHost _host;
@@ -63,25 +64,21 @@ namespace X13.WebUI {
       _config?.Dispose();
     }
 
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+
     public bool enabled {
       get {
-        Topic t = Owner;
         // Is<bool>, NOT AsBool: this decides whether the config topic has to be CREATED and
         // seeded, and a reader with a default cannot tell "not set yet" from "set to the
         // default", so the topic would never be created. Is is the type test without the
         // coercion - the same thing EnsureCfg does for every other setting here.
-        if(!t.GetState().Is<bool>()) {
-          t.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-          t.SetState(true);
+        if(!Owner.GetState().Is<bool>()) {
+          Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          Owner.SetState(true);
           return true;
         }
-        return (bool)t.GetState();
+        return (bool)Owner.GetState();
       }
-      set { Owner.SetState(value); }
-    }
-
-    private Topic Owner {
-      get { return _owner ?? (_owner = Topic.root.Get("/$YS/WebUI", true)); }
     }
 
     private bool TryStart(int port) {

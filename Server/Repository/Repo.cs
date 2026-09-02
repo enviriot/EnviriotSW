@@ -20,10 +20,11 @@ namespace X13.Repository {
     #region internal Members
     private ConcurrentQueue<Perform> _tcQueue;
     private List<Perform> _prOp;
-    private List<Action<Perform>> _subscribers;
+    private volatile Action<Perform>[] _subscribers;
     private int _busyFlag;
     private int _pfPos;
     private DateTime? _saveConfigT;
+    private bool _loaded;
 
     internal void DoCmd(Perform cmd, bool intern) {
       if(intern && _prOp.Count > 0 && _pfPos < _prOp.Count) {
@@ -33,8 +34,53 @@ namespace X13.Repository {
         _tcQueue.Enqueue(cmd);               // Process in next tick
       }
     }
-    internal void SubscribeAll(Action<Perform> func) {
-      _subscribers.Add(func);
+    /// <summary>Registers a repository-wide callback and hands back the way to stop it.</summary>
+    /// <remarks>Returned rather than void, which is what this was: a plugin could start receiving
+    /// every Perform in the tree and had no way to stop receiving them. PersistentStorage paid for
+    /// that concretely - its Stop() disposes the AutoResetEvent that its own callback then went on
+    /// to Set() on the next repository change.
+    /// <para>The list is replaced rather than mutated, so the publish loop below reads a snapshot
+    /// that cannot change under it. Writes happen three times at startup and three times at
+    /// shutdown; the read runs on every published Perform.</para></remarks>
+    internal IDisposable SubscribeAll(Action<Perform> func) {
+      if(func == null) {
+        throw new ArgumentNullException("func");
+      }
+      var old = _subscribers;
+      var next = new Action<Perform>[old.Length + 1];
+      Array.Copy(old, next, old.Length);
+      next[old.Length] = func;
+      _subscribers = next;
+      return new AllSubRec(this, func);
+    }
+    private void UnsubscribeAll(Action<Perform> func) {
+      var old = _subscribers;
+      int idx = Array.IndexOf(old, func);
+      if(idx < 0) {
+        return;
+      }
+      var next = new Action<Perform>[old.Length - 1];
+      Array.Copy(old, 0, next, 0, idx);
+      Array.Copy(old, idx + 1, next, idx, old.Length - idx - 1);
+      _subscribers = next;
+    }
+
+    /// <summary>What SubscribeAll hands back. Disposing twice is a no-op, as is disposing late.</summary>
+    private sealed class AllSubRec : IDisposable {
+      private Repo _owner;
+      private readonly Action<Perform> _func;
+
+      public AllSubRec(Repo owner, Action<Perform> func) {
+        _owner = owner;
+        _func = func;
+      }
+      public void Dispose() {
+        Repo owner = _owner;
+        _owner = null;
+        if(owner != null) {
+          owner.UnsubscribeAll(_func);
+        }
+      }
     }
 
     private int EnquePerf(Perform cmd) {
@@ -215,7 +261,7 @@ namespace X13.Repository {
     public Repo() {
       _tcQueue = new ConcurrentQueue<Perform>();
       _prOp = new List<Perform>(128);
-      _subscribers = new List<Action<Perform>>();
+      _subscribers = new Action<Perform>[0];
       _saveConfigT = null;
     }
 
@@ -371,6 +417,7 @@ namespace X13.Repository {
       }
       this.Tick();
       this.Tick();
+      _loaded = true;   // last line on purpose: see Stop
     }
 
     public void Start() {
@@ -411,8 +458,11 @@ namespace X13.Repository {
         cmd = _prOp[_pfPos];
         if(cmd.Art != Perform.E_Art.setState && cmd.Art != Perform.E_Art.setField) {
           Topic.I.Publish(cmd);
-          for(int i = _subscribers.Count-1; i>=0; i--) {
-            var func = _subscribers[i];
+          // One read of the field, then iterate that: a callback may unsubscribe - its own
+          // registration or another's - and the loop must not be walking the list it changed.
+          var subs = _subscribers;
+          for(int i = subs.Length-1; i>=0; i--) {
+            var func = subs[i];
             try {
               func.Invoke(cmd);
             }
@@ -435,11 +485,37 @@ namespace X13.Repository {
       _busyFlag = 1;
     }
 
+    /// <summary>Writes the configuration back out - but never a tree that was not fully read in.</summary>
+    /// <remarks>Import throws on a truncated or malformed server.xst, which is exactly what a
+    /// power cut during the previous Export leaves behind. Startup then fails and the server is
+    /// torn down - and this method, running as part of that teardown, would export whatever made
+    /// it into the tree before the parser gave up, straight over the file that has the rest of it.
+    /// A configuration one could still repair by hand becomes an empty one. Reproduced, not
+    /// imagined: a deliberately truncated config came back as a 92-byte empty export.
+    /// <para>Only Init sets the flag, and only as its last statement, so "loaded" means the whole
+    /// of it - Topic.I.Init, the import and both ticks.</para></remarks>
     public void Stop() {
+      if(!_loaded) {
+        Log.Warning("Repository did not finish loading; {0} is left as it is", configPath);
+        return;
+      }
       Export(configPath, Topic.root, true);
     }
 
-    public bool enabled { get { return true; } set { if(!value) throw new ApplicationException("Repository disabled"); } }
+    /// <summary>Where the repository's own settings would live. Nothing is created until read.</summary>
+    /// <remarks>Deliberately not touched by <see cref="enabled"/> below, unlike every other
+    /// plugin: Topic.root does not exist until Init() runs Topic.I.Init(this), and enabled is
+    /// asked first, so a topic-backed answer here would dereference null on the way up.</remarks>
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+    private const string OWNER_PATH = "/$YS/Repository";
+    private Topic _owner;
+
+    /// <summary>Always on - the one plugin that does not read this from its Owner topic.</summary>
+    /// <remarks>Every other plugin may be switched off from the tree; switching this one off would
+    /// make InitPlugins skip the component that owns the tree, leaving the rest of the server with
+    /// nothing to run against. A constant says that better than the ApplicationException the
+    /// setter used to throw, which nothing could reach anyway.</remarks>
+    public bool enabled { get { return true; } }
     #endregion IPlugModul Members
   }
 }

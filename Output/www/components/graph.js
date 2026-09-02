@@ -85,12 +85,39 @@ class X13_graph extends BaseComponent {
     };
     this.reqQuery();
     this.g = new Dygraph(this.ref.gr_hl, [row], options);
-    window.addEventListener('resize', this.resized.bind(this), true);
+    // The bound function is kept: bind() returns a new one every call, so the listener added here
+    // could never be removed by passing this.resized.bind(this) again - the element stayed
+    // reachable from window for as long as the page lived, once per attach.
+    this.onResize = this.resized.bind(this);
+    window.addEventListener('resize', this.onResize, true);
   }
   disconnectedCallback() {
-    this.g.destroy();
+    if (this.onResize) {
+      window.removeEventListener('resize', this.onResize, true);
+      this.onResize = null;
+    }
+    // The debounce and the request in flight go too. Both end in a callback that draws into the
+    // chart, and the chart is about to stop existing; leaving them meant a detached element kept
+    // alive by a timer, then a call into a destroyed dygraph when it fired.
+    if (this.reqTimer) {
+      clearTimeout(this.reqTimer);
+      this.reqTimer = null;
+    }
+    if (this.reqCtl) {
+      this.reqCtl.abort();
+      this.reqCtl = null;
+    }
+    if (this.g) {
+      this.g.destroy();
+      this.g = null;
+    }
   }
   resized() {
+    // Guarded as well as unregistered: a resize already dispatched reaches the handler after
+    // destroy(), and dygraph does not survive being resized once it is gone.
+    if (!this.g) {
+      return;
+    }
     if (this.g.width_ != this.clientWidth - 10) {
       this.g.resize(this.clientWidth - 10, this.clientHeight - 10);
     }
@@ -110,6 +137,9 @@ class X13_graph extends BaseComponent {
       }
     }
     this.data.push(row);
+    if (!this.g) {
+      return;   // a live sample arriving after disconnectedCallback
+    }
     let opt = { 'file': this.data };
     let range = this.g.xAxisRange();
     if (range[1] - range[0] > 15000 && (row[0].getTime() - range[1]) < ((range[1] - range[0]) / 50)) {
@@ -139,7 +169,9 @@ class X13_graph extends BaseComponent {
     // A copy, because updateData appends live samples to this.data and those are not on the grid;
     // letting them into the cache would put them into the next merge.
     this.data = this.cache.rows.slice();
-    this.g.updateOptions({ 'file': this.data });
+    if (this.g) {
+      this.g.updateOptions({ 'file': this.data });
+    }
   }
   drawCallback(me, initial) {
     if (blockRedraw || initial) return;

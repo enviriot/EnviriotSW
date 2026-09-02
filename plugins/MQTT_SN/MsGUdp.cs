@@ -14,13 +14,19 @@ using X13.Repository;
 
 namespace X13.Periphery {
   internal class MsGUdp : IMsGate {
+    private const int HEX_PREVIEW = 32;      // bytes of a refused frame that reach the log
+    private const int REJECT_QUIET_SEC = 10; // at most one refusal line per this many seconds
+
+    private readonly object _rejectLock = new object();
+    private DateTime _rejectQuiet;
+    private int _rejected;
+
     private MQTT_SNPl _pl;
     private Topic _udpT;
     private byte[][] _myIps;
     private IPAddress[] _bcIps;
     private UdpClient _udp;
     private Timer _advTick;
-    private byte _gwRadius;
     private AddrWithMask[] _whiteList;
     private int _scanBusy;
     //private System.Collections.Concurrent.ConcurrentQueue<Tuple<byte[], byte[]>> _inBuf;
@@ -54,15 +60,6 @@ namespace X13.Periphery {
         _udp.EnableBroadcast = true;
         _udp.BeginReceive(new AsyncCallback(ReceiveCallback), null);
         _advTick = new Timer(SendAdv, null, 4500, 900000);
-        Topic t;
-        if(Topic.root.Exist("/$YS/MQTT-SN/radius", out t) && t.GetState().IsNumber) {
-          _gwRadius = (byte)(int)t.GetState();
-          if(_gwRadius < 1 || _gwRadius > 3) {
-            _gwRadius = 0;
-          }
-        } else {
-          _gwRadius = 1;
-        }
       }
       catch(Exception ex) {
         Log.Error("MsGUdp.ctor() {0}", ex.Message);
@@ -147,18 +144,24 @@ namespace X13.Periphery {
         buf = _udp.EndReceive(ar, ref re);
         byte[] addr = re.Address.GetAddressBytes();
         if(!_myIps.Any(z => addr.SequenceEqual(z))) {
-          if(buf.Length > 1) {
-            var mt = (MsMessageType)(buf[0] > 1 ? buf[1] : buf[3]);
+          MsMessageType mt;
+          // TryReadHeader, not `buf[0] > 1 ? buf[1] : buf[3]` behind a `buf.Length > 1` guard:
+          // a two- or three-byte datagram with a leading 0 or 1 passed that guard and then
+          // indexed the fourth byte, so anyone on the network could turn one short datagram into
+          // an Error line with a stack trace and the whole payload - as often as they cared to.
+          if(MsMessage.TryReadHeader(buf, 0, buf.Length, out mt, out _, out MsParseError perr)) {
             if((mt != MsMessageType.CONNECT && mt != MsMessageType.SEARCHGW) || _whiteList.Any(z => z.Check(addr))) {
               //_inBuf.Enqueue(new Tuple<byte[],byte[]>(addr, buf));
               _pl.ProcessInPacket(this, addr, buf, 0, buf.Length);
             } else if(_pl.verbose) {
               var msg = MsMessage.Parse(buf, 0, buf.Length);
               if(msg != null) {
-                Log.Debug("restricted  {0}: {1}  {2}", this.Addr2If(addr), BitConverter.ToString(buf), msg.ToString());
+                Log.Debug("restricted  {0}: {1}  {2}", this.Addr2If(addr), MsMessage.HexPreview(buf, 0, buf.Length, HEX_PREVIEW), msg.ToString());
               }
 
             }
+          } else {
+            RejectFrame(re, buf, perr.ToString());
           }
         }
       }
@@ -166,12 +169,34 @@ namespace X13.Periphery {
         return;
       }
       catch(Exception ex) {
-        Log.Error("ReceiveCallback({0}, {1}) - {2}", re, buf == null ? "null" : BitConverter.ToString(buf), ex.ToString());
+        RejectFrame(re, buf, ex.Message);
       }
       if(_udp != null && _udp.Client != null) {
         _udp.BeginReceive(new AsyncCallback(ReceiveCallback), null);
       }
     }
+    /// <summary>One log line per rejected datagram, and no more than one per interval.</summary>
+    /// <remarks>The rejection itself is cheap; the log line was not. It printed the entire payload
+    /// and, on the exception path, the full stack trace - a remote sender decided both how often
+    /// this ran and how much it wrote. Rate limiting alone would not be enough: a single 64 KB
+    /// datagram is one line, so the preview is bounded too.
+    /// <para>Warning, not Error: a frame this gate refuses to read is an event on the wire, not a
+    /// fault in the server, and Error is the level someone puts an alert on. What gets lost to the
+    /// throttle is counted rather than dropped silently, so a flood reads as a flood.</para></remarks>
+    private void RejectFrame(IPEndPoint from, byte[] buf, string reason) {
+      Interlocked.Increment(ref _rejected);
+      DateTime now = DateTime.Now;
+      lock(_rejectLock) {
+        if(now < _rejectQuiet) {
+          return;
+        }
+        _rejectQuiet = now.AddSeconds(REJECT_QUIET_SEC);
+      }
+      int total = Interlocked.Exchange(ref _rejected, 0);
+      Log.Warning("MsGUdp refused {0}: {1} - {2}{3}", from, MsMessage.HexPreview(buf, 0, buf == null ? 0 : buf.Length, HEX_PREVIEW),
+        reason, total > 1 ? (" (+" + (total - 1).ToString() + " more since the last line)") : string.Empty);
+    }
+
     private void SendAdv(object o) {
       SendGw((MsDevice)null, new MsAdvertise(0, 900));
     }
@@ -241,7 +266,7 @@ namespace X13.Periphery {
     }
 
     public byte gwIdx { get { return 0; } }
-    public byte gwRadius { get { return _gwRadius; } }
+    public byte gwRadius { get { return MQTT_SNPl.gwRadius; } }
     public string name { get { return "UDP"; } }
     public string Addr2If(byte[] addr) {
       return (new IPAddress(addr)).ToString();

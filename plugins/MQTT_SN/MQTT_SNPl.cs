@@ -16,10 +16,34 @@ namespace X13.Periphery {
   [ExportMetadata("priority", 7)]
   [ExportMetadata("name", "MQTT_SN")]
   public class MQTT_SNPl : IPlugModul {
+    private const string OWNER_PATH = "/$YS/MQTT-SN";
+    private const int HEX_PREVIEW = 32;  // bytes of a frame that reach a log line
+    private const Topic.Attribute CfgAttr = Topic.Attribute.Required | Topic.Attribute.Config;
+    private const Topic.Attribute DbAttr = Topic.Attribute.Required | Topic.Attribute.DB;
+#if DEBUG
+    private const bool VerboseDefault = true;
+#else
+    private const bool VerboseDefault = false;
+#endif
+
     private Topic _owner;
-    private SubRec _verboserSR;
-    private Topic _stat;
+    private SubRec[] _cfg;
     private Random _rand;
+    private bool _statistic;
+
+    /// <summary>Flags belonging to DevicePLC, TWI and the gates, seeded here for all of them.</summary>
+    /// <remarks>Static because the topics are: /$YS/DevicePLC/verbose is one setting for every PLC
+    /// device, not one per device, yet DevicePLC and TWI are constructed per device and were each
+    /// seeding it in their own constructor - so the same topic was written as many times as there
+    /// were devices, and with EnsureCfg that would have been one subscription per device with
+    /// nothing to dispose them. MEF gives exactly one MQTT_SNPl (CreationPolicy.Shared), which is
+    /// what makes a static the same thing as an instance field here, minus threading a plugin
+    /// reference through two constructors for a diagnostic flag.
+    /// <para>gwRadius is the same story: MsGSerial and MsGUdp read /$YS/MQTT-SN/radius with
+    /// byte-for-byte identical code, and neither seeded it - the topic existed only if someone
+    /// created it by hand.</para></remarks>
+    internal static bool verbosePlc, verboseTwi;
+    internal static byte gwRadius;
 
     internal List<IMsGate> _gates;
     internal List<MsDevice> _devs;
@@ -44,32 +68,22 @@ namespace X13.Periphery {
       RPC.Register("MQTT_SN.RefreshNIC", RefreshNICRpc);
     }
 
+    /// <summary>Every setting this plugin owns, declared before the first gate exists.</summary>
+    /// <remarks>The order is load-bearing: both gates read <see cref="gwRadius"/> in their
+    /// constructors, so it has to hold its configured value by the time they are built. EnsureCfg
+    /// applies before it returns for exactly this reason - the subscription alone would not have
+    /// run yet, since Subscribe only queues a Perform for the next Repo tick.
+    /// <para>radius is clamped in the apply rather than at the read sites: 1..3 is the range the
+    /// protocol defines, and anything else means "no radius", which is what both gates already
+    /// did with the raw value.</para></remarks>
     public void Start() {
-      _owner = Topic.root.Get("/$YS/MQTT-SN");
-      var verboseT = _owner.Get("verbose");
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-      // from "set to the default", so the topic would never be created.
-      if(verboseT.GetState().ValueType != JSC.JSValueType.Boolean) {
-        verboseT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
-#if DEBUG
-        verboseT.SetState(true);
-#else
-        verboseT.SetState(false);
-#endif
-      }
-      // Deliberately As<bool>() and not AsBool(false): this reads JS truthiness, so a verbose flag
-      // set to 1 or to a non-empty string still turns tracing on. AsBool is strict and would
-      // silently ignore those.
-      _verboserSR = verboseT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, (p, s) => verbose = (_verboserSR.setTopic != null && _verboserSR.setTopic.GetState().As<bool>()));
-      _stat = _owner.Get("statistic");
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-      // from "set to the default", so the topic would never be created.
-      if(_stat.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _stat.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
-        _stat.SetState(false);
-      }
+      _cfg = new SubRec[] {
+        JsExtLib.EnsureCfg(Owner, "verbose", CfgAttr, v => verbose = v, VerboseDefault),
+        JsExtLib.EnsureCfg(Owner, "statistic", CfgAttr, v => _statistic = v, false),
+        JsExtLib.EnsureCfg(Owner, "radius", CfgAttr, v => gwRadius = (byte)(v >= 1 && v <= 3 ? v : 0), 1),
+        JsExtLib.EnsureCfg(Topic.root.Get("/$YS/DevicePLC", true), "verbose", DbAttr, v => verbosePlc = v, VerboseDefault),
+        JsExtLib.EnsureCfg(Topic.root.Get("/$YS/TWI", true), "verbose", DbAttr, v => verboseTwi = v, VerboseDefault),
+      };
       _gates.Add(new MsGUdp(this));
       MsGSerial.Init(this);
     }
@@ -85,6 +99,12 @@ namespace X13.Periphery {
     }
 
     public void Stop() {
+      // Released here because EnsureCfg hands ownership to the caller. The hand-rolled
+      // subscription this replaced was never released at all.
+      if(_cfg != null) {
+        foreach(var s in _cfg) s.Dispose();
+        _cfg = null;
+      }
       foreach(var g in _gates.ToArray()) {
         try {
           g.Stop();
@@ -94,33 +114,26 @@ namespace X13.Periphery {
       }
     }
 
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/MQTT-SN", true);
-        // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-        // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-        // from "set to the default", so the topic would never be created.
-        if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
-          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-          en.SetState(true);
+        // Is<bool>, NOT AsBool/AsString: this decides whether the config topic has to be CREATED
+        // and seeded. A reader with a default cannot tell "not set yet" from "set to the
+        // default", so the topic would never be created.
+        if(!Owner.GetState().Is<bool>()) {
+          Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          Owner.SetState(true);
           return true;
         }
-        return (bool)en.GetState();
-      }
-      set {
-        var en = Topic.root.Get("/$YS/MQTT-SN", true);
-        en.SetState(value);
+        return (bool)Owner.GetState();
       }
     }
     #endregion IPlugModul Members
 
     public bool verbose;
 
-    public bool Statistic {
-      get {
-        return _stat != null && (bool)_stat.GetState();
-      }
-    }
+    public bool Statistic { get { return _statistic; } }
     #region RPC
     /// <summary>Every RPC below takes exactly one argument: the path of the topic to act on.</summary>
     /// <remarks>The guard was written out five times, byte for byte. AsString folds four of the
@@ -200,10 +213,13 @@ namespace X13.Periphery {
     #endregion RPC
 
     internal bool ProcessInPacket(IMsGate gate, byte[] addr, byte[] buf, int start, int end) {
-      var msg = MsMessage.Parse(buf, start, end);
-      if(msg == null) {
+      MsMessage msg;
+      MsParseError perr;
+      if(!MsMessage.TryParse(buf, start, end, out msg, out perr)) {
+        // The reason, not just "bad message": an unknown type, a truncated frame and a body that
+        // contradicts its own header used to arrive here as the same null.
         if(verbose) {
-          Log.Warning("r {0}: {1}  bad message", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start));
+          Log.Warning("r {0}: {1}  {2}", gate.Addr2If(addr), MsMessage.HexPreview(buf, start, end - start, HEX_PREVIEW), perr.ToString());
         }
         return false;
       }
@@ -211,7 +227,7 @@ namespace X13.Periphery {
         return true;
       }
       if(verbose) {
-        Log.Debug("r {0}: {1}  {2}", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start), msg.ToString());
+        Log.Debug("r {0}: {1}  {2}", gate.Addr2If(addr), MsMessage.HexPreview(buf, start, end - start, HEX_PREVIEW), msg.ToString());
       }
       if(msg.MsgTyp == MsMessageType.SEARCHGW) {
         if((msg as MsSearchGW).radius == 0 || (msg as MsSearchGW).radius == gate.gwRadius) {
@@ -250,7 +266,7 @@ namespace X13.Periphery {
               ackAddr.AddRange(resp);
             } else {
               if(verbose) {
-                Log.Warning("r {0}: {1}  DhcpReq.hLen is too high", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start));
+                Log.Warning("r {0}: {1}  DhcpReq.hLen is too high", gate.Addr2If(addr), MsMessage.HexPreview(buf, start, end - start, HEX_PREVIEW));
               }
               ackAddr = null;
               break;
@@ -266,12 +282,12 @@ namespace X13.Periphery {
         var cm = msg as MsConnect;
         MsDevice dev = _devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
         if(dev == null) {
-          var dt = Topic.root.Get("/dev/" + cm.ClientId, true, _owner);
+          var dt = Topic.root.Get("/dev/" + cm.ClientId, true, Owner);
           dev = new MsDevice(this, dt);
           _devs.Add(dev);
           dt.SetAttribute(Topic.Attribute.Readonly);
-          dt.SetField("editor", "MsStatus", _owner);
-          dt.SetField("cctor.MqsDev", string.Empty, _owner);
+          dt.SetField("editor", "MsStatus", Owner);
+          dt.SetField("cctor.MqsDev", string.Empty, Owner);
         }
         dev._gate = gate;
         dev.addr = addr;

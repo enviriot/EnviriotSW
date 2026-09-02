@@ -108,14 +108,44 @@ namespace X13.Archivist {
 
     #region open / close
 
+    /// <summary>Opens all three files or none of them.</summary>
+    /// <remarks>The three were assigned to the fields one after another with nothing around them,
+    /// so a locked or corrupt hot file - the third - left meta and raw open, holding their files,
+    /// with no reference anywhere that could close them: Close() runs off the same fields, and the
+    /// caller had been handed an exception instead of a store. IsOpen said "open" throughout,
+    /// because it only ever asked whether _meta was set.
+    /// <para>Locals until every step has succeeded, then publish. The catch disposes what this
+    /// call opened and nothing else, so a second attempt starts from a clean slate.</para></remarks>
     internal void Open() {
       if(!Directory.Exists(_dir)) {
         Directory.CreateDirectory(_dir);
       }
-      _meta = new LiteDatabase(new ConnectionString { Filename = Path.Combine(_dir, META_FILE), Upgrade = true });
-      _raw = new LiteDatabase(new ConnectionString { Filename = Path.Combine(_dir, RAW_FILE), Upgrade = true }) { CheckpointSize = 100 };
-      _hot = new LiteDatabase(new ConnectionString { Filename = Path.Combine(_dir, HOT_FILE), Upgrade = true }) { CheckpointSize = 100 };
+      LiteDatabase meta = null, raw = null, hot = null;
+      try {
+        meta = new LiteDatabase(new ConnectionString { Filename = Path.Combine(_dir, META_FILE), Upgrade = true });
+        raw = new LiteDatabase(new ConnectionString { Filename = Path.Combine(_dir, RAW_FILE), Upgrade = true }) { CheckpointSize = 100 };
+        hot = new LiteDatabase(new ConnectionString { Filename = Path.Combine(_dir, HOT_FILE), Upgrade = true }) { CheckpointSize = 100 };
+      }
+      catch {
+        DisposeQuietly(hot);
+        DisposeQuietly(raw);
+        DisposeQuietly(meta);
+        throw;
+      }
+      _meta = meta;
+      _raw = raw;
+      _hot = hot;
+      try {
+        Populate();
+      }
+      catch {
+        Close();   // published, so the fields are what has to be unwound now
+        throw;
+      }
+    }
 
+    /// <summary>Collections and indexes, once all three files are known to be open.</summary>
+    private void Populate() {
       _topics = _meta.GetCollection<BsonDocument>("topics");
       _topics.EnsureIndex("p", true);
       // No secondary index at all: the primary key already orders by topic and then by time, which
@@ -194,6 +224,21 @@ namespace X13.Archivist {
       }
       finally {
         _gate.ExitWriteLock();
+      }
+    }
+
+    /// <summary>Closes a database opened moments ago, when the caller is already failing.</summary>
+    /// <remarks>Nothing has been written through it yet, so there is no commit to attempt and no
+    /// second failure worth reporting over the one about to be rethrown.</remarks>
+    private static void DisposeQuietly(LiteDatabase db) {
+      if(db == null) {
+        return;
+      }
+      try {
+        db.Dispose();
+      }
+      catch(Exception ex) {
+        Log.Debug("Archivist.Open cleanup - {0}", ex.Message);
       }
     }
 

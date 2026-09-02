@@ -13,7 +13,6 @@ namespace X13.Periphery {
     private readonly int _idx;
     private readonly Topic _owner;
     private readonly Action<byte[]> _pub;
-    private readonly Topic _verbose;
     private bool _plcStoped;
     private bool PlcStoped {
       get {
@@ -37,25 +36,14 @@ namespace X13.Periphery {
       _idx = System.Threading.Interlocked.Increment(ref _cntCom);
       this._owner = owner;
       this._pub = pub;
-      this._verbose = Topic.root.Get("/$YS/DevicePLC/verbose");
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-      // from "set to the default", so the topic would never be created.
-      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-#if DEBUG
-        _verbose.SetState(true);
-#else
-        _verbose.SetState(false);
-#endif
-      }
       _st = 0;
       _owner.SetState(0);
     }
 
+    /// <summary>/$YS/DevicePLC/verbose, declared once by the plugin rather than per device.</summary>
     public bool Verbose {
       get {
-        return _verbose != null && (bool)_verbose.GetState();
+        return MQTT_SNPl.verbosePlc;
       }
     }
     public string Path { get { return _owner.path; } }

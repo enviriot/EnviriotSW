@@ -194,6 +194,10 @@ namespace X13.WebUI {
 
       string fileName = SafeExportFileName(topic.parent == null ? "root" : topic.name) + ".xst";
       response.Headers["Content-Disposition"] = "attachment; filename=\"" + fileName + "\"";
+      // An export is a snapshot of the tree fetched over a URL that carries the session token in
+      // its query. Neither belongs in a shared cache, and the archivist endpoint already says so.
+      response.Headers["Cache-Control"] = "no-store";
+      response.Headers["Referrer-Policy"] = "no-referrer";
       using(MemoryStream stream = new MemoryStream()) {
         Repo.Export(stream, topic, false);
         stream.Position = 0;
@@ -235,12 +239,14 @@ namespace X13.WebUI {
         WriteJsonResponse(response, HttpStatusCode.BadRequest, false, "archivist_bad_request", error);
         return;
       }
-      // Only the first path is checked. A chart carries tens of lines and they come from one
-      // branch in every case the protocol was built for; checking each would put a scan of the
-      // rule set on a request that already costs a store round trip. The gap is real and
-      // deliberate: paths from different branches ride in on the first path's grant.
-      if(!ArchivistAccessAllowed(client, query.Topics[0], _config.TrustedNets)) {
-        Log.Warning("WebUI archivist {0} refused for {1}", FormatAddress(client), query.Topics[0]);
+      // Every distinct path, not just the first. Checking only Topics[0] let the rest of the
+      // array ride in on its grant: a chart naming one readable topic could pull the history of
+      // any other, and history is the thing DashboardAcl exists to gate. That shortcut was taken
+      // for cost - a chart carries tens of lines - but the request already makes a store round
+      // trip, and this is a rule-set scan per distinct path against it.
+      string refused = FirstRefusedTopic(client, query.Topics, _config.TrustedNets);
+      if(refused != null) {
+        Log.Warning("WebUI archivist {0} refused for {1}", FormatAddress(client), refused);
         WriteResponse(response, HttpStatusCode.Forbidden);
         return;
       }
@@ -269,6 +275,34 @@ namespace X13.WebUI {
     /// <para>Note that IsAllowed exempts loopback unconditionally, so a dashboard page opened on
     /// the server itself takes this branch too and bypasses DashboardAcl. That opens nothing
     /// either: the whole IDE is reachable from loopback by the same rule.</para></remarks>
+    /// <summary>The first path this client may not read, or null when it may read them all.</summary>
+    /// <remarks>Whole request or nothing: a mixed set is refused rather than served in part. A
+    /// partial answer would be indistinguishable from a topic with no samples, so the caller
+    /// could map out what it is not allowed to see by watching which lines come back empty.
+    /// <para>Distinct, because a chart repeating a path pays for it once, and ordinal - the same
+    /// comparison Topic paths use everywhere else. Returning the path rather than a bool keeps
+    /// the log line able to name what was refused, which the single-topic check also did.</para></remarks>
+    internal static string FirstRefusedTopic(IPAddress client, string[] topics, string trustedNets) {
+      if(topics == null || topics.Length == 0) {
+        return null;
+      }
+      // NetworkAcl.IsAllowed does not depend on the path, so a caller on the IDE's network is
+      // cleared once instead of once per line.
+      if(NetworkAcl.IsAllowed(client, trustedNets)) {
+        return null;
+      }
+      var seen = new HashSet<string>(StringComparer.Ordinal);
+      for(int i = 0; i < topics.Length; i++) {
+        if(!seen.Add(topics[i])) {
+          continue;
+        }
+        if(!DashboardAcl.CanRead(client, topics[i])) {
+          return topics[i];
+        }
+      }
+      return null;
+    }
+
     internal static bool ArchivistAccessAllowed(IPAddress client, string topicPath, string trustedNets) {
       return NetworkAcl.IsAllowed(client, trustedNets) || DashboardAcl.CanRead(client, topicPath);
     }
@@ -354,7 +388,7 @@ namespace X13.WebUI {
             WriteResponse(e.Response, HttpStatusCode.NotFound);  // 404, not 403: stay invisible
             return;
           }
-          ImportUpload upload = ReadImportUpload(e.Request);
+          ImportUpload upload = ReadImportUpload(e.Request, _config.MaxImportBytes);
           if(upload == null || upload.Data == null) {
             WriteJsonResponse(e.Response, HttpStatusCode.BadRequest, false, "import_file_missing", "Import file is missing");
           } else {
@@ -366,9 +400,20 @@ namespace X13.WebUI {
           WriteResponse(e.Response, HttpStatusCode.NotFound);
         }
       }
+      catch(ImportTooLargeException ex) {
+        // Its own status, and the limit is not a secret: the caller has to know what to aim under.
+        Log.Warning("WebUI import refused - {0}", ex.Message);
+        WriteJsonResponse(e.Response, (HttpStatusCode)413, false, "import_too_large",
+          "Import file exceeds the limit of " + _config.MaxImportBytes.ToString() + " bytes");
+      }
       catch(Exception ex) {
-        Log.Warning("WebUI import failed - {0}", ex.Message);
-        WriteJsonResponse(e.Response, HttpStatusCode.InternalServerError, false, "import_failed", ex.Message);
+        // The detail stays in the server log, keyed by an id the caller can quote. ex.Message went
+        // out over the wire before this: parser positions, and filesystem paths from anything that
+        // touched a file - the remote end learns nothing from those it is entitled to know.
+        string incident = NewIncidentId();
+        Log.Warning("WebUI import failed [{0}] - {1}", incident, ex.ToString());
+        WriteJsonResponse(e.Response, HttpStatusCode.InternalServerError, false, "import_failed",
+          "Import failed; quote incident " + incident + " to the server operator");
       }
       if (e.Response.StatusCode == 200) {
         Log.Info("{0} POST {1} {2}", FormatRemoteEndPoint(remoteEndPoint), path, filename);
@@ -376,19 +421,60 @@ namespace X13.WebUI {
         Log.Warning("{0} POST {1} {2} - {3}", FormatRemoteEndPoint(remoteEndPoint), path, filename, (HttpStatusCode)e.Response.StatusCode);
       }
     }
-    private static ImportUpload ReadImportUpload(WSN.HttpListenerRequest request) {
+    /// <summary>Reads the multipart body, refusing one that will not fit the limit.</summary>
+    /// <remarks>ContentLength64 was used only to size the buffer, and CopyTo then read whatever
+    /// arrived: the payload went into memory whole, with the sender choosing how much. Two guards,
+    /// because either alone is bypassable - a declared length over the limit is refused before a
+    /// byte is read, and the read itself is capped, since a chunked request declares nothing.
+    /// <para>Throws rather than returning null: null already means "no file part in the body" and
+    /// answers 400, while this has to answer 413. See ImportTooLargeException.</para></remarks>
+    private static ImportUpload ReadImportUpload(WSN.HttpListenerRequest request, int maxBytes) {
       string contentType = request.ContentType ?? string.Empty;
       string boundary = MultipartBoundary(contentType);
       if(string.IsNullOrWhiteSpace(boundary)) return null;
 
       long declared = request.ContentLength64;
+      if(declared > maxBytes) {
+        throw new ImportTooLargeException(declared, maxBytes);
+      }
       // One copy of the payload, and only one: sizing the stream up front avoids the repeated
       // doubling reallocations, and everything downstream works on this same buffer.
       using(MemoryStream ms = new MemoryStream(declared > 0 && declared < int.MaxValue ? (int)declared : 0)) {
-        request.InputStream.CopyTo(ms);
+        CopyBounded(request.InputStream, ms, maxBytes);
         return ParseMultipartImport(ms.GetBuffer(), (int)ms.Length, boundary);
       }
     }
+    /// <summary>Short id tying a neutral HTTP error to the full detail in the server log.</summary>
+    /// <remarks>Not a GUID: it is meant to be read aloud or pasted into a message, and it only has
+    /// to be unique among the failures an operator is looking through, not globally.</remarks>
+    private static int _incidentSeq;
+    private static string NewIncidentId() {
+      return DateTime.Now.ToString("HHmmss") + "-" + (Interlocked.Increment(ref _incidentSeq) & 0xFFF).ToString("X3");
+    }
+
+    /// <summary>Copies at most <paramref name="maxBytes"/>, and refuses the moment there is more.</summary>
+    /// <remarks>Reads one byte past the limit on purpose: stopping exactly at it cannot tell a
+    /// body of exactly maxBytes from the start of a larger one, and the first must be accepted.</remarks>
+    internal static void CopyBounded(Stream source, Stream target, int maxBytes) {
+      byte[] buffer = new byte[16 * 1024];
+      long total = 0;
+      int read;
+      while((read = source.Read(buffer, 0, buffer.Length)) > 0) {
+        total += read;
+        if(total > maxBytes) {
+          throw new ImportTooLargeException(total, maxBytes);
+        }
+        target.Write(buffer, 0, read);
+      }
+    }
+
+    /// <summary>An import body over the configured limit. Carried as a type so it answers 413.</summary>
+    internal sealed class ImportTooLargeException : Exception {
+      public ImportTooLargeException(long size, int limit)
+        : base(string.Format("import body of {0} bytes exceeds the {1} byte limit", size, limit)) {
+      }
+    }
+
     /// <summary>Locates the "file" part directly in <paramref name="body"/>, without copying it.</summary>
     /// <remarks>Scanning is byte-wise: the previous latin1 round trip cost three extra copies of
     /// the payload, and its trailing "--" trim silently truncated any file whose content ended
@@ -658,6 +744,16 @@ namespace X13.WebUI {
     private static readonly System.Collections.Concurrent.ConcurrentQueue<WorkItem> _inbox
       = new System.Collections.Concurrent.ConcurrentQueue<WorkItem>();
 
+    /// <summary>Deepest the queue has been seen, and how many passes hit the item budget.</summary>
+    /// <remarks>The queue is unbounded, and adding a bound would mean choosing what to drop - a
+    /// row update, a resp.* a client is waiting on - which is a decision worth making from
+    /// evidence rather than in advance. This is the evidence: a depth that grows across a run
+    /// says work arrives faster than one 15 ms pass clears it. Reported once a minute and only
+    /// when it moved, so a healthy server says nothing.</remarks>
+    private static int _inboxPeak;
+    private static int _pumpSaturated;
+    private static DateTime _inboxReport = DateTime.MinValue;
+
     internal static void Post(string what, Action work) {
       if(work != null) _inbox.Enqueue(new WorkItem() { What = what, Run = work });
     }
@@ -672,6 +768,9 @@ namespace X13.WebUI {
     internal static void Pump() {
       WorkItem item;
       int budget = _inbox.Count;
+      if(budget > _inboxPeak) {
+        _inboxPeak = budget;
+      }
       while(budget-- > 0 && _inbox.TryDequeue(out item)) {
         // Per item, not per pass: one failed frame must not swallow the rest of the queue.
         // Program.cs:243 would also catch this, but only after abandoning everything still
@@ -683,10 +782,33 @@ namespace X13.WebUI {
           X13.Log.Error("WebUI pump: {0} failed - {1}", item.What ?? "<unlabelled>", ex.ToString());
         }
       }
+      // Anything still here was posted during the pass. A pass that ends with the queue no
+      // shorter than it started is the shape worth noticing, not the depth on its own.
+      if(_inbox.Count >= budget && budget > 0) {
+        _pumpSaturated++;
+      }
+      ReportQueueDepth();
       // After the queue rather than before it: an answer that arrived during this pass is
       // delivered by the work item that carries it, and only what is still outstanding after
       // that has any business being timed out.
       PendingRpc.Sweep();
+    }
+
+    private static void ReportQueueDepth() {
+      DateTime now = DateTime.Now;
+      if(now < _inboxReport) {
+        return;
+      }
+      bool first = _inboxReport == DateTime.MinValue;
+      _inboxReport = now.AddMinutes(1);
+      if(first || _inboxPeak <= 1) {
+        _inboxPeak = _inbox.Count;
+        _pumpSaturated = 0;
+        return;
+      }
+      Log.Debug("WebUI queue peak {0}, {1} saturated passes in the last minute", _inboxPeak, _pumpSaturated);
+      _inboxPeak = _inbox.Count;
+      _pumpSaturated = 0;
     }
 
     /// <summary>Transport for the dashboard protocol; DashboardSession holds the protocol.</summary>

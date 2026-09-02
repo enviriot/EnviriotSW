@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using X13.Repository;
+using NiL.JS.Extensions;
 using System.Threading;
 using System.IO.Ports;
 
@@ -15,12 +16,20 @@ namespace X13.Periphery {
   [ExportMetadata("priority", 8)]
   [ExportMetadata("name", "AntSw")]
   public class AntSwPl : IPlugModul {
-    private Topic _owner, _verbose, _di;
+    private const string OWNER_PATH = "/$YS/AntSw";
+    private const Topic.Attribute DbAttr = Topic.Attribute.Required | Topic.Attribute.DB;
+#if DEBUG
+    private const bool VerboseDefault = true;
+#else
+    private const bool VerboseDefault = false;
+#endif
+    private Topic _owner, _di;
     private Transport _transport;
     private int _st;
     private byte[] _remoteSt, _rxCfg, _txCfg;
     private SubRec _reqSub;
-    private Topic _enableT;
+    private SubRec[] _cfg;
+    private bool _verbose, _remote;
     private DateTime _to;
 
     #region IPlugModul Members
@@ -32,21 +41,10 @@ namespace X13.Periphery {
     }
 
     public void Start() {
-      _owner = Topic.root.Get("/$YS/AntSw");
-      _verbose = _owner.Get("verbose");
-      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-#if DEBUG
-        _verbose.SetState(true);
-#else
-        _verbose.SetState(false);
-#endif
-      }
-      _enableT = _owner.Get("remote");
-      if(_enableT.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _enableT.SetAttribute(Topic.Attribute.DB | Topic.Attribute.Required);
-        _enableT.SetState(true);
-      }
+      _cfg = new SubRec[] {
+        JsExtLib.EnsureCfg(Owner, "verbose", DbAttr, v => _verbose = v, VerboseDefault),
+        JsExtLib.EnsureCfg(Owner, "remote", DbAttr, v => _remote = v, true),
+      };
 
       var rt = Topic.root.Get("/export/req", true, _owner);
       Topic con;
@@ -62,6 +60,11 @@ namespace X13.Periphery {
     }
     public void Stop() {
       _reqSub.Dispose();
+      // EnsureCfg hands ownership of the subscriptions to the caller.
+      if(_cfg != null) {
+        foreach(var s in _cfg) s.Dispose();
+        _cfg = null;
+      }
       var tr = Interlocked.Exchange(ref _transport, null);
       if(tr!=null) {
         tr.Dispose();
@@ -118,19 +121,16 @@ namespace X13.Periphery {
         break;
       }
     }
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/AntSw", true);
-        if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
-          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-          en.SetState(true);
+        if(!Owner.GetState().Is<bool>()) {
+          Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          Owner.SetState(true);
           return true;
         }
-        return (bool)en.GetState();
-      }
-      set {
-        var en = Topic.root.Get("/$YS/AntSw", true);
-        en.SetState(value);
+        return (bool)Owner.GetState();
       }
     }
     #endregion IPlugModul Members
@@ -363,8 +363,7 @@ namespace X13.Periphery {
     private void Request(Perform p, SubRec sr) {
       byte con;
       int tmp;
-      var en = _enableT.GetState();
-      if((en.ValueType == JSC.JSValueType.Boolean && !((bool)en)) || p.Prim==_owner || p.src.path.Length < 17 || !p.src.path.StartsWith("/export/req/con") || !byte.TryParse(p.src.path.Substring(15, 1), out con) || con==0 || con > 8) {
+      if(!_remote || p.Prim==_owner || p.src.path.Length < 17 || !p.src.path.StartsWith("/export/req/con") || !byte.TryParse(p.src.path.Substring(15, 1), out con) || con==0 || con > 8) {
         return;
       }
       switch(p.src.name) {
@@ -395,7 +394,6 @@ namespace X13.Periphery {
       }
     }
 
-    public Topic Owner { get { return _owner; } }
-    public bool Verbose { get { return _verbose != null && (bool)_verbose.GetState(); } }
+    public bool Verbose { get { return _verbose; } }
   }
 }

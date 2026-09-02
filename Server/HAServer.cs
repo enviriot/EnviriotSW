@@ -79,8 +79,21 @@ namespace X13 {
       _instance=new Program(cfgPath);
     }
 
+    /// <summary>Starts the server and tells the SCM the truth about how it went.</summary>
+    /// <remarks>Start() now blocks until the plugins are up or have failed, so the SCM is asked
+    /// for the time that takes - without RequestAdditionalTime it gives roughly 30 s, and a
+    /// PersistentStorage that copies a large database to a backup first can want more.
+    /// <para>ExitCode before Stop() is what keeps the recovery actions configured in
+    /// InstallService working. They used to fire because the process died outright under
+    /// Environment.Exit(1) - the SCM read that as a crash. A service that simply stops is not a
+    /// failed one; a service that stops with a non-zero exit code is.</para></remarks>
     protected override void OnStart(string[] args) {
-      _instance.Start();
+      RequestAdditionalTime(Program.StartupTimeoutMs + 15000);
+      if(!_instance.Start()) {
+        Log.Error("The {0} service failed to start", SERVICE_NAME);
+        ExitCode = 1;
+        Stop();
+      }
     }
 
     protected override void OnStop() {

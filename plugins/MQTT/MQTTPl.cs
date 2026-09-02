@@ -15,6 +15,7 @@ namespace X13.MQTT {
   [ExportMetadata("priority", 8)]
   [ExportMetadata("name", "MQTT")]
   public class MQTTPl : IPlugModul {
+    private const string OWNER_PATH = "/$YS/MQTT";
     private Topic _owner;
     private SubRec _verboserSR;
     private SubRec _subMq;
@@ -31,53 +32,40 @@ namespace X13.MQTT {
       RPC.Register("MQTT.Reconnect", ReconnectRpc);
     }
     public void Start() {
-      _owner = Topic.root.Get("/$YS/MQTT");
-      var verboseT = _owner.Get("verbose");
-      // Deliberately a raw ValueType test, NOT AsBool: this decides whether the config topic has
-      // to be CREATED and seeded. A reader with a default cannot tell "not set yet" from "set to
-      // the default", so the topic would never be created.
-      if(verboseT.GetState().ValueType != JSC.JSValueType.Boolean) {
-        verboseT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-//#if DEBUG
-//        verboseT.SetState(true);
-//#else
-        verboseT.SetState(false);
-//#endif
-      }
-      // Deliberately As<bool>() and not AsBool(false): this reads JS truthiness, so a verbose flag
-      // set to 1 or to a non-empty string still turns tracing on. AsBool is strict and would
-      // silently ignore those.
-      _verboserSR = verboseT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, (p, s) => verbose = (_verboserSR.setTopic != null && _verboserSR.setTopic.GetState().As<bool>()));
+      _verboserSR = JsExtLib.EnsureCfg(Owner, "verbose",
+        Topic.Attribute.Required | Topic.Attribute.DB, v => verbose = v, false);
       _subMq = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "MQTT.uri", SubFunc);
     }
     public void Tick() {
     }
     public void Stop() {
-      var sr = Interlocked.Exchange(ref _subMq, null);
-      if(sr != null) {
-        sr.Dispose();
+      if(_subMq != null) {
+        _subMq.Dispose();
+        _subMq = null;
+      }
+      // EnsureCfg hands ownership of the subscription to the caller.
+      if(_verboserSR != null) {
+        _verboserSR.Dispose();
+        _verboserSR = null;
       }
       int i;
       for(i = _clients.Count - 1; i >= 0; i--) {
         _clients[i].Dispose();
       }
     }
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/MQTT", true);
-        // Deliberately a raw ValueType test, NOT AsBool: this decides whether the config topic has
-        // to be CREATED and seeded. A reader with a default cannot tell "not set yet" from "set to
-        // the default", so the topic would never be created.
-        if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
-          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-          en.SetState(true);
+        // Is<bool>, NOT AsBool: this decides whether the config topic has to be CREATED and
+        // seeded. A reader with a default cannot tell "not set yet" from "set to the default",
+        // so the topic would never be created.
+        if(!Owner.GetState().Is<bool>()) {
+          Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          Owner.SetState(true);
           return true;
         }
-        return (bool)en.GetState();
-      }
-      set {
-        var en = Topic.root.Get("/$YS/MQTT", true);
-        en.SetState(value);
+        return (bool)Owner.GetState();
       }
     }
     #endregion IPlugModul Members

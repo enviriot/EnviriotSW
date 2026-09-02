@@ -94,11 +94,17 @@ namespace X13 {
     }
     public static event Action<LogLevel, DateTime, string, bool> Write;
     public static Func<DateTime, int, IEnumerable<Log.LogRecord>> History;
+    /// <summary>Flushes what is queued and unhooks the writer. Once, at shutdown.</summary>
+    /// <remarks>fin is not the thing being waited for in its own right: Unregister signals it once
+    /// the registered wait has finished running, which is how this knows the last Process call is
+    /// over. It is a local handle like any other and gets disposed like one - it was simply left
+    /// to the finalizer before.</remarks>
     public static void Finish() {
       _kickEv.Set();
-      AutoResetEvent fin = new AutoResetEvent(false);
-      _wh.Unregister(fin);
-      fin.WaitOne(400);
+      using(AutoResetEvent fin = new AutoResetEvent(false)) {
+        _wh.Unregister(fin);
+        fin.WaitOne(400);
+      }
     }
 
     private static void Process(object o, bool to) {

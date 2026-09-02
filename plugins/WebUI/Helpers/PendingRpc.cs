@@ -22,9 +22,17 @@ namespace X13.WebUI {
     /// own failure long before this, and say something more useful than "timeout" when it does.</remarks>
     internal static int TimeoutMs = 30000;
 
+    /// <summary>Elapsed time for the timeouts, running from process start and never adjusted.</summary>
+    /// <remarks>Deadlines used to be DateTime.Now, which moves: the daylight-saving step alone
+    /// either fires every outstanding action an hour early or holds it an hour late, and an NTP
+    /// correction does the same on a smaller scale. Nothing here wants a wall clock - it wants
+    /// "has 30 seconds passed", which is what a monotonic count answers.</remarks>
+    private static readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+
     private sealed class Entry {
       public readonly object Sync = new object();
-      public DateTime Deadline;
+      /// <summary>_clock.ElapsedMilliseconds at which this entry times out.</summary>
+      public long Deadline;
       public Action<ViewOpResult> Done;
       public ViewOpResult Result;
       public bool HasResult;
@@ -37,7 +45,7 @@ namespace X13.WebUI {
     /// <returns>An error when nothing is registered under that name - a caller that waited on it
     /// would wait forever - otherwise a Pending result.</returns>
     public static ViewOpResult Begin(string name, JSC.JSValue[] args) {
-      Entry e = new Entry() { Deadline = DateTime.Now.AddMilliseconds(TimeoutMs) };
+      Entry e = new Entry() { Deadline = _clock.ElapsedMilliseconds + TimeoutMs };
       if(!RPC.Call(name, args, v => Complete(e, ToResult(v)))) {
         return ViewOpResult.Error("action_no_handler", "No handler is registered for action: " + (name ?? "<null>"));
       }
@@ -53,7 +61,7 @@ namespace X13.WebUI {
     /// <summary>Answers everything whose deadline has passed. Engine thread only.</summary>
     internal static void Sweep() {
       List<Entry> due = null;
-      DateTime now = DateTime.Now;
+      long now = _clock.ElapsedMilliseconds;
       lock(_pending) {
         for(int i = _pending.Count - 1; i >= 0; i--) {
           if(_pending[i].Deadline > now) continue;

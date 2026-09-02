@@ -15,9 +15,13 @@ namespace X13.Repository {
     private static Repo _repo;
     public static Topic root { get; private set; }
 
-    public static void Subscribe(Action<Perform> func) {
+    /// <summary>Every Perform the repository publishes. Dispose the result to stop receiving.</summary>
+    /// <remarks>The return value used to be void, so a plugin that subscribed here stayed
+    /// subscribed for the life of the process - including after its own Stop() had disposed the
+    /// objects the callback touches. Callers own what they get back.</remarks>
+    public static IDisposable Subscribe(Action<Perform> func) {
       if (_repo != null) {
-        _repo.SubscribeAll(func);
+        return _repo.SubscribeAll(func);
       } else {
         Log.Error("Topic.Subscribe({0}.{1}) - _repo == null", func.Target != null ? func.Target.ToString() : func.Method.DeclaringType.Name, func.Method.Name);
         throw new NullReferenceException("Topic.Subscribe() - _repo == null");

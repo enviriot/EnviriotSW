@@ -50,51 +50,162 @@ namespace X13.Periphery {
     ShortName=2
   }
 
+  /// <summary>Why a buffer did not become a message.</summary>
+  /// <remarks>All four used to be the same null, so a caller could log "bad message" and nothing
+  /// more, and a corpus test could not tell which failure it had reproduced.</remarks>
+  internal enum MsParseError {
+    None = 0,
+    TooShort,     // fewer bytes than a header needs, or fewer than the header declares
+    BadLength,    // the length field is not one this implementation accepts
+    UnknownType,  // header read, but no message class answers for that type
+    Malformed,    // a message constructor rejected the body
+  }
+
   public class MsMessage {
     public const int MSG_MAX_LENGTH=50;
+    /// <summary>Smallest frame the protocol allows: the length byte and the type byte.</summary>
+    internal const int MIN_LENGTH = 2;
+    /// <summary>A length byte of 0x01 says the real length follows as 16 bits.</summary>
+    private const byte EXT_MARKER = 1;
+    private const int EXT_HEADER = 4;  // marker, length hi, length lo, type
 
-    public static MsMessage Parse(byte[] buf, int start, int end) {
-      if(start+1>end) {
-        return null;
+    /// <summary>True for a declared frame length this implementation is willing to handle.</summary>
+    /// <remarks>The one place the limit lives. It was applied on the serial raw path only, so the
+    /// same malformed frame was refused over a wire and accepted over UDP - the transport, not the
+    /// protocol, decided what counted as a packet.</remarks>
+    internal static bool IsPlausibleLength(int declared) {
+      return declared >= MIN_LENGTH && declared <= MSG_MAX_LENGTH;
+    }
+
+    /// <summary>Reads the fixed header without trusting the buffer to be long enough for it.</summary>
+    /// <remarks>Every caller opened with `buf[start] &gt; 1 ? buf[start+1] : buf[start+3]` guarded by
+    /// `start+1 &gt; end` - a test a two-byte buffer passes before the fourth byte of it is indexed.
+    /// In MsGUdp that threw into a catch that logged the whole datagram at Error; here in Parse the
+    /// read sat BEFORE the try, so the exception left Parse altogether and reached
+    /// MQTT_SNPl.ProcessInPacket and the MsForward recursion, neither of which expects one.
+    /// <para>A leading 0x00 is refused rather than treated as the extended marker: it is not a
+    /// length, and reading a length out of the two bytes behind it only invents one.</para></remarks>
+    internal static bool TryReadHeader(byte[] buf, int start, int end, out MsMessageType msgTyp, out int length, out MsParseError error) {
+      msgTyp = default(MsMessageType);
+      length = 0;
+      if(buf == null || start < 0 || end > buf.Length || end - start < MIN_LENGTH) {
+        error = MsParseError.TooShort;
+        return false;
       }
-      var msgTyp=(MsMessageType)(buf[start+0]>1?buf[start+1]:buf[start+3]);
+      if(buf[start] > EXT_MARKER) {
+        length = buf[start];
+        msgTyp = (MsMessageType)buf[start + 1];
+      } else if(buf[start] == EXT_MARKER) {
+        if(end - start < EXT_HEADER) {
+          error = MsParseError.TooShort;
+          return false;
+        }
+        length = (buf[start + 1] << 8) | buf[start + 2];
+        msgTyp = (MsMessageType)buf[start + 3];
+      } else {
+        error = MsParseError.BadLength;
+        return false;
+      }
+      if(!IsPlausibleLength(length)) {
+        error = MsParseError.BadLength;
+        return false;
+      }
+      if(length > end - start) {
+        error = MsParseError.TooShort;  // truncated: the frame declares more than arrived
+        return false;
+      }
+      error = MsParseError.None;
+      return true;
+    }
+
+    /// <summary>Bounded hex for a log line: a malformed frame must not size the log entry.</summary>
+    internal static string HexPreview(byte[] buf, int start, int count, int max) {
+      if(buf == null || start < 0 || start >= buf.Length || count <= 0) {
+        return "<empty>";
+      }
+      if(start + count > buf.Length) {
+        count = buf.Length - start;
+      }
+      if(count <= max) {
+        return BitConverter.ToString(buf, start, count);
+      }
+      return BitConverter.ToString(buf, start, max) + "...(" + count.ToString() + " bytes)";
+    }
+
+    /// <summary>Parses a frame, saying why when it cannot.</summary>
+    public static MsMessage Parse(byte[] buf, int start, int end) {
+      MsMessage msg;
+      TryParse(buf, start, end, out msg, out _);
+      return msg;
+    }
+
+    internal static bool TryParse(byte[] buf, int start, int end, out MsMessage msg, out MsParseError error) {
+      msg = null;
+      MsMessageType msgTyp;
+      if(!TryReadHeader(buf, start, end, out msgTyp, out _, out error)) {
+        return false;
+      }
       try {
         switch(msgTyp) {
         case MsMessageType.ADVERTISE:
-          return new MsAdvertise(buf, start, end);
+          msg = new MsAdvertise(buf, start, end);
+          break;
         case MsMessageType.SEARCHGW:
-          return new MsSearchGW(buf, start, end);
+          msg = new MsSearchGW(buf, start, end);
+          break;
         case MsMessageType.GWINFO:
-          return new MsGwInfo(buf, start, end);
+          msg = new MsGwInfo(buf, start, end);
+          break;
         case MsMessageType.CONNECT:
-          return new MsConnect(buf, start, end);
+          msg = new MsConnect(buf, start, end);
+          break;
         case MsMessageType.WILLTOPIC:
-          return new MsWillTopic(buf, start, end);
+          msg = new MsWillTopic(buf, start, end);
+          break;
         case MsMessageType.WILLMSG:
-          return new MsWillMsg(buf, start, end);
+          msg = new MsWillMsg(buf, start, end);
+          break;
         case MsMessageType.SUBSCRIBE:
-          return new MsSubscribe(buf, start, end);
+          msg = new MsSubscribe(buf, start, end);
+          break;
         case MsMessageType.REGISTER:
-          return new MsRegister(buf, start, end);
+          msg = new MsRegister(buf, start, end);
+          break;
         case MsMessageType.REGACK:
-          return new MsRegAck(buf, start, end);
+          msg = new MsRegAck(buf, start, end);
+          break;
         case MsMessageType.PUBLISH:
-          return new MsPublish(buf, start, end);
+          msg = new MsPublish(buf, start, end);
+          break;
         case MsMessageType.PUBACK:
-          return new MsPubAck(buf, start, end);
+          msg = new MsPubAck(buf, start, end);
+          break;
         case MsMessageType.PINGREQ:
-          return new MsPingReq(buf, start, end);
+          msg = new MsPingReq(buf, start, end);
+          break;
         case MsMessageType.DISCONNECT:
-          return new MsDisconnect(buf, start, end);
+          msg = new MsDisconnect(buf, start, end);
+          break;
         case MsMessageType.DHCP_REQ:
-          return new MsDhcpReq(buf, start, end);
+          msg = new MsDhcpReq(buf, start, end);
+          break;
         case MsMessageType.EncapsulatedMessage:
-          return new MsForward(buf, start, end);
+          msg = new MsForward(buf, start, end);
+          break;
+        default:
+          error = MsParseError.UnknownType;
+          return false;
         }
       }
       catch(Exception) {
+        // Narrowed to a reason rather than swallowed: the constructors read the body, and a body
+        // that does not match its own header is the caller's problem to report, not ours to hide.
+        msg = null;
+        error = MsParseError.Malformed;
+        return false;
       }
-      return null;
+      error = MsParseError.None;
+      return true;
     }
     protected static UTF8Encoding enc = new UTF8Encoding();
 
@@ -106,16 +217,20 @@ namespace X13.Periphery {
     public ushort MessageId { get; set; }
     public int tryCnt;
 
+    /// <summary>Reads the header through the same validator TryParse used, not a second copy.</summary>
+    /// <remarks>These four lines were the third place spelling out the short/extended layout by
+    /// hand, and the only one that also checked the declared length against what arrived. Sharing
+    /// TryReadHeader keeps them from drifting apart - and it means a body constructed directly,
+    /// bypassing TryParse, is validated too.</remarks>
     protected MsMessage(byte[] buf, int start, int end) {
-      if(buf[start+0]>1) {
-        _length=buf[start+0];
-      } else {
-        _length=(ushort)((buf[start+1]<<8) | (buf[start+2]));
+      MsMessageType typ;
+      int len;
+      MsParseError err;
+      if(!TryReadHeader(buf, start, end, out typ, out len, out err)) {
+        throw new ArgumentException("bad MQTT-SN header: " + err.ToString());
       }
-      if(end-start<_length) {
-        throw new ArgumentException("length is too small");
-      }
-      MsgTyp=(MsMessageType)(buf[start+0]>1?buf[start+1]:buf[start+3]);
+      _length=(ushort)len;
+      MsgTyp=typ;
       _sendBuf=null;
     }
     public MsMessage(MsMessageType type) {

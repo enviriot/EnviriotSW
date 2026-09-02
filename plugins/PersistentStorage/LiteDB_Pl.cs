@@ -26,12 +26,12 @@ namespace X13.PersistentStorage {
   [System.ComponentModel.Composition.ExportMetadata("priority", 2)]
   [System.ComponentModel.Composition.ExportMetadata("name", "LiteDB")]
   internal class LiteDB_Pl : IPlugModul {
-    /// <summary>The one legacy value that has to keep its meaning: an explicit "off".</summary>
-
+    private const string OWNER_PATH = "/$YS/PersistentStorage";
     private Topic _owner;
+    private IDisposable _allSub;
     private readonly System.Collections.Concurrent.ConcurrentQueue<Perform> _q;
     private Thread _tr;
-    private bool _terminate;
+    private volatile bool _terminate;
     private readonly AutoResetEvent _tick;
     public LiteDB_Pl() {
       _tick = new AutoResetEvent(false);
@@ -40,7 +40,6 @@ namespace X13.PersistentStorage {
 
     #region IPlugModul Members
     public void Init() {
-      _owner = Topic.root.Get("/$YS/PersistentStorage", true);
       var dir = Path.GetDirectoryName(DB_PATH);
       if (!Directory.Exists(dir)) {
         Directory.CreateDirectory(dir);
@@ -76,7 +75,7 @@ namespace X13.PersistentStorage {
       };
       _tr.Start();
       _tick.WaitOne();  // wait load
-      Topic.Subscribe(SubFunc);
+      _allSub = Topic.Subscribe(SubFunc);
       if(_db.UserVersion < 4) {
         _db.UserVersion = 4;
         ImportDefault();
@@ -87,42 +86,65 @@ namespace X13.PersistentStorage {
         _tick.Set();
       }
     }
+    /// <summary>Teardown in the order the dependencies run, not the order they were created.</summary>
+    /// <remarks>Every step here has to happen before the next, and none of them used to happen at
+    /// all. The repository callback goes first: while it is attached, any change to any topic -
+    /// and Repo.Stop still exports the configuration after this - reaches SubFunc, which enqueues
+    /// and calls _tick.Set(). Disposing _tick while that was live is the ObjectDisposedException
+    /// the whole ordering exists to avoid. Log.Write and Log.History go next for the same reason
+    /// one step down: both reach _history, which belongs to the database about to be closed.
+    /// <para>The database is closed here at last. `//Interlocked.Exchange(ref _db, null)?.Dispose()`
+    /// had been commented out, so the file was never closed and the last writes reached disk only
+    /// through LiteDB's recovery on the next start. The cost is named rather than hidden: log
+    /// records produced after this point are no longer persisted, because there is nothing left
+    /// open to persist them into.</para></remarks>
     public void Stop() {
+      IDisposable allSub = _allSub;
+      _allSub = null;
+      if(allSub != null) {
+        allSub.Dispose();
+      }
+      Log.Write -= Log_Write;
+      Log.History = null;
+
       _terminate = true;
       _tick.Set();
-      if(!_tr.Join(5000)) {
-        _tr.Abort();
+      if(_tr != null && !_tr.Join(5000)) {
+        // Abandoned, not aborted. Thread.Abort lands at an arbitrary instruction, and for this
+        // thread that instruction is most likely inside LiteDB - mid transaction, mid page write -
+        // which is precisely how a file comes to need recovery. Not stopping in five seconds means
+        // it is stuck in a LiteDB call, and there is nothing there to cancel: the only other
+        // blocking point is _tick.WaitOne(15).
+        // The thread is IsBackground, so the process still exits. What must NOT happen is the
+        // cleanup below: disposing the database and the wait handle out from under a thread still
+        // using them turns a slow shutdown into an ObjectDisposedException, or worse.
+        Log.Error("PersistentStorage worker did not stop within 5 s; leaving the database open - it will be recovered on the next start");
+        return;
       }
-      //Interlocked.Exchange(ref _db, null)?.Dispose();
+      var db = Interlocked.Exchange(ref _db, null);
+      if(db != null) {
+        try {
+          db.Dispose();
+        }
+        catch(Exception ex) {
+          Log.Warning("PersistentStorage close - {0}", ex.Message);
+        }
+      }
       _tick.Dispose();
     }
-    /// <summary>Whether the state store runs, as a plain bool - the same shape every other plugin
-    /// uses at /$YS/&lt;name&gt;.</summary>
-    /// <remarks>It held a STRING until now, naming which storage backend was active: "LiteDB",
-    /// "FBSQL", "MySQL" or "Disabled". That existed because three plugins answered this property and
-    /// exactly one of them had to say yes, so the name was the arbitration. FBSQL and MySQL are
-    /// gone, one backend is left, and a name that can only take one value carries no information.
-    /// <para>The old value is still read once, and read for its meaning rather than discarded: a
-    /// storage someone deliberately turned off must not switch itself back on because the encoding
-    /// changed. After that single read the topic is rewritten as a bool and the branch is dead
-    /// weight - harmless, and cheaper than asking every installation to fix its own config.</para></remarks>
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/PersistentStorage", true);
-        var st = en.GetState();
-        // Deliberately a raw ValueType test, NOT AsBool: this decides whether the config topic has
-        // to be CREATED and seeded, and a reader with a default cannot tell "not set yet" from
-        // "set to the default" - the topic would then never be created.
-        if(st.ValueType == JSC.JSValueType.Boolean) {
-          return (bool)st;
+        // Is<bool>, NOT AsBool: this decides whether the config topic has to be CREATED and
+        // seeded, and a reader with a default cannot tell "not set yet" from "set to the
+        // default" - the topic would then never be created.
+        if(!Owner.GetState().Is<bool>()) {
+          Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          Owner.SetState(true);
+          return true;
         }
-        bool on = true;
-        en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-        en.SetState(on);
-        return on;
-      }
-      set {
-        Topic.root.Get("/$YS/PersistentStorage", true).SetState(value);
+        return (bool)Owner.GetState();
       }
     }
     #endregion IPlugModul Members
@@ -301,7 +323,7 @@ namespace X13.PersistentStorage {
       throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
     }
     private void SubFunc(Perform p) {
-      if (p.Art == Perform.E_Art.subscribe || p.Art == Perform.E_Art.subAck || p.Art == Perform.E_Art.setField || p.Art == Perform.E_Art.setState || p.Art == Perform.E_Art.unsubscribe || p.Prim == _owner) {
+      if (p.Art == Perform.E_Art.subscribe || p.Art == Perform.E_Art.subAck || p.Art == Perform.E_Art.setField || p.Art == Perform.E_Art.setState || p.Art == Perform.E_Art.unsubscribe || p.Prim == Owner) {
         return;
       }
       _q.Enqueue(p);
@@ -383,7 +405,7 @@ namespace X13.PersistentStorage {
             oldId.Add(obj["_id"]);
             continue;  // skip load, old version
           }
-          t = Topic.I.Get(Topic.root, sTmp, true, _owner, false, false);
+          t = Topic.I.Get(Topic.root, sTmp, true, Owner, false, false);
           a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
           // check version
           {
@@ -415,7 +437,7 @@ namespace X13.PersistentStorage {
             }
           }
           _base.Add(t, a);
-          Topic.I.Fill(t, a.js, a.jm, _owner);
+          Topic.I.Fill(t, a.js, a.jm, Owner);
         }
         oldT.Clear();
         foreach (var id in oldId) {
@@ -510,10 +532,10 @@ namespace X13.PersistentStorage {
     /// it, and nothing else writes it.</remarks>
     private void SeedBackupDir(string dir) {
       Topic bakT;
-      if (_owner.Exist("bak", out bakT)) {
+      if (Owner.Exist("bak", out bakT)) {
         return;
       }
-      bakT = _owner.Get("bak", true, _owner);
+      bakT = Owner.Get("bak", true, Owner);
       bakT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
       bakT.SetState(dir);
     }
@@ -527,7 +549,7 @@ namespace X13.PersistentStorage {
     /// <para>The directory is created here rather than assumed, so a setting pointing somewhere
     /// that does not exist yet is not fatal either.</para></remarks>
     private string BackupDir(string fallback) {
-      var bak_dir = _owner.Get("bak", true, _owner).GetState().AsString(null);
+      var bak_dir = Owner.Get("bak", true, Owner).GetState().AsString(null);
       if (string.IsNullOrEmpty(bak_dir)) {
         Log.Warning("PersistentStorage.bak is not set, backing up into {0}", fallback);
         bak_dir = fallback;
@@ -600,6 +622,9 @@ namespace X13.PersistentStorage {
         _history = _db.GetCollection<BsonDocument>("history");
       }
 
+      // Per file, not per pass. One undeletable backup - held open by a copy in progress, or by a
+      // virus scanner - used to abort the whole retention sweep silently, so everything older than
+      // it stayed forever and nothing said why.
       try {
         DateTime now = DateTime.Now, fdt;
         foreach (string f in Directory.GetFiles(bak_dir, "??????_??????.bak", SearchOption.TopDirectoryOnly)) {
@@ -607,11 +632,21 @@ namespace X13.PersistentStorage {
           if (fdt.AddDays(7) > now || (fdt.DayOfWeek == DayOfWeek.Thursday && fdt.Hour == 3 && (fdt.AddMonths(1) > now || (fdt.AddMonths(6) > now && fdt.Day < 8)))) {
             continue;
           }
-          File.Delete(f);
-          Log.Info("backup {0} deleted", Path.GetFileName(f));
+          try {
+            File.Delete(f);
+            Log.Info("backup {0} deleted", Path.GetFileName(f));
+          }
+          catch (IOException ex) {
+            Log.Warning("backup {0} not deleted - {1}", Path.GetFileName(f), ex.Message);
+          }
+          catch (UnauthorizedAccessException ex) {
+            Log.Warning("backup {0} not deleted - {1}", Path.GetFileName(f), ex.Message);
+          }
         }
       }
-      catch (System.IO.IOException) {
+      catch (IOException ex) {
+        // Listing the directory failed, which is not the same as one file refusing to go.
+        Log.Warning("backup retention could not list {0} - {1}", bak_dir, ex.Message);
       }
     }
     #endregion Persisten Storage Members

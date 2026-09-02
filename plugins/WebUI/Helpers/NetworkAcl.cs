@@ -141,6 +141,12 @@ namespace X13.WebUI.Helpers {
       return prefix;
     }
 
+    /// <summary>Watches for the machine's addresses changing, for the life of the process.</summary>
+    /// <remarks>Process-lifetime on purpose, and worth saying out loud because the delegate is
+    /// anonymous and therefore cannot be removed: what it holds is two static caches, it is armed
+    /// exactly once by the CompareExchange below, and "local" means whatever the machine's
+    /// interfaces currently say - a question that outlives any one WebUiPl. Restarting the plugin
+    /// in the same process reuses this hook rather than adding a second one.</remarks>
     private static void InstallNetworkHook() {
       if(Interlocked.CompareExchange(ref _networkHookInstalled, 1, 0) != 0) {
         return;

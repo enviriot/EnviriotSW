@@ -20,6 +20,9 @@ namespace X13 {
     static JsExtLib() {
       _timerCnt = 1;
       Context = new JSC.GlobalContext();
+      // Activated here as well as in ActivateEngineOnThisThread: DefineVariable and ProxyValue
+      // below run inside this constructor and want a live context. Which thread that turns out to
+      // be is not decided here - see ActivateEngineOnThisThread.
       Context.ActivateInCurrentThread();
       Context.DefineVariable("setTimeout").Assign(Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
       Context.DefineVariable("setInterval").Assign(Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
@@ -34,6 +37,22 @@ namespace X13 {
       var arch= JSC.JSObject.CreateObject();
       arch["Query"] = Context.ProxyValue(new Func<JSC.JSValue, JSC.JSValue, int, JSC.JSValue, Task<JSL.Array>>(AQueryJS));
       Context.DefineVariable("Arch").Assign(arch);
+    }
+
+    /// <summary>Makes the calling thread the one the script engine belongs to.</summary>
+    /// <remarks>NiL.JS holds the active-context stack in a [ThreadStatic] field, so "the context
+    /// is active" is true of one thread and no other. The activation used to happen as a side
+    /// effect of the static constructor above, which runs on whichever thread first touches this
+    /// class - an ordering nothing declared and nothing checked.
+    /// <para>Getting it wrong is silent, which is the reason this exists as a named call. A
+    /// Function captures Context.CurrentContext when it is compiled and falls back to NiL.JS's own
+    /// DefaultGlobalContext if there is none; that context has no setTimeout, console, File or
+    /// Arch, so the script does not fail - it finds them undefined.</para>
+    /// <para>Safe to call whether or not the static constructor already ran here: on this thread
+    /// ActivateInCurrentThread deactivates the context before re-activating it, and on any other
+    /// thread there is nothing on the stack to deactivate.</para></remarks>
+    public static void ActivateEngineOnThisThread() {
+      Context.ActivateInCurrentThread();
     }
 
     #region XMLHttpRequest
