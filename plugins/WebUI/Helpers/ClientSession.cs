@@ -9,7 +9,7 @@ using X13.Repository;
 namespace X13.WebUI.Helpers {
   // One connected client, represented in the tree by a topic under /$YS/WebUI/clients.
   //
-  // The topic is not decoration: it is the Perform.Prim this session's writes carry, and Prim
+  // The topic is not decoration: it is the TopicEvent.Author this session's writes carry, and Prim
   // is the only thing a subscriber can compare against to tell its own echo from someone
   // else's change (the repository does not filter delivery - every plugin filters itself, see
   // ArchivistPl.SubFunc). Without a topic per session there is nothing to compare.

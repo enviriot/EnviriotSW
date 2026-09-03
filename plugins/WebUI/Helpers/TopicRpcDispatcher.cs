@@ -153,8 +153,8 @@ namespace X13.WebUI {
 
       JSC.JSValue state = action["default"];
       JSC.JSValue manifest = action["manifest"];
-      Topic child = Topic.I.Get(topic, name, true, prim, false, false);
-      Topic.I.Fill(
+      Topic child = Topic.Declare(topic, name, prim);
+      Topic.Fill(
         child,
         state != null && state.Defined ? JsLib.Clone(state) : JSC.JSValue.Null,
         manifest.IsObject() ? JsLib.Clone(manifest) : null,

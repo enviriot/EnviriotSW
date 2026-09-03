@@ -16,7 +16,7 @@ namespace X13.WebUI.Helpers {
       Topic catalog = Topic.root.Get("/$YS/Catalog", true);
       catalog.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
       Topic uri = catalog.Get("uri", true);
-      // Readonly: the catalog's download path feeds this URL straight into Repo.Import, so the
+      // Readonly: the catalog's download path feeds this URL straight into Xst.Import, so the
       // catalog source is not something a client should be able to repoint.
       uri.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
       string value = uri.GetState().AsString(null);

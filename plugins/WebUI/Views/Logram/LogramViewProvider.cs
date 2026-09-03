@@ -11,7 +11,7 @@ namespace X13.WebUI {
   // LogramGraphController per open document, keyed by the diagram's own Topic.
   //
   // Keyed by Topic, not by the vid the client opened with: a vid is a path, and Topic.Move
-  // rewrites Topic._path in place (Topic.I.UpdatePath), so every vid naming a renamed diagram
+  // rewrites Topic._path in place (Topic.UpdatePath), so every vid naming a renamed diagram
   // goes stale while the Topic reference stays valid. The reference needs no id of its own -
   // it is already stable, costs no lookup and cannot be desynchronised. Same idiom as
   // LogramPl._items and PersistentStorage's Dictionary<Topic, ...>. vid remains what it was
@@ -193,8 +193,8 @@ namespace X13.WebUI {
       manifest = JsLib.SetField(manifest, "Logram.left", new JSL.Number(left));
 
       JSC.JSValue state = descState["default"];
-      Topic block = Topic.I.Get(diagram, name, true, null, false, false);
-      Topic.I.Fill(block, state != null && state.Defined ? JsLib.Clone(state) : JSC.JSValue.Null, manifest, null);
+      Topic block = Topic.Declare(diagram, name);
+      Topic.Fill(block, state != null && state.Defined ? JsLib.Clone(state) : JSC.JSValue.Null, manifest, null);
 
       CreateRequiredChildren(block, descState["Children"]);
       return ViewOpResult.Success();
@@ -238,8 +238,8 @@ namespace X13.WebUI {
       manifest = JsLib.SetField(manifest, "cctor.LoBind", new JSL.String(source.path));
 
       JSC.JSValue state = source.GetState();
-      Topic variable = Topic.I.Get(diagram, name, true, null, false, false);
-      Topic.I.Fill(variable, state != null && state.Defined ? JsLib.Clone(state) : JSC.JSValue.Null, manifest, null);
+      Topic variable = Topic.Declare(diagram, name);
+      Topic.Fill(variable, state != null && state.Defined ? JsLib.Clone(state) : JSC.JSValue.Null, manifest, null);
 
       if(string.IsNullOrEmpty(source.GetField("cctor.LoBind").AsString(null))) {
         source.SetField("cctor.LoBind", variable.path);
@@ -281,8 +281,8 @@ namespace X13.WebUI {
         if((attr & (int)Topic.Attribute.Required) == 0) continue;
         JSC.JSValue childState = entry.Value.Field("default");
         JSC.JSValue childManifest = entry.Value.Field("manifest");
-        Topic child = Topic.I.Get(parent, entry.Key, true, null, false, false);
-        Topic.I.Fill(
+        Topic child = Topic.Declare(parent, entry.Key);
+        Topic.Fill(
           child,
           childState != null && childState.Defined ? JsLib.Clone(childState) : JSC.JSValue.Null,
           childManifest != null && childManifest.Defined ? JsLib.Clone(childManifest) : null,

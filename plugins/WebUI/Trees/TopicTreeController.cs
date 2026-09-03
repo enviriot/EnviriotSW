@@ -46,7 +46,7 @@ namespace X13.WebUI {
 
     private readonly Func<Topic> _prim;
 
-    /// <summary>This session's client topic, carried as Perform.Prim on everything it writes.</summary>
+    /// <summary>This session's client topic, carried as TopicEvent.Author on everything it writes.</summary>
     /// <remarks>Read per write rather than cached: the topic is created on the engine thread
     /// after this controller exists, and renamed again when the reverse DNS lookup lands. Null
     /// when no session owns these writes, which is how every existing test constructs one.</remarks>
@@ -240,21 +240,21 @@ namespace X13.WebUI {
     // would reintroduce exactly the interleaving the locks exist to prevent. The topic path is in
     // the label for the same reason the session id is in a frame's - without it a pump failure
     // does not say which document broke.
-    private void OnTopicChanged(Perform perform, SubRec sub) {
-      _post("callback " + (perform == null || perform.src == null ? "?" : perform.src.path),
+    private void OnTopicChanged(TopicEvent perform, SubRec sub) {
+      _post("callback " + (perform == null || perform.Source == null ? "?" : perform.Source.path),
         () => OnTopicChangedCore(perform, sub));
     }
 
-    private void OnTopicChangedCore(Perform perform, SubRec sub) {
+    private void OnTopicChangedCore(TopicEvent perform, SubRec sub) {
       try {
-        if(perform == null || perform.src == null || sub == null) return;
+        if(perform == null || perform.Source == null || sub == null) return;
 
         // This controller's own root being deleted out from under it (only reachable
         // when Once was added to the root's own subscription mask, see ExpandTopic) -
         // the regular child-focused guard just below would reject a self-event anyway
-        // (perform.src.parent never equals sub.setTopic for a self-event), so this has
+        // (perform.Source.parent never equals sub.setTopic for a self-event), so this has
         // to be handled before it, not folded into the existing remove branch.
-        if(perform.Art == Perform.E_Art.remove && perform.src == _rootTopic && sub.setTopic == _rootTopic) {
+        if(perform.Kind == EventKind.Removed && perform.Source == _rootTopic && sub.setTopic == _rootTopic) {
           HandleRootRemoved();
           return;
         }
@@ -265,42 +265,42 @@ namespace X13.WebUI {
         // fields (RowProjector.ResolveAltView): without this, turning archiving on, or retyping a
         // topic to Core/Logram, would leave the open document's own breadcrumb button describing
         // what the topic used to be until someone navigated away and back.
-        if(perform.Art == Perform.E_Art.changedField && perform.src == _rootTopic && sub.setTopic == _rootTopic) {
+        if(perform.Kind == EventKind.FieldChanged && perform.Source == _rootTopic && sub.setTopic == _rootTopic) {
           SendUpd(_rootTopic, null);
           return;
         }
-        if(perform.src.parent != sub.setTopic) return;
+        if(perform.Source.parent != sub.setTopic) return;
 
         string parentVid = _rowProjector.TopicVid(sub.setTopic);
         bool parentExpanded = _expansion.IsExpanded(parentVid);
 
-        if(perform.Art == Perform.E_Art.create) {
+        if(perform.Kind == EventKind.Created) {
           SendUpd(sub.setTopic, sub.setTopic.HasChildren() ? (parentExpanded ? 2 : 1) : 0);
-          if(parentExpanded) SendAdd(perform.src);
-        } else if(perform.Art == Perform.E_Art.remove) {
-          string vid = _rowProjector.TopicVid(perform.src);
+          if(parentExpanded) SendAdd(perform.Source);
+        } else if(perform.Kind == EventKind.Removed) {
+          string vid = _rowProjector.TopicVid(perform.Source);
           if(parentExpanded) _send(ViewProtocolSerializer.Del(vid));
           _targets.RemoveSubtree(vid);
           _expansion.RemoveWatchSubtree(vid, VidHelper.IsDescendant);
           // Skipped once the parent is itself disposed - removing a topic with
-          // children fans out into one remove Perform per descendant (Repo.cs
-          // TickStep1: `foreach(Topic tmp in c.src.all) ...`, self first, then
+          // children fans out into one remove TopicEvent per descendant (Repo.cs
+          // TickStep1: `foreach(Topic tmp in c.Target.all) ...`, self first, then
           // children), so a child's own removal handler would otherwise send a
           // pointless evnt.upd "refreshing" a parent row the client was just told
           // (via the parent's own remove event) to delete entirely.
           if(!sub.setTopic.disposed) SendUpd(sub.setTopic, sub.setTopic.HasChildren() ? (parentExpanded ? 2 : 1) : 0);
-        } else if(perform.Art == Perform.E_Art.changedState || perform.Art == Perform.E_Art.changedField) {
-          SendUpd(perform.src, null);
-        } else if(perform.Art == Perform.E_Art.move) {
-          string oldPath = perform.o as string;
+        } else if(perform.Kind == EventKind.StateChanged || perform.Kind == EventKind.FieldChanged) {
+          SendUpd(perform.Source, null);
+        } else if(perform.Kind == EventKind.Moved) {
+          string oldPath = perform.OldPath;
           if(parentExpanded) {
             if(!string.IsNullOrEmpty(oldPath)) _send(ViewProtocolSerializer.Del(_viewName + "#" + oldPath));
-            SendAdd(perform.src);
+            SendAdd(perform.Source);
           }
           SendUpd(sub.setTopic, sub.setTopic.HasChildren() ? (parentExpanded ? 2 : 1) : 0);
 
           // The callback above only fires for the NEW parent's subscription (see the
-          // guard at the top: perform.src.parent now points at the new parent, so
+          // guard at the top: perform.Source.parent now points at the new parent, so
           // the OLD parent's own subscription - if any - never matches and never
           // runs). Without this, the old parent's expander arrow goes stale when it
           // loses its last child (or gains one back via a subsequent move/paste).
@@ -442,7 +442,7 @@ namespace X13.WebUI {
 
     // The emptiness guard stays even though the path is no longer stored: it is what makes a vid
     // naming no topic fail as view_target_not_found instead of resolving to Topic.root, which
-    // Topic.I.Get returns for an empty path.
+    // Topic.Resolve returns for an empty path.
     private ViewTarget CreateTarget(string vid) {
       if(VidHelper.GetView(vid) != _viewName) return null;
       if(string.IsNullOrEmpty(VidHelper.GetTopicPath(vid))) return null;

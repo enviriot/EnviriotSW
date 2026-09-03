@@ -29,13 +29,13 @@ namespace X13.PersistentStorage {
     private const string OWNER_PATH = "/$YS/PersistentStorage";
     private Topic _owner;
     private IDisposable _allSub;
-    private readonly System.Collections.Concurrent.ConcurrentQueue<Perform> _q;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<TopicEvent> _q;
     private Thread _tr;
     private volatile bool _terminate;
     private readonly AutoResetEvent _tick;
     public LiteDB_Pl() {
       _tick = new AutoResetEvent(false);
-      _q = new System.Collections.Concurrent.ConcurrentQueue<Perform>();
+      _q = new System.Collections.Concurrent.ConcurrentQueue<TopicEvent>();
     }
 
     #region IPlugModul Members
@@ -225,7 +225,7 @@ namespace X13.PersistentStorage {
         case JSC.JSValueType.String: {
             string s = val.AsString(null);
             if (s != null && s.StartsWith("¤TR")) {
-              var t = Topic.I.Get(Topic.root, s.Substring(3), false, null, false, false);
+              var t = Topic.root.Get(s.Substring(3), false);
               if (t != null) {
                 if (_base.TryGetValue(t, out Stash tu)) {
                   return tu.bm["_id"];
@@ -322,8 +322,12 @@ namespace X13.PersistentStorage {
       }
       throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
     }
-    private void SubFunc(Perform p) {
-      if (p.Art == Perform.E_Art.subscribe || p.Art == Perform.E_Art.subAck || p.Art == Perform.E_Art.setField || p.Art == Perform.E_Art.setState || p.Art == Perform.E_Art.unsubscribe || p.Prim == Owner) {
+    private void SubFunc(TopicEvent p) {
+      // Snapshot and Ready say nothing new about the tree - they replay what is already stored -
+      // and a change this plugin made itself must not be written back. The three kinds this also
+      // used to test for (setState, setField, unsubscribe) were requests rather than outcomes and
+      // could never arrive here; the split makes that unwritable rather than merely useless.
+      if (p.Kind == EventKind.Snapshot || p.Kind == EventKind.Ready || p.Author == Owner) {
         return;
       }
       _q.Enqueue(p);
@@ -343,7 +347,7 @@ namespace X13.PersistentStorage {
         try {
           if (_tick.WaitOne(15)) {
             _db.BeginTrans();
-            while (_q.TryDequeue(out Perform p)) {
+            while (_q.TryDequeue(out TopicEvent p)) {
               try {
                 Save(p);
               }
@@ -405,7 +409,7 @@ namespace X13.PersistentStorage {
             oldId.Add(obj["_id"]);
             continue;  // skip load, old version
           }
-          t = Topic.I.Get(Topic.root, sTmp, true, Owner, false, false);
+          t = Topic.Declare(Topic.root, sTmp, Owner);
           a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
           // check version
           {
@@ -437,7 +441,7 @@ namespace X13.PersistentStorage {
             }
           }
           _base.Add(t, a);
-          Topic.I.Fill(t, a.js, a.jm, Owner);
+          Topic.Fill(t, a.js, a.jm, Owner);
         }
         oldT.Clear();
         foreach (var id in oldId) {
@@ -455,18 +459,18 @@ namespace X13.PersistentStorage {
       using (var rs = assembly.GetManifestResourceStream("X13.Repository.base.xst")) {
         using (var reader = new StreamReader(rs)) {
           Log.Info("Import base.xst");
-          Repo.Import(reader, null);
+          Xst.Import(reader, null);
         }
       }
     }
 
-    private void Save(Perform p) {
-      Topic t = p.src;
+    private void Save(TopicEvent p) {
+      Topic t = p.Source;
       Stash a;
       JSC.JSValue jTmp;
       bool saveM = false, saveS = false;
       if (!_base.TryGetValue(t, out a)) {
-        if (p.Art == Perform.E_Art.remove) {
+        if (p.Kind == EventKind.Removed) {
           return;
         }
         var obj = _objects.FindOne(Query.EQ("p", t.path));
@@ -474,7 +478,7 @@ namespace X13.PersistentStorage {
         _base[t] = a;
       }
 
-      if (p.Art == Perform.E_Art.remove) {
+      if (p.Kind == EventKind.Removed) {
         _states.Delete(a.id);
         _objects.Delete(a.id);
         _base.Remove(t);
@@ -515,7 +519,7 @@ namespace X13.PersistentStorage {
           }
         }
 
-        if (p.Art == Perform.E_Art.move) {
+        if (p.Kind == EventKind.Moved) {
           a.bm["p"] = t.path;
           saveM = true;
         }

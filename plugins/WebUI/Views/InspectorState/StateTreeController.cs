@@ -28,8 +28,8 @@ namespace X13.WebUI {
       get { return ViewTargetKind.State; }
     }
 
-    protected override bool IsRelevantChange(Perform.E_Art art) {
-      return art == Perform.E_Art.changedState || art == Perform.E_Art.changedField;
+    protected override bool IsRelevantChange(EventKind art) {
+      return art == EventKind.StateChanged || art == EventKind.FieldChanged;
     }
 
     protected override JSC.JSValue ResolveValueAt(string fieldPath) {

@@ -23,7 +23,7 @@ namespace X13.Archivist {
     private const string DEFAULT_DIR = "../data";
 
     private readonly string _dir;
-    private readonly ConcurrentQueue<Perform> _q;
+    private readonly ConcurrentQueue<TopicEvent> _q;
     private readonly AutoResetEvent _tick;
     private ArchStore _store;
     private Topic _owner;
@@ -48,7 +48,7 @@ namespace X13.Archivist {
     /// <summary>Directory is injectable so the store can be exercised outside a running server.</summary>
     internal ArchivistPl(string dir) {
       _dir = dir;
-      _q = new ConcurrentQueue<Perform>();
+      _q = new ConcurrentQueue<TopicEvent>();
       _tick = new AutoResetEvent(false);
     }
 
@@ -149,11 +149,11 @@ namespace X13.Archivist {
     /// short. Arch.enable is read with As&lt;bool&gt;() - JS truthiness - on purpose, exactly as the
     /// old code did: the field is user-editable, so enable set to 1 or to a non-empty string still
     /// means yes. AsBool is strict and would silently turn those off.</remarks>
-    private void SubFunc(Perform p) {
-      if(p.Art != Perform.E_Art.changedState || p.src == null || p.Prim == Owner) {
+    private void SubFunc(TopicEvent p) {
+      if(p.Kind != EventKind.StateChanged || p.Source == null || p.Author == Owner) {
         return;
       }
-      if(!p.src.GetField("Arch.enable").As<bool>()) {
+      if(!p.Source.GetField("Arch.enable").As<bool>()) {
         return;
       }
       _q.Enqueue(p);
@@ -169,7 +169,7 @@ namespace X13.Archivist {
       _tick.Set();
       do {
         if(_tick.WaitOne(15)) {
-          while(_q.TryDequeue(out Perform p)) {
+          while(_q.TryDequeue(out TopicEvent p)) {
             try {
               StoreOne(p);
             }
@@ -187,16 +187,16 @@ namespace X13.Archivist {
       }
     }
 
-    private void StoreOne(Perform p) {
+    private void StoreOne(TopicEvent p) {
       var st = _store;
       if(st == null || !st.IsOpen) {
         return;
       }
-      double v = p.src.GetState().AsDouble(double.NaN);
+      double v = p.Source.GetState().AsDouble(double.NaN);
       if(double.IsNaN(v) || double.IsInfinity(v)) {
         return;                                     // nothing numeric to archive
       }
-      st.Append(st.Resolve(p.src), v);
+      st.Append(st.Resolve(p.Source), v);
     }
 
     /// <summary>One unit of background work per idle pass, round-robin over the topics.</summary>

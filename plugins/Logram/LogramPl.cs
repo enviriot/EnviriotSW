@@ -40,8 +40,8 @@ namespace X13.Logram {
 
     #region IPlugModul Members
     public void Init() {
-      RPC.Register("LoBind", BindCh);
-      RPC.Register("LoBlock", BlockCh);
+      CCtor.Register("LoBind", BindCh);
+      CCtor.Register("LoBlock", BlockCh);
     }
     public void Start() {
       _verboseSR = JsExtLib.EnsureCfg(Owner, "verbose",
@@ -81,7 +81,7 @@ namespace X13.Logram {
     }
     /// <summary>Stop used to be empty, so nothing here was ever taken down.</summary>
     /// <remarks>The repository callback goes first: SubFunc enqueues into _TaskIn, so clearing the
-    /// queues while it is still attached only makes room for the next Perform to refill them.</remarks>
+    /// queues while it is still attached only makes room for the next TopicEvent to refill them.</remarks>
     public void Stop() {
       IDisposable allSub = _allSub;
       _allSub = null;
@@ -144,10 +144,10 @@ namespace X13.Logram {
       _TaskIn.Enqueue(it);
     }
 
-    private void BindCh(Topic t, Perform.E_Art a) {
+    private void BindCh(Topic t, EventKind a) {
       ILoItem it;
       LoVariable v = null;
-      if(( !_items.TryGetValue(t, out it) || ( v = it as LoVariable )==null ) && a == Perform.E_Art.create) {
+      if(( !_items.TryGetValue(t, out it) || ( v = it as LoVariable )==null ) && a == EventKind.Created) {
         v = new LoVariable(this, t);
         _items[t] = v;
       }
@@ -155,11 +155,11 @@ namespace X13.Logram {
         v.ManifestChanged();
       }
     }
-    private void BlockCh(Topic t, Perform.E_Art a) {
+    private void BlockCh(Topic t, EventKind a) {
       ILoItem it;
       LoBlock v = null;
       if(!_items.TryGetValue(t, out it) || ( v = it as LoBlock )==null) {
-        if(a == Perform.E_Art.create) {
+        if(a == EventKind.Created) {
           v = new LoBlock(this, t);
           _items[t] = v;
         }
@@ -167,20 +167,20 @@ namespace X13.Logram {
         v.ManifestChanged();
       }
     }
-    private void SubFunc(Perform p) {
+    private void SubFunc(TopicEvent p) {
       ILoItem it;
-      if(!_items.TryGetValue(p.src, out it)) {
-        if(p.Art==Perform.E_Art.create) {
+      if(!_items.TryGetValue(p.Source, out it)) {
+        if(p.Kind==EventKind.Created) {
           LoBlock lb;
-          if(p.src.parent!=null && _items.TryGetValue(p.src.parent, out it) && ( lb = it as LoBlock )!=null) {
-            lb.GetPin(p.src);
+          if(p.Source.parent!=null && _items.TryGetValue(p.Source.parent, out it) && ( lb = it as LoBlock )!=null) {
+            lb.GetPin(p.Source);
           }
         }
         return;
       }
-      if(p.Art==Perform.E_Art.changedState) {
-        it.SetValue(p.src.GetState(), p.Prim);
-      } else if(p.Art==Perform.E_Art.remove) {
+      if(p.Kind==EventKind.StateChanged) {
+        it.SetValue(p.Source.GetState(), p.Author);
+      } else if(p.Kind==EventKind.Removed) {
         _TaskIn.Enqueue(it);
       }
     }

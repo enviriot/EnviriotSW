@@ -1,16 +1,16 @@
 ///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
-using JSL = NiL.JS.BaseLibrary;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 
-namespace X13.Repository {
+namespace X13 {
+  /// <summary>A flat name space of callable handlers, and nothing else.</summary>
+  /// <remarks>Moved out of X13.Repository: it has no relationship with the topic tree at all. The
+  /// one thing that gave it one - the type-constructor registry - was a second dictionary sharing
+  /// the class by accident, and now lives with the mechanism that drives it, in CCtor.</remarks>
   public static class RPC {
     // Concurrent: plugins register from Init()/Start() on the main thread while worker threads
-    // (e.g. PersistentStorage's) already Call/CCtor - a plain Dictionary is not safe for that.
+    // (e.g. PersistentStorage's) already Call - a plain Dictionary is not safe for that.
     //
     // One dictionary for both registration shapes, not two: the name space has to stay single, or
     // the duplicate-name check below would let the same name be registered once in each map and
@@ -19,8 +19,6 @@ namespace X13.Repository {
     // them - see Register(name, Action<JSValue[]>).
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Action<JSC.JSValue[], Action<JSC.JSValue>>> _list
       = new System.Collections.Concurrent.ConcurrentDictionary<string, Action<JSC.JSValue[], Action<JSC.JSValue>>>();
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Action<Topic, Perform.E_Art>> _cctors
-      = new System.Collections.Concurrent.ConcurrentDictionary<string, Action<Topic, Perform.E_Art>>();
 
     /// <summary>Registers a handler that has nothing to report back.</summary>
     /// <remarks>Answers <c>undefined</c> the moment the handler returns, so a caller waiting on a
@@ -47,11 +45,6 @@ namespace X13.Repository {
         throw new ArgumentException("RPC.Register - duplicate name: " + name);
       }
     }
-    public static void Register(string name, Action<Topic, Perform.E_Art> cb) {
-      if(!_cctors.TryAdd(name, cb)) {
-        throw new ArgumentException("RPC.Register(cctor) - duplicate name: " + name);
-      }
-    }
 
     /// <summary>Invokes a registered handler.</summary>
     /// <param name="reply">Called with whatever the handler answers, at most once. Omitted for a
@@ -73,18 +66,6 @@ namespace X13.Repository {
         }
       });
       return true;
-    }
-
-    internal static void CCtor(string name, Topic t, Perform.E_Art a) {
-      Action<Topic, Perform.E_Art> cb;
-      if(_cctors.TryGetValue(name, out cb)) {
-        try {
-          cb.Invoke(t, a);
-        }
-        catch(Exception ex) {
-          Log.Warning("RPC.CCtor({0}, {1}, {2}) - {3}", name, t.path, a, ex);
-        }
-      }
     }
   }
 }

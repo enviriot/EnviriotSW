@@ -127,19 +127,19 @@ namespace X13.MQTT {
       }
     }
 
-    private void Changed(Perform p, SubRec sr) {
+    private void Changed(TopicEvent p, SubRec sr) {
       if(Client == null || Client.status != MqClient.Status.Connected) {
         Disconnected();
         Log.Warning("{0}.Changed({1}) - Client OFFLINE", Owner.path, p.ToString());
         return;
       }
-      if((p.Art == Perform.E_Art.subscribe || ((p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.create) && p.Prim != Owner)) && !p.src.CheckAttribute(Topic.Attribute.Internal)) {
-        var rp = remotePrefix + p.src.path.Substring(Owner.path.Length);
-        var payload = JsLib.Stringify(p.src.GetState() ?? JSC.JSValue.Null);
+      if((p.Kind == EventKind.Snapshot || ((p.Kind == EventKind.StateChanged || p.Kind == EventKind.Created) && p.Author != Owner)) && !p.Source.CheckAttribute(Topic.Attribute.Internal)) {
+        var rp = remotePrefix + p.Source.path.Substring(Owner.path.Length);
+        var payload = JsLib.Stringify(p.Source.GetState() ?? JSC.JSValue.Null);
         if(!string.IsNullOrEmpty(rp) && payload != null) {
           Client.Send(new MqPublish(rp, payload) { Retained = _retainedEn });
         }
-      } else if(p.Art == Perform.E_Art.subAck && _subEn) {
+      } else if(p.Kind == EventKind.Ready && _subEn) {
         Client.Subscribe(this);
       }
     }

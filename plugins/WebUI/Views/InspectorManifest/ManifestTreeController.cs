@@ -28,8 +28,8 @@ namespace X13.WebUI {
       get { return ViewTargetKind.Manifest; }
     }
 
-    protected override bool IsRelevantChange(Perform.E_Art art) {
-      return art == Perform.E_Art.changedField;
+    protected override bool IsRelevantChange(EventKind art) {
+      return art == EventKind.FieldChanged;
     }
 
     protected override JSC.JSValue ResolveValueAt(string fieldPath) {

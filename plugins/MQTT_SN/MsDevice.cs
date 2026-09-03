@@ -140,16 +140,16 @@ namespace X13.Periphery {
 
     }
 
-    private void OwnerChanged(Perform p, SubRec sr) {
-      if(p.Art == Perform.E_Art.remove) {
+    private void OwnerChanged(TopicEvent p, SubRec sr) {
+      if(p.Kind == EventKind.Removed) {
         _pl._devs.Remove(this);
         this.Stop();
         return;
       }
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || p.Prim == owner) {
+      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || p.Author == owner) {
         return;
       }
-      if(p.Art == Perform.E_Art.changedField) {
+      if(p.Kind == EventKind.FieldChanged) {
         var fp = "." + (p.FieldPath ?? string.Empty);
         var pt = PredefinedTopics.FirstOrDefault(z => z.Item2 == fp);
         if(pt == null || pt.Item1 >= 0xFFC0) {
@@ -159,7 +159,7 @@ namespace X13.Periphery {
         if(!val.IsNull) {
           Send(new MsPublish(pt.Item1, Serialize(val, pt.Item3)));
         }
-      } else if(p.Art == Perform.E_Art.move) {
+      } else if(p.Kind == EventKind.Moved) {
         if(_oldName != owner.name) {
           Send(new MsPublish(0xFF00, Encoding.UTF8.GetBytes(owner.name)));  // _sName
           _state = State.Disconnected;
@@ -909,23 +909,23 @@ namespace X13.Periphery {
       }
     }
 
-    private void PublishTopic(Perform p, SubRec sb) {
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.Prim == owner && p.Art != Perform.E_Art.subscribe) || p.src == owner) {
+    private void PublishTopic(TopicEvent p, SubRec sb) {
+      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.Author == owner && p.Kind != EventKind.Snapshot) || p.Source == owner) {
         return;
       }
-      if(p.Art == Perform.E_Art.create) {
-        GetTopicInfo(p.src);
+      if(p.Kind == EventKind.Created) {
+        GetTopicInfo(p.Source);
         return;
       }
       TopicInfo ti = null;
       for(int i = _topics.Count - 1; i >= 0; i--) {
-        if(_topics[i].topic == p.src) {
+        if(_topics[i].topic == p.Source) {
           ti = _topics[i];
           break;
         }
       }
-      if(p.Art == Perform.E_Art.changedField && ti != null) {
-        string sTag = p.src.GetField("MQTT-SN.tag").AsString(null);
+      if(p.Kind == EventKind.FieldChanged && ti != null) {
+        string sTag = p.Source.GetField("MQTT-SN.tag").AsString(null);
         // The emptiness test is the fix, not AsString: the field is user-editable, so anything that
         // is not a string - including a removed field - read as null and went straight into
         // ti.tag, which then unregistered the topic and re-registered it under a null tag. A tag
@@ -938,17 +938,17 @@ namespace X13.Periphery {
         UpdateConverters(ti);
         UpdateSuppressedInputs();
       }
-      if(ti == null && (p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.subscribe)) {
-        ti = GetTopicInfo(p.src, true);
+      if(ti == null && (p.Kind == EventKind.StateChanged || p.Kind == EventKind.Snapshot)) {
+        ti = GetTopicInfo(p.Source, true);
       }
       if(ti == null || ti.TopicId >= 0xFFC0 || !ti.registred) {
         return;
       }
-      if((p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.subscribe)) {
+      if((p.Kind == EventKind.StateChanged || p.Kind == EventKind.Snapshot)) {
         if((ti.dType & DType.ExtensionType) == DType.None) {
           Send(new MsPublish(ti));
         }
-      } else if(p.Art == Perform.E_Art.remove) {          // Remove by device
+      } else if(p.Kind == EventKind.Removed) {          // Remove by device
         if(ti.it == TopicIdType.Normal && ti.registred) {
           Send(new MsRegister(0xFFFF, ti.tag));
         }

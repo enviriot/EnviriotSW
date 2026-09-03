@@ -213,10 +213,10 @@ namespace X13.WebUI {
     }
 
 
-    // Only the download leaves the engine thread. Repo.Import stays on it: parsing a package and
+    // Only the download leaves the engine thread. Xst.Import stays on it: parsing a package and
     // creating its topics is milliseconds, and running it here means RefreshInstallState right
-    // after reads a tree that already has them - Topic.I.Get publishes the instance and Fill sets
-    // the manifest immediately, only the Perform is queued.
+    // after reads a tree that already has them - Topic.Resolve publishes the instance and Fill sets
+    // the manifest immediately, only the TopicEvent is queued.
     //
     // resp.rpc now answers before the install has happened, so a failure reaches the log rather
     // than the client. Accepted: catalog-document.js#rpc only console.warn's the rejection, and
@@ -240,7 +240,7 @@ namespace X13.WebUI {
       }
       try {
         using(StreamReader reader = new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(body)), Encoding.UTF8, true)) {
-          Repo.Import(reader, null);
+          Xst.Import(reader, null);
         }
         RefreshInstallState(node);
         SendStateUpd(node);

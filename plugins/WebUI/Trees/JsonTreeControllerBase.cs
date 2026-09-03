@@ -58,7 +58,7 @@ namespace X13.WebUI {
 
     private readonly Func<Topic> _prim;
 
-    /// <summary>This session's client topic, carried as Perform.Prim on everything it writes.</summary>
+    /// <summary>This session's client topic, carried as TopicEvent.Author on everything it writes.</summary>
     /// <remarks>Read per write rather than cached: the topic is created on the engine thread
     /// after this controller exists, and renamed again when the reverse DNS lookup lands. Null
     /// when no session owns these writes, which is how every existing test constructs one.</remarks>
@@ -193,18 +193,18 @@ namespace X13.WebUI {
 
     // Queued whole - see TopicTreeController.OnTopicChanged for why it cannot be split: the body
     // reads the value, reconciles the expanded/children bookkeeping and writes the socket.
-    private void OnRootChanged(Perform perform, SubRec sub) {
+    private void OnRootChanged(TopicEvent perform, SubRec sub) {
       _post("callback " + RootVid, () => OnRootChangedCore(perform, sub));
     }
 
-    private void OnRootChangedCore(Perform perform, SubRec sub) {
+    private void OnRootChangedCore(TopicEvent perform, SubRec sub) {
       try {
         if(perform == null) return;
-        if(perform.Art == Perform.E_Art.remove) {
+        if(perform.Kind == EventKind.Removed) {
           HandleRootRemoved();
           return;
         }
-        if(!IsRelevantChange(perform.Art)) return;
+        if(!IsRelevantChange(perform.Kind)) return;
         SendUpd(string.Empty);
         foreach(string vid in ExpandedSnapshot().OrderBy(v => v, StringComparer.Ordinal)) {
           SendChildren(VidHelper.GetFieldPath(vid), vid, true);
@@ -296,8 +296,8 @@ namespace X13.WebUI {
     /// <summary>Row shape for one node - the schema/editor/icon rules differ per tree.</summary>
     protected abstract ViewRowDto BuildRow(string fieldPath);
 
-    /// <summary>Which Perform kinds this tree has to redraw for.</summary>
-    protected abstract bool IsRelevantChange(Perform.E_Art art);
+    /// <summary>Which TopicEvent kinds this tree has to redraw for.</summary>
+    protected abstract bool IsRelevantChange(EventKind art);
     #endregion supplied by the concrete tree
   }
 }

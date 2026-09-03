@@ -360,36 +360,36 @@ namespace X13.Periphery {
       }
     }
 
-    private void Request(Perform p, SubRec sr) {
+    private void Request(TopicEvent p, SubRec sr) {
       byte con;
       int tmp;
-      if(!_remote || p.Prim==_owner || p.src.path.Length < 17 || !p.src.path.StartsWith("/export/req/con") || !byte.TryParse(p.src.path.Substring(15, 1), out con) || con==0 || con > 8) {
+      if(!_remote || p.Author==_owner || p.Source.path.Length < 17 || !p.Source.path.StartsWith("/export/req/con") || !byte.TryParse(p.Source.path.Substring(15, 1), out con) || con==0 || con > 8) {
         return;
       }
-      switch(p.src.name) {
+      switch(p.Source.name) {
       case "ptt":
-        if(p.src.GetState().ValueType==JSC.JSValueType.Boolean) {
-          _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)(((bool)p.src.GetState())?4:3)));  
+        if(p.Source.GetState().ValueType==JSC.JSValueType.Boolean) {
+          _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)(((bool)p.Source.GetState())?4:3)));  
         }
-        p.src.SetState(JSC.JSObject.Null, _owner);
+        p.Source.SetState(JSC.JSObject.Null, _owner);
         break;
       case "band":
-        if(p.src.GetState().IsNumber && (tmp = (int)p.src.GetState())>0 && tmp <= 8) {
+        if(p.Source.GetState().IsNumber && (tmp = (int)p.Source.GetState())>0 && tmp <= 8) {
           _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)((tmp-1)*2 + 64)));  
         }
-        p.src.SetState(0, _owner);
+        p.Source.SetState(0, _owner);
         break;
       case "rxcfg":
-        if(p.src.GetState().IsNumber && (tmp = (int)p.src.GetState())>0 && tmp <= 8) {
+        if(p.Source.GetState().IsNumber && (tmp = (int)p.Source.GetState())>0 && tmp <= 8) {
           _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)((tmp-1)*2 + 96)));  
         }
-        p.src.SetState(0, _owner);
+        p.Source.SetState(0, _owner);
         break;
       case "txcfg":
-        if(p.src.GetState().IsNumber && (tmp = (int)p.src.GetState())>0 && tmp <= 8) {
+        if(p.Source.GetState().IsNumber && (tmp = (int)p.Source.GetState())>0 && tmp <= 8) {
           _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)((tmp-1)*2 + 97)));  
         }
-        p.src.SetState(0, _owner);
+        p.Source.SetState(0, _owner);
         break;
       }
     }

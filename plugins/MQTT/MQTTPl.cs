@@ -88,18 +88,18 @@ namespace X13.MQTT {
     #endregion RPC
 
 
-    private void SubFunc(Perform p, SubRec sr) {
-      if(p.Art == Perform.E_Art.create) {
+    private void SubFunc(TopicEvent p, SubRec sr) {
+      if(p.Kind == EventKind.Created) {
         return;
       }
-      MqSite ms = _sites.FirstOrDefault(z => z.Owner == p.src);
+      MqSite ms = _sites.FirstOrDefault(z => z.Owner == p.Source);
       MqClient client;
       if(ms != null) {
         ms.Dispose();
         _sites.Remove(ms);
       }
-      if(p.Art == Perform.E_Art.changedField || p.Art==Perform.E_Art.subscribe) {
-        string uri = p.src.GetField("MQTT.uri").AsString(null);
+      if(p.Kind == EventKind.FieldChanged || p.Kind==EventKind.Snapshot) {
+        string uri = p.Source.GetField("MQTT.uri").AsString(null);
         if(string.IsNullOrEmpty(uri)) {
           return;
         }
@@ -108,7 +108,7 @@ namespace X13.MQTT {
           uUri = new Uri(uri, UriKind.Absolute);
         }
         catch(Exception ex) {
-          Log.Warning("{0}.MQTT.uri = {1} - {2}", p.src.path, uri, ex.Message);
+          Log.Warning("{0}.MQTT.uri = {1} - {2}", p.Source.path, uri, ex.Message);
           return;
         }
         string uName, uPass;
@@ -126,7 +126,7 @@ namespace X13.MQTT {
           client = new MqClient(this, uUri.DnsSafeHost, uUri.IsDefaultPort?1883:uUri.Port, uName, uPass);
           _clients.Add(client);
         }
-        _sites.Add( new MqSite(this, client, p.src, uUri));
+        _sites.Add( new MqSite(this, client, p.Source, uUri));
       }
     }
   }

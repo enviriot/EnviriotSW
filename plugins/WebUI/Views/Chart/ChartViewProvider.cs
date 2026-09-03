@@ -42,8 +42,8 @@ namespace X13.WebUI {
 
     /// <summary>Starts watching the topic named by <paramref name="vid"/>.</summary>
     /// <remarks>SubMask.Once earns its place twice over. It is what makes the subscription see the
-    /// topic's OWN changedState rather than only its children's (Topic.I.Subscribe), and it is
-    /// what makes Repo enqueue the subscribe Perform itself (Repo.Tick) - which is how the current
+    /// topic's OWN changedState rather than only its children's (Topic.Subscribe), and it is
+    /// what makes Repo enqueue the subscribe TopicEvent itself (Repo.Tick) - which is how the current
     /// value reaches the client, with no separate read and no second code path to keep in step
     /// with the update one.
     /// <para>Re-opening an already-watched vid drops the old watch and subscribes again rather
@@ -82,26 +82,26 @@ namespace X13.WebUI {
       sub.Dispose();
     }
 
-    private void OnChanged(string vid, Perform perform) {
+    private void OnChanged(string vid, TopicEvent perform) {
       _post("callback " + vid, () => OnChangedCore(vid, perform));
     }
 
-    private void OnChangedCore(string vid, Perform perform) {
+    private void OnChangedCore(string vid, TopicEvent perform) {
       try {
-        if(_disposed || perform == null || perform.src == null) return;
+        if(_disposed || perform == null || perform.Source == null) return;
         // Closed while this callback sat on the pump - the watch is already gone and the client
         // has already been told it may forget the row.
         if(!_watches.ContainsKey(vid)) return;
-        switch(perform.Art) {
-        case Perform.E_Art.subscribe:
+        switch(perform.Kind) {
+        case EventKind.Snapshot:
           // The first packet has to be an add: ViewStore.update returns without doing anything
           // for a vid it holds no row for (view-store.js), so an upd here would be dropped.
-          SendValue(ViewMessageTypes.EvntAdd, vid, perform.src);
+          SendValue(ViewMessageTypes.EvntAdd, vid, perform.Source);
           break;
-        case Perform.E_Art.changedState:
-          SendValue(ViewMessageTypes.EvntUpd, vid, perform.src);
+        case EventKind.StateChanged:
+          SendValue(ViewMessageTypes.EvntUpd, vid, perform.Source);
           break;
-        case Perform.E_Art.remove:
+        case EventKind.Removed:
           Drop(vid);
           _send(ViewProtocolSerializer.Del(vid));
           break;

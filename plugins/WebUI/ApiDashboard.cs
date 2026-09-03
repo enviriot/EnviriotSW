@@ -205,29 +205,29 @@ namespace X13.WebUI {
       _subscriptions.Add(topic.Subscribe(mask, SubChanged));
     }
 
-    private void SubChanged(Perform p, SubRec sr) {
-      _post(Label("callback " + (p == null || p.src == null ? "?" : p.src.path)), () => SubChangedCore(p));
+    private void SubChanged(TopicEvent p, SubRec sr) {
+      _post(Label("callback " + (p == null || p.Source == null ? "?" : p.Source.path)), () => SubChangedCore(p));
     }
 
-    private void SubChangedCore(Perform p) {
-      if(_disposed || p == null || p.src == null) return;
-      if(p.Art == Perform.E_Art.subAck) return;
+    private void SubChangedCore(TopicEvent p) {
+      if(_disposed || p == null || p.Source == null) return;
+      if(p.Kind == EventKind.Ready) return;
       // owner is checked for null explicitly: a write from a plugin that passes no prim also
       // has Prim == null, and before this session has a topic that would suppress every such
       // value as if the session had produced it.
       Topic owner = _client.owner;
-      if(owner != null && p.Prim == owner) return;
+      if(owner != null && p.Author == owner) return;
       // A /# subscription spans a subtree that may hold declarations narrower than the one the
       // subscribe was granted under, so the grant is re-checked per value rather than only at
       // subscribe time.
-      if(!DashboardAcl.CanRead(_client.ip, p.src.path)) return;
+      if(!DashboardAcl.CanRead(_client.ip, p.Source.path)) return;
 
       // On remove the topic still answers GetState() with its last value; sending that would
       // tell the client the topic is alive and holding it. "null" is what the protocol spells
       // a removal with, and what the client already parses as one.
-      string json = p.Art == Perform.E_Art.remove ? "null" : JsLib.Stringify(p.src.GetState());
-      _send(string.Concat("P\t", p.src.path, "\t", json));
-      if(_verbose()) Log.Debug("dashboard.snd({0}, {1})", p.src.path, json);
+      string json = p.Kind == EventKind.Removed ? "null" : JsLib.Stringify(p.Source.GetState());
+      _send(string.Concat("P\t", p.Source.path, "\t", json));
+      if(_verbose()) Log.Debug("dashboard.snd({0}, {1})", p.Source.path, json);
     }
 
     private string Label(string what) {

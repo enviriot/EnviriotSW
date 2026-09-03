@@ -63,7 +63,7 @@ namespace X13.Periphery {
       RPC.Register("MQTT_SN.PLC.Run", PlcRunRpc);
       RPC.Register("MQTT_SN.PLC.Start", PlcStartRpc);
       RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
-      RPC.Register("MqsDev", MqsDevCctor);
+      CCtor.Register("MqsDev", MqsDevCctor);
       RPC.Register("MQTT_SN.RefreshPorts", RefreshPortsRpc);
       RPC.Register("MQTT_SN.RefreshNIC", RefreshNICRpc);
     }
@@ -72,7 +72,7 @@ namespace X13.Periphery {
     /// <remarks>The order is load-bearing: both gates read <see cref="gwRadius"/> in their
     /// constructors, so it has to hold its configured value by the time they are built. EnsureCfg
     /// applies before it returns for exactly this reason - the subscription alone would not have
-    /// run yet, since Subscribe only queues a Perform for the next Repo tick.
+    /// run yet, since Subscribe only queues a TopicEvent for the next Repo tick.
     /// <para>radius is clamped in the apply rather than at the read sites: 1..3 is the range the
     /// protocol defines, and anything else means "no radius", which is what both gates already
     /// did with the raw value.</para></remarks>
@@ -191,7 +191,7 @@ namespace X13.Periphery {
       }
     }
 
-    private void MqsDevCctor(Topic t, Perform.E_Art a) {
+    private void MqsDevCctor(Topic t, EventKind a) {
       var dev = _devs.FirstOrDefault(z => z.name == t.name);
       if(dev == null) {
         dev = new MsDevice(this, t);

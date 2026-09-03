@@ -461,7 +461,7 @@ namespace X13 {
     /// <summary>Seeds a config topic if it is missing, then keeps <paramref name="apply"/> current.</summary>
     /// <param name="owner">The plugin's own topic, e.g. /$YS/WebUI.</param>
     /// <param name="relativePath">Path below it, slashes allowed: "Static/verbose" creates the
-    /// group on the way. Intermediate topics need no attributes of their own - Repo.Export keeps
+    /// group on the way. Intermediate topics need no attributes of their own - Xst.Export keeps
     /// a parent whose children were exported, so a Config leaf carries its groups with it.</param>
     /// <param name="attr">Attributes for the leaf when this call is the one that seeds it.</param>
     /// <param name="apply">Called once before this returns, and again on every later change.</param>
@@ -471,7 +471,7 @@ namespace X13 {
     /// created. A null default seeds nothing.</param>
     /// <returns>The subscription. The caller owns it and must dispose it on shutdown.</returns>
     /// <remarks>The immediate call is not redundant with the subscription: Subscribe does not
-    /// call back synchronously, it queues a subscribe Perform that Repo dispatches on its next
+    /// call back synchronously, it queues a subscribe command that Repo dispatches on its next
     /// tick. A plugin that starts listening the moment its Start() returns would otherwise
     /// answer the first requests from whatever its fields were initialised to.
     ///

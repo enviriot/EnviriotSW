@@ -100,27 +100,27 @@ namespace X13.WebUI.Helpers {
       return topicPath.Length == rulePath.Length || topicPath[rulePath.Length] == Topic.Bill.delmiter;
     }
 
-    private static void SubFunc(Perform p, SubRec sr) {
-      if(p == null || p.src == null) return;
-      switch(p.Art) {
-      case Perform.E_Art.remove:
-        Forget(p.src);
+    private static void SubFunc(TopicEvent p, SubRec sr) {
+      if(p == null || p.Source == null) return;
+      switch(p.Kind) {
+      case EventKind.Removed:
+        Forget(p.Source);
         break;
-      // create matters, and it is not obvious that it does: Topic.I.Fill assigns the manifest
+      // create matters, and it is not obvious that it does: Topic.Fill assigns the manifest
       // and only then publishes create, so a topic can be born already carrying a declaration
-      // and never emit a changedField for it. That is the path both Repo.Import and the store's
+      // and never emit a changedField for it. That is the path both Xst.Import and the store's
       // load take - skipping create here left every imported or later-loaded rule invisible.
-      case Perform.E_Art.create:
-      case Perform.E_Art.move:
-      case Perform.E_Art.changedField:
-      case Perform.E_Art.subscribe:
-      case Perform.E_Art.subAck:
-        Refresh(p.src);
+      case EventKind.Created:
+      case EventKind.Moved:
+      case EventKind.FieldChanged:
+      case EventKind.Snapshot:
+      case EventKind.Ready:
+        Refresh(p.Source);
         break;
       }
     }
 
-    // Re-read rather than take the value off the Perform: move carries the old path in o and
+    // Re-read rather than take the value off the TopicEvent: move carries the old path in o and
     // no value at all, and reading the topic covers every art with one branch.
     private static void Refresh(Topic topic) {
       if(topic == null || topic.disposed) {

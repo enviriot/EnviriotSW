@@ -22,7 +22,7 @@ namespace X13.WebUI {
     // No lock: every entry point - the five request forwarders and ForgetRoot - now arrives
     // through the session's queue and runs on the engine thread.
     // Keyed by the document's root Topic, not by the vid it was opened with. A vid is a path,
-    // and Topic.Move rewrites Topic._path in place (Topic.I.UpdatePath), so an opened-with key
+    // and Topic.Move rewrites Topic._path in place (Topic.UpdatePath), so an opened-with key
     // goes stale the moment the root is renamed while the Topic reference stays valid. No id of
     // its own is needed: the reference is already stable, costs no lookup and cannot
     // desynchronise - same idiom as LogramPl._items and PersistentStorage's Dictionary<Topic,..>.

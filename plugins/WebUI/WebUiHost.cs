@@ -199,7 +199,7 @@ namespace X13.WebUI {
       response.Headers["Cache-Control"] = "no-store";
       response.Headers["Referrer-Policy"] = "no-referrer";
       using(MemoryStream stream = new MemoryStream()) {
-        Repo.Export(stream, topic, false);
+        Xst.Export(stream, topic, false);
         stream.Position = 0;
         WriteResponse(response, stream, "application/octet-stream");
       }
@@ -393,7 +393,7 @@ namespace X13.WebUI {
             WriteJsonResponse(e.Response, HttpStatusCode.BadRequest, false, "import_file_missing", "Import file is missing");
           } else {
             filename = upload.FileName;
-            using(StreamReader reader = new StreamReader(new MemoryStream(upload.Data, upload.Offset, upload.Count, false), Encoding.UTF8, true)) Repo.Import(reader, null);
+            using(StreamReader reader = new StreamReader(new MemoryStream(upload.Data, upload.Offset, upload.Count, false), Encoding.UTF8, true)) Xst.Import(reader, null);
             WriteJsonResponse(e.Response, HttpStatusCode.OK, true, null, upload.FileName ?? string.Empty);
           }
         } else {

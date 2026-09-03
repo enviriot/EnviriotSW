@@ -57,7 +57,7 @@ namespace X13.WebUI {
 
     internal string RootVid { get { return Vid(_root); } }
     /// <summary>The diagram this controller renders - what LogramViewProvider keys _open by.</summary>
-    /// <remarks>A Topic reference survives Topic.Move untouched (Topic.I.UpdatePath rewrites
+    /// <remarks>A Topic reference survives Topic.Move untouched (Topic.UpdatePath rewrites
     /// _path in place), which is exactly what RootVid does not - see _sentRootVid below.</remarks>
     internal Topic Root { get { return _root; } }
 
@@ -78,25 +78,25 @@ namespace X13.WebUI {
     }
 
     // Queued whole - see TopicTreeController.OnTopicChanged.
-    private void OnChanged(Perform p, SubRec sub) {
-      _post("callback " + (p == null || p.src == null ? RootVid : p.src.path), () => OnChangedCore(p, sub));
+    private void OnChanged(TopicEvent p, SubRec sub) {
+      _post("callback " + (p == null || p.Source == null ? RootVid : p.Source.path), () => OnChangedCore(p, sub));
     }
 
-    private void OnChangedCore(Perform p, SubRec sub) {
+    private void OnChangedCore(TopicEvent p, SubRec sub) {
       try {
         // Disposing the subscription raises events that come straight back here, and
         // HandleRootRemoved disposes it from inside this method. Quiesce used to make that
         // unreachable by waiting the callback out under _stateGate.
         if(_disposed) return;
-        if(p == null || p.src == null) return;
+        if(p == null || p.Source == null) return;
         // The diagram's own topic was deleted (e.g. from Workspace) - mirrors
         // TopicTreeController.HandleRootRemoved. SendSnapshot never notices this on
         // its own: it unconditionally treats RootVid as still current, so without
         // this the client would be left showing a diagram whose topic is gone,
         // with nothing to route it back to the parent (see app-shell.js
         // #onDocumentRootDeleted). Must be checked before the changedState branch
-        // below, since a self-remove is also p.src == _root.
-        if(p.Art == Perform.E_Art.remove && p.src == _root) {
+        // below, since a self-remove is also p.Source == _root.
+        if(p.Kind == EventKind.Removed && p.Source == _root) {
           HandleRootRemoved();
           return;
         }
@@ -110,13 +110,13 @@ namespace X13.WebUI {
         // no consumer client-side, so it's silently dropped rather than sent for
         // nothing. _knownVids guards a topic whose own first SendSnapshot hasn't
         // gone out yet.
-        if(p.Art == Perform.E_Art.changedState) {
+        if(p.Kind == EventKind.StateChanged) {
           // The _knownVids test and the update it gates have to be one atomic step - a
           // snapshot running concurrently rewrites that set wholesale (see _stateGate).
-          if(p.src == _root || !_knownVids.Contains(Vid(p.src))) return;
-          bool isPin = p.src.parent != null && p.src.parent != _root;
-          if(isPin) SendValueUpdate(p.src, true);
-          else if(ChildrenSchema(ResolveTypeState(p.src)) == null) SendValueUpdate(p.src, false);
+          if(p.Source == _root || !_knownVids.Contains(Vid(p.Source))) return;
+          bool isPin = p.Source.parent != null && p.Source.parent != _root;
+          if(isPin) SendValueUpdate(p.Source, true);
+          else if(ChildrenSchema(ResolveTypeState(p.Source)) == null) SendValueUpdate(p.Source, false);
           return;
         }
         // Pin context menu's "Trace" toggle (LogramPaletteBuilder.BuildPinMenu,
@@ -128,19 +128,19 @@ namespace X13.WebUI {
         // comment there). _knownVids.Contains guards against a pin whose very first
         // SendSnapshot hasn't gone out yet (falls through to the generic
         // ScheduleSnapshot path below instead, same as any other field change).
-        if(p.Art == Perform.E_Art.changedField && string.Equals(p.FieldPath, "Logram.trace", StringComparison.Ordinal)) {
-          if(_knownVids.Contains(Vid(p.src))) {
-            SendTraceUpdate(p.src);
+        if(p.Kind == EventKind.FieldChanged && string.Equals(p.FieldPath, "Logram.trace", StringComparison.Ordinal)) {
+          if(_knownVids.Contains(Vid(p.Source))) {
+            SendTraceUpdate(p.Source);
             return;
           }
           // Not known yet - fall through to the generic ScheduleSnapshot path below,
           // same as any other field change.
         }
-        // Subscribe() itself synchronously delivers one subscribe/subAck callback
-        // (Topic.I.Publish's special-cased branch) before Open() calls SendSnapshot()
-        // explicitly - ignore those (and unsubscribe) here to avoid a redundant
+        // A new subscription is answered with a Snapshot per topic and one Ready
+        // (Topic.Publish addresses those at the one registration) while Open() calls
+        // SendSnapshot() explicitly - ignore them here to avoid a redundant
         // initial double-send; only react to genuine topology changes.
-        if(p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.remove || p.Art == Perform.E_Art.changedField || p.Art == Perform.E_Art.move) {
+        if(p.Kind == EventKind.Created || p.Kind == EventKind.Removed || p.Kind == EventKind.FieldChanged || p.Kind == EventKind.Moved) {
           ScheduleSnapshot();
         }
       }
@@ -163,8 +163,8 @@ namespace X13.WebUI {
       if(_onRootGone != null) _onRootGone(this);
     }
 
-    // Debounced: removing one topic fans out into a separate remove Perform for
-    // every descendant (Repo.cs TickStep1: `foreach(Topic tmp in c.src.all) ...`),
+    // Debounced: removing one topic fans out into a separate remove TopicEvent for
+    // every descendant (Repo.cs TickStep1: `foreach(Topic tmp in c.Target.all) ...`),
     // each independently matching this deep (SubMask.All) subscription - deleting a
     // block with N pins would otherwise fire N+1 back-to-back full snapshots for one
     // logical delete. Any burst of structural changes arriving within the debounce

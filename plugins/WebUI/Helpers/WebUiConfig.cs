@@ -81,7 +81,7 @@ namespace X13.WebUI.Helpers {
 
     /// <summary>Creates whatever is missing, primes every value, then follows all of it.</summary>
     /// <remarks>The groups are not created explicitly: EnsureCfg's path makes them on the way,
-    /// and Repo.Export keeps a parent whose children were exported, so a Config leaf carries its
+    /// and Xst.Export keeps a parent whose children were exported, so a Config leaf carries its
     /// group into server.xst without the group needing attributes of its own.</remarks>
     public void Start() {
       _subs = new SubRec[] {

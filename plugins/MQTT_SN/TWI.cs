@@ -121,14 +121,14 @@ namespace X13.Periphery {
         }
       }
     }
-    private void DeviceChanged(Perform p, SubRec sr) {
-      var d = _devs.FirstOrDefault(z => z.owner == p.src);
+    private void DeviceChanged(TopicEvent p, SubRec sr) {
+      var d = _devs.FirstOrDefault(z => z.owner == p.Source);
       if(d != null) {
         _devs.Remove(d);
         d.Dispose();
       }
-      if((p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedField || p.Art == Perform.E_Art.subscribe) && p.src.GetField("type").AsString(string.Empty).StartsWith("TWI")) {
-        _devs.Add(new TwiDevice(p.src, this));
+      if((p.Kind == EventKind.Created || p.Kind == EventKind.FieldChanged || p.Kind == EventKind.Snapshot) && p.Source.GetField("type").AsString(string.Empty).StartsWith("TWI")) {
+        _devs.Add(new TwiDevice(p.Source, this));
       }
     }
     private Task<JSC.JSValue> TwiReq(int[] arr) {

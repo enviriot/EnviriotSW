@@ -49,7 +49,7 @@ namespace X13.Periphery {
       _startScan.Set();
     }
 
-    private static void PortValuesChanged(Perform p, SubRec sr) {
+    private static void PortValuesChanged(TopicEvent p, SubRec sr) {
       _startScan.Set();
     }
 

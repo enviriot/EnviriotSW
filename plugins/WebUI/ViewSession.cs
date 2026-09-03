@@ -39,7 +39,7 @@ namespace X13.WebUI {
     /// queued semantics themselves (ordering, coalescing, command_error on a throwing handler)
     /// are covered by tests that pass a real queue.</param>
     /// <param name="prim">This session's client topic, read per write and passed as the
-    /// Perform.Prim of everything the session changes. A function rather than a Topic because
+    /// TopicEvent.Author of everything the session changes. A function rather than a Topic because
     /// the topic is created on the engine thread after the constructor has returned, and it is
     /// renamed later still when the reverse DNS lookup lands. Omitted means writes carry no
     /// prim, which is what they did before and what tests still exercise.</param>
