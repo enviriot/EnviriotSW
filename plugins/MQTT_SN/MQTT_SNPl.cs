@@ -47,6 +47,7 @@ namespace X13.Periphery {
 
     internal List<IMsGate> _gates;
     internal List<MsDevice> _devs;
+    private SubRec _devSub;
     internal List<DevicePLC> _plcs;
 
     public MQTT_SNPl() {
@@ -63,7 +64,12 @@ namespace X13.Periphery {
       RPC.Register("MQTT_SN.PLC.Run", PlcRunRpc);
       RPC.Register("MQTT_SN.PLC.Start", PlcStartRpc);
       RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
-      CCtor.Register("MqsDev", MqsDevCctor);
+      // Subscribed here rather than in Start, where this plugin's gates are opened: it replaces a
+      // CCtor.Register that stood on this line, and registration happened at Init too - so the
+      // first delivery still lands on the first tick, as it always did. SubMask.All also brings a
+      // Snapshot of what is already in the tree, which is what PersistentStorage (priority 2) has
+      // put there by the time this plugin (priority 7) is reached.
+      _devSub = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "cctor.MqsDev", MqsDevSub);
       RPC.Register("MQTT_SN.RefreshPorts", RefreshPortsRpc);
       RPC.Register("MQTT_SN.RefreshNIC", RefreshNICRpc);
     }
@@ -99,6 +105,11 @@ namespace X13.Periphery {
     }
 
     public void Stop() {
+      // Acquired in Init, so released here: Stop undoes whatever was reached, and Init counts.
+      if(_devSub != null) {
+        _devSub.Dispose();
+        _devSub = null;
+      }
       // Released here because EnsureCfg hands ownership to the caller. The hand-rolled
       // subscription this replaced was never released at all.
       if(_cfg != null) {
@@ -168,11 +179,20 @@ namespace X13.Periphery {
       }
     }
 
-    private void MqsDevCctor(Topic t, EventKind a) {
+    /// <summary>Gives a topic that names cctor.MqsDev its device object.</summary>
+    /// <remarks>Matched by name and not by topic, which is how the CCtor handler this replaces did
+    /// it: a device that was renamed keeps the object it already had.</remarks>
+    private void MqsDevSub(TopicEvent p, SubRec sr) {
+      if(p.Kind != EventKind.Created && p.Kind != EventKind.FieldChanged && p.Kind != EventKind.Snapshot) {
+        return;
+      }
+      Topic t = p.Source;
+      if(!t.GetField("cctor.MqsDev").Defined) {
+        return;
+      }
       var dev = _devs.FirstOrDefault(z => z.name == t.name);
       if(dev == null) {
-        dev = new MsDevice(this, t);
-        _devs.Add(dev);
+        _devs.Add(new MsDevice(this, t));
       }
     }
 

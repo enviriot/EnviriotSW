@@ -43,10 +43,7 @@ namespace X13.Repository {
   internal sealed class CmdCreate : Cmd {
     public CmdCreate(Topic target, Topic author) : base(target, author) { }
     public override Phase Phase { get { return Phase.Struct; } }
-    // The manifest is read HERE, in the Struct phase, and carried on the event - not read again by
-    // whoever handles it. By the time events are published the Field phase has run, so the live
-    // manifest may already hold a field that has its own FieldChanged queued behind this.
-    public override TopicEvent Apply() { return TopicEvent.Created(Target, Target.GetField(string.Empty), Author); }
+    public override TopicEvent Apply() { return TopicEvent.Created(Target, Author); }
   }
 
   internal sealed class CmdMove : Cmd {

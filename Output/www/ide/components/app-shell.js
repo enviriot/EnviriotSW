@@ -297,7 +297,7 @@ export class X13AppShell extends LitElement {
         else for(const pane of INSPECTOR_PANES) this.#closeVid(`${pane}#${path}`);
         return;
       }
-      if(result?.view === 'logram') this.#setLogramDocument(path, historyMode);
+      if(result?.view === 'logram') this.#setLogramDocument(path, historyMode, true);
       else this.#setInspectorDocument(path, { requestedMode: null, altView: undefined }, historyMode);
     }
     catch(error) {
@@ -330,7 +330,7 @@ export class X13AppShell extends LitElement {
     this.#openInspectorPanes(path);
   }
 
-  #setLogramDocument(path, historyMode = 'push') {
+  #setLogramDocument(path, historyMode = 'push', alreadyOpened = false) {
     const store = new ViewStore();
     this.#setDocument({
       view: 'logram',
@@ -338,9 +338,9 @@ export class X13AppShell extends LitElement {
       stores: { logram: store },
       store,
       inspectorOpened: false,
-      logramOpened: false,
+      logramOpened: alreadyOpened,
     }, historyMode);
-    this.#openLogram(path);
+    if(!alreadyOpened) this.#openLogram(path);
   }
 
   // The State, Manifest and Children roots are three separate server-side views opened as one.

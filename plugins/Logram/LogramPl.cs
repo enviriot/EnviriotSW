@@ -40,13 +40,57 @@ namespace X13.Logram {
 
     #region IPlugModul Members
     public void Init() {
-      CCtor.Register("LoBind", BindCh);
-      CCtor.Register("LoBlock", BlockCh);
     }
     public void Start() {
       _verboseSR = JsExtLib.EnsureCfg(Owner, "verbose",
         Topic.Attribute.Required | Topic.Attribute.DB, v => _verbose = v, VerboseDefault);
       _allSub = Topic.Subscribe(SubFunc);
+      // The tree is older than this plugin: PersistentStorage is priority 2 and restores everything
+      // before Logram, priority 5, is even initialised. The subscription above only reports what
+      // happens next, so what is already there has to be walked once. Parents come before children
+      // in this order, which is what LoBlock's constructor needs - it collects its pins from the
+      // children that exist by then.
+      foreach(Topic t in Topic.root.all) {
+        Claim(t);
+      }
+    }
+
+    /// <summary>Materialises the topic if it names one of Logram's handlers, itself or by type.</summary>
+    /// <remarks>This is the half of CCtor that Logram actually used. The registry it replaces knew
+    /// a field name, a type root and a difference algorithm on the core's behalf, and resolved the
+    /// type only to answer "call LoBlock" - while LoBlock.ManifestChanged resolved the very same
+    /// type again, for the "src" it really wanted. One resolution in one layer now.</remarks>
+    private bool Claim(Topic t) {
+      if(_items.TryGetValue(t, out _)) return true;
+      if(Names(t, "LoBlock")) {
+        _items.Add(t, new LoBlock(this, t));
+        return true;
+      }
+      if(Names(t, "LoBind")) {
+        var v = new LoVariable(this, t);
+        _items.Add(t, v);
+        v.ManifestChanged();
+        return true;
+      }
+      return false;
+    }
+
+    /// <summary>Whether the topic names this handler in its own manifest or through its type.</summary>
+    /// <remarks>The type's cctor lives in the type topic's STATE, not its manifest - see the
+    /// descriptors under /$YS/TYPES/LoBlock in base.xst.</remarks>
+    private static bool Names(Topic t, string name) {
+      if(t.GetField("cctor." + name).Defined) {
+        return true;
+      }
+      var jType = t.GetField("type");
+      if(!jType.Is<string>() || jType.Value == null) {
+        return false;
+      }
+      Topic types = Topic.root.Get("$YS/TYPES", false), tt;   // null until PersistentStorage seeds it
+      if(types == null || !types.Exist(jType.Value as string, out tt)) {
+        return false;
+      }
+      return tt.GetState().Field("cctor." + name).Defined;
     }
     public void Tick() {
       ILoItem it;
@@ -144,35 +188,20 @@ namespace X13.Logram {
       _TaskIn.Enqueue(it);
     }
 
-    private void BindCh(Topic t, EventKind a) {
-      ILoItem it;
-      LoVariable v = null;
-      if(( !_items.TryGetValue(t, out it) || ( v = it as LoVariable )==null ) && a == EventKind.Created) {
-        v = new LoVariable(this, t);
-        _items[t] = v;
-      }
-      if(v!=null) {
-        v.ManifestChanged();
-      }
-    }
-    private void BlockCh(Topic t, EventKind a) {
-      ILoItem it;
-      LoBlock v = null;
-      if(!_items.TryGetValue(t, out it) || ( v = it as LoBlock )==null) {
-        if(a == EventKind.Created) {
-          v = new LoBlock(this, t);
-          _items[t] = v;
-        }
-      } else {
-        v.ManifestChanged();
-      }
-    }
     private void SubFunc(TopicEvent p) {
       ILoItem it;
       if(!_items.TryGetValue(p.Source, out it)) {
+        // Created covers a block added with its type already in the manifest - which is how the
+        // IDE adds one, cloning the descriptor's manifest - and FieldChanged covers a plain topic
+        // given a type or a cctor afterwards. Claiming does not end the pass: a claimed topic can
+        // still be a pin of its parent, and it was reached by both mechanisms while they were two.
+        if(p.Kind == EventKind.Created || p.Kind == EventKind.FieldChanged) {
+          Claim(p.Source);
+        }
         if(p.Kind==EventKind.Created) {
+          ILoItem parent;
           LoBlock lb;
-          if(p.Source.parent!=null && _items.TryGetValue(p.Source.parent, out it) && ( lb = it as LoBlock )!=null) {
+          if(p.Source.parent!=null && _items.TryGetValue(p.Source.parent, out parent) && ( lb = parent as LoBlock )!=null) {
             lb.GetPin(p.Source);
           }
         }
@@ -182,6 +211,17 @@ namespace X13.Logram {
         it.SetValue(p.Source.GetState(), p.Author);
       } else if(p.Kind==EventKind.Removed) {
         _TaskIn.Enqueue(it);
+      } else if(p.Kind==EventKind.FieldChanged) {
+        // What CCtor delivered when a cctor value changed rather than appeared.
+        var lb = it as LoBlock;
+        if(lb != null) {
+          lb.ManifestChanged();
+        } else {
+          var lv = it as LoVariable;
+          if(lv != null) {
+            lv.ManifestChanged();
+          }
+        }
       }
     }
   }

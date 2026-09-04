@@ -76,7 +76,8 @@ namespace X13.MQTT {
     /// <summary>Restarts the client bound to this topic.</summary>
     /// <remarks>The missing return is the point: it used to log that there was no binding and then
     /// dereference the very variable it had just called null. A menu action on a topic without an
-    /// MQTT binding threw instead of saying so, and RPC.Call does not catch - unlike CCtor.</remarks>
+    /// MQTT binding threw instead of saying so, and RPC.Call does not catch what a handler
+    /// throws - deliberately, because somebody is waiting for the answer.</remarks>
     private void ReconnectRpc(Topic t, JSC.JSValue arg) {
       var s = _sites.FirstOrDefault(z => z.Owner == t);
       if(s == null) {

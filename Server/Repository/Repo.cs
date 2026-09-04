@@ -264,18 +264,6 @@ namespace X13.Repository {
         for(int p = 0; p < PH_COUNT; p++) {
           List<TopicEvent> evs = _events[p];
           for(int i = 0; i < evs.Count; i++) {
-            try {
-              CCtor.Check(evs[i]);
-            }
-            catch(Exception ex) {
-              Failed("CCtor", evs[i], ex);
-            }
-          }
-        }
-
-        for(int p = 0; p < PH_COUNT; p++) {
-          List<TopicEvent> evs = _events[p];
-          for(int i = 0; i < evs.Count; i++) {
             TopicEvent e = evs[i];
             try {
               Topic.Publish(e);
