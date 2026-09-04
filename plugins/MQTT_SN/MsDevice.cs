@@ -600,7 +600,7 @@ namespace X13.Periphery {
                 _pl._devs.Add(dev);
                 dt.SetAttribute(Topic.Attribute.Readonly);
                 dt.SetField("editor", "MsStatus");
-                dt.SetField("cctor.MqsDev", string.Empty, owner);
+                dt.SetField(MQTT_SNPl.FLD_MODEL, string.Empty, owner);
               }
               dev._gate = this;
               dev.addr = fm.addr;
@@ -1004,7 +1004,7 @@ namespace X13.Periphery {
           return;
         }
         if(ti.tag[0] == '.') {
-          if(ti.tag == ".cctor.MqsDev" && val.Is<string>()) {
+          if(ti.tag == "." + MQTT_SNPl.FLD_MODEL && val.Is<string>()) {
             string v = val.AsString(string.Empty);
             int dot = v.IndexOf('.');
             // IndexOf returns -1 when the device sends a name with no dot, and Substring(0, -1)
@@ -1013,7 +1013,7 @@ namespace X13.Periphery {
             if(dot > 0) {
               ti.topic.SetField("type", "MQTT-SN/" + v.Substring(0, dot), owner);
             } else {
-              Log.Warning("{0}.cctor.MqsDev - expected <family>.<model>, got \"{1}\"", ti.topic.path, v);
+              Log.Warning("{0}.{1} - expected <family>.<model>, got \"{2}\"", ti.topic.path, MQTT_SNPl.FLD_MODEL, v);
             }
           }
           ti.topic.SetField(ti.tag.Substring(1), val, owner);
@@ -1418,7 +1418,7 @@ namespace X13.Periphery {
       new Tuple<ushort, string, DType>(0xFF23, ".MQTT-SN.IPRouter",       DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFF24, ".MQTT-SN.IPBroker",       DType.ByteArray),
 
-      new Tuple<ushort, string, DType>(0xFFC0, ".cctor.MqsDev",           DType.String),
+      new Tuple<ushort, string, DType>(0xFFC0, "." + MQTT_SNPl.FLD_MODEL,  DType.String),
       new Tuple<ushort, string, DType>(0xFFC1, ".MQTT-SN.phy1_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC2, ".MQTT-SN.phy2_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC3, ".MQTT-SN.phy3_addr",      DType.ByteArray),

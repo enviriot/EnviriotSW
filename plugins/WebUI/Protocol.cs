@@ -111,29 +111,10 @@ namespace X13.WebUI {
     public string ErrorCode { get; private set; }
     public string ErrorMessage { get; private set; }
     public JSC.JSValue Data { get; private set; }
-    /// <summary>Set only by <see cref="Pending"/>: how to learn the real outcome, later.</summary>
-    /// <remarks>Valid ONLY as the result of IViewProvider.ExecuteRpc. Every other handler answers
-    /// the client the moment its result comes back, so a Pending returned from one of those would
-    /// be reported as a bare success and the continuation would fire with nobody listening.</remarks>
-    public Action<Action<ViewOpResult>> Continuation { get; private set; }
 
     public string View { get; private set; }
     public string Vid { get; private set; }
     public string Title { get; private set; }
-
-    /// <summary>"The answer is not here yet" - subscribe to it instead of reading it.</summary>
-    /// <remarks>Ok is true so that ViewSession.Run keeps treating this as a result rather than a
-    /// failure: Run only distinguishes null / Ok / not-Ok, and teaching it a third state would put
-    /// the knowledge in every handler instead of the one that needs it. HandleRpc is what looks at
-    /// Continuation. <paramref name="subscribe"/> must deliver exactly one result, and may deliver
-    /// it before it returns - a handler that answered synchronously has already finished by the
-    /// time anyone subscribes.</remarks>
-    public static ViewOpResult Pending(Action<Action<ViewOpResult>> subscribe) {
-      return new ViewOpResult() {
-        Ok = true,
-        Continuation = subscribe,
-      };
-    }
 
     public static ViewOpResult Success(JSC.JSValue data = null) {
       return new ViewOpResult() {

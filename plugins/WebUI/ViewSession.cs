@@ -277,31 +277,23 @@ namespace X13.WebUI {
         X13.Log.Warning("WebUI WS#{0} auto-open({1}) - one of the Inspector panes failed to open", _sessionId, path);
       }
     }
-
-    /// <summary>Runs one view command, answering now or later depending on what it returns.</summary>
-    /// <remarks>An action declared on a topic reaches a plugin, and a plugin's work does not have
-    /// to fit inside this call - a device round trip does not. So ExecuteRpc may answer with a
-    /// Pending result, and the response is assembled when the continuation fires, the same way
-    /// HandleLog assembles resp.log. Exactly one answer is guaranteed upstream: RPC.Call passes on
-    /// only the first, and PendingRpc supplies one on a deadline if the plugin never does.</remarks>
+    /// <summary>Runs one view command and answers with what it reported.</summary>
+    /// <remarks>The answer used to be allowed to arrive later - ExecuteRpc could return a Pending
+    /// result and the response was assembled when its continuation fired. Nothing ever used it: no
+    /// plugin registered a handler that replies, so the deferred path existed for a consumer that
+    /// never arrived and is gone along with it. An action now reports that it was dispatched, not
+    /// what it did.</remarks>
     public void HandleRpc(JSC.JSValue request) {
       string vid = request.AsString("vid", null);
       string cmd = request.AsString("cmd", null);
       ViewOpResult result = Run(request, vid, "view_rpc_failed", "View RPC failed", p => p.ExecuteRpc(vid, cmd, request.Field("args")));
       if(result == null) return;
 
-      if(result.Continuation != null) {
-        // Through Post even when the plugin answers inline: a handler is free to reply from its
-        // own worker thread, and everything this session sends has to leave from the engine
-        // thread. Paying one queue hop on the inline path is the price of not having two.
-        result.Continuation(final => Post("resp.rpc " + (cmd ?? "<null>"), () => SendRpcResult(request, final)));
-        return;
-      }
       SendRpcResult(request, result);
     }
 
-    // Reached from the pump for a deferred answer, so _disposed is live again here - the tab can
-    // close while a plugin is still working, and Dispose does not cancel what is already queued.
+    // Still guards on _disposed: this runs from the pump, and the tab can close between the
+    // command arriving and the answer leaving - Dispose does not cancel what is already queued.
     private void SendRpcResult(JSC.JSValue request, ViewOpResult result) {
       if(_disposed) return;
       if(result == null || !result.Ok) {

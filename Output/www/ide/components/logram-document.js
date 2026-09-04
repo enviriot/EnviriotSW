@@ -575,7 +575,7 @@ export class X13LogramDocument extends LitElement {
   // Compatibility = opposite polarity, same rule ES used (LogramView.cs's mouse-up:
   // finish pin must have the opposite IsInput of the drag's start) - source is
   // whichever end is "out", the other end's own vid becomes the sink whose
-  // cctor.LoBind gets set (see LogramViewProvider.ExecuteRpc's "bind" handler).
+  // Logram.bind gets set (see LogramViewProvider.ExecuteRpc's "bind" handler).
   #tryConnect(fromVid, fromSide, toVid, toSide) {
     if(!this.api || fromSide === toSide) return;
     const sourceVid = fromSide === 'out' ? fromVid : toVid;

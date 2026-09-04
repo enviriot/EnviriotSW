@@ -12,7 +12,7 @@ using X13.WebUI.Helpers;
 namespace X13.WebUI {
   // Read-only live view over one Logram diagram (a Core/Logram-typed topic). Reads
   // the same manifest/state conventions ES/Logram/LogramItems.cs draws from directly
-  // (Logram.top/left for position, cctor.LoBind for wires, the resolved type's
+  // (Logram.top/left for position, Logram.bind for wires, the resolved type's
   // Children.<pin>.ddr for pin schema/direction) - there is no separate diagram
   // format, see todo.md. One instance per open Logram document (mirrors
   // InspectorChildrenViewProvider's per-document TopicTreeController).
@@ -521,8 +521,8 @@ namespace X13.WebUI {
 
     // Non-null (and non-empty) only for genuine block types - a Logram "variable" type
     // (LoBlock/Variable/*) declares no Children schema at all, which is how blocks and
-    // variables are told apart (mirrors LogramView.cs:129's cctor.LoBlock check, but
-    // structurally - see todo.md for why the cctor merge itself isn't needed here).
+    // variables are told apart (mirrors LogramView.cs:129's Logram.block check, but
+    // structurally - see todo.md for why the type merge itself isn't needed here).
     private static JSC.JSValue ChildrenSchema(JSC.JSValue typeState) {
       if(!typeState.IsObject()) return null;
       JSC.JSValue children = typeState["Children"];
@@ -739,7 +739,7 @@ namespace X13.WebUI {
 
     private void ResolveOneWire(Topic sinkTopic, LogramWireRouter.GridPoint sinkCell, HashSet<long> blocked, Dictionary<Topic, ElementLayout> byTopic, RoutingPass pass) {
       string vid = Vid(sinkTopic);
-      string sourcePath = sinkTopic.GetField("cctor.LoBind").AsString(null);
+      string sourcePath = sinkTopic.GetField("Logram.bind").AsString(null);
       Topic sourceTopic = string.IsNullOrEmpty(sourcePath) ? null : Topic.root.Get(sourcePath, false);
 
       string sourceVid = string.Empty;

@@ -28,7 +28,7 @@ namespace X13.Logram {
     }
 
     public void ManifestChanged() {
-      string ss = _owner.GetField("cctor.LoBind").AsString(null);
+      string ss = _owner.GetField(LogramPl.FLD_BIND).AsString(null);
       Topic st;
       LoVariable sv;
       if(ss!=null && _owner.Exist(ss, out st)) {
@@ -92,7 +92,7 @@ namespace X13.Logram {
           if(( bl = _links[i] as LoBlock )!=null) {
             bl.DeletePin(this);
           } else {
-            _links[i].Owner.SetField("cctor.LoBind", null, _owner);
+            _links[i].Owner.SetField(LogramPl.FLD_BIND, null, _owner);
           }
         }
         _links.Clear();
@@ -117,7 +117,7 @@ namespace X13.Logram {
           // counter marked DB keeps its count across a restart.
           // A RING of variables is the third case, and it is not a derivation either: dragging a
           // topic onto a diagram deliberately binds both ways (LogramViewProvider.ExecuteAddVariable
-          // back-fills the dragged topic's own cctor.LoBind to point at the new variable), so the
+          // back-fills the dragged topic's own Logram.bind to point at the new variable), so the
           // two ends are each other's source. Nothing outside the ring recomputes it - the ring is
           // where the value lives - and clearing DB there does not merely stop writing: the next
           // save DELETES the stored state (LiteDB_Pl.Save), so a user setting marked DB

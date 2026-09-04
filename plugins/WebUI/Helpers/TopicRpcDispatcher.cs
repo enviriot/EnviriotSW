@@ -122,7 +122,14 @@ namespace X13.WebUI {
       if(string.IsNullOrWhiteSpace(actionName) || !MenuBuilder.ResolveActionDescriptor(topic, actionName, out action)) {
         return ViewOpResult.Error("action_not_found", "Action not found: " + (actionName ?? "<null>"));
       }
-      return PendingRpc.Begin(actionName, topic, args);
+      // Straight through, with no answer to wait for. The reply mechanism this used to go around -
+      // a deferred ViewOpResult, a timeout sweeper, a one-shot guard in RPC.Call - served handlers
+      // that reply, and no plugin ever registered one. What comes back now is whether the name was
+      // registered at all, which is the difference the menu actually shows.
+      if(!RPC.Call(actionName, topic, args)) {
+        return ViewOpResult.Error("action_not_registered", "No handler for action: " + actionName);
+      }
+      return ViewOpResult.Success();
     }
     private static ViewOpResult ExecuteAdd(Topic topic, string key, JSC.JSValue args, Topic prim) {
       if(topic == null) {

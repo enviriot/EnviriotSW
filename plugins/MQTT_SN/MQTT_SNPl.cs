@@ -47,6 +47,14 @@ namespace X13.Periphery {
 
     internal List<IMsGate> _gates;
     internal List<MsDevice> _devs;
+
+    /// <summary>The manifest field naming a topic as an MQTT-SN device, and its model.</summary>
+    /// <remarks>Was "cctor.MqsDev" while a registry called CCtor read that field on the core's
+    /// behalf. The registry is gone, so the prefix named nothing - and this was the only entry in
+    /// PredefinedTopics that sat outside this plugin's own namespace. The WIRE is unchanged: that
+    /// table pairs a ushort with a local field path, and only the string moved. Old trees are not
+    /// read; MQTT_SNPl.Init complains instead.</remarks>
+    internal const string FLD_MODEL = "MQTT-SN.model";
     private SubRec _devSub;
     internal List<DevicePLC> _plcs;
 
@@ -69,7 +77,7 @@ namespace X13.Periphery {
       // first delivery still lands on the first tick, as it always did. SubMask.All also brings a
       // Snapshot of what is already in the tree, which is what PersistentStorage (priority 2) has
       // put there by the time this plugin (priority 7) is reached.
-      _devSub = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, "cctor.MqsDev", MqsDevSub);
+      _devSub = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, FLD_MODEL, MqsDevSub);
       RPC.Register("MQTT_SN.RefreshPorts", RefreshPortsRpc);
       RPC.Register("MQTT_SN.RefreshNIC", RefreshNICRpc);
     }
@@ -92,6 +100,24 @@ namespace X13.Periphery {
       };
       _gates.Add(new MsGUdp(this));
       MsGSerial.Init(this);
+      WarnAboutOldFields();
+    }
+
+    /// <summary>Says so, loudly, when the tree still carries the pre-rename field name.</summary>
+    /// <remarks>Reading "cctor.MqsDev" as well would be a compatibility prop that never comes out
+    /// again; saying nothing would mean every device quietly failing to appear. So neither - the
+    /// count goes in the log once, at the only moment anyone is looking. In Start rather than Init
+    /// because the tree has to be loaded for the walk to see anything.</remarks>
+    private static void WarnAboutOldFields() {
+      int n = 0;
+      foreach(Topic t in Topic.root.all) {
+        if(t.GetField("cctor.MqsDev").Defined) {
+          n++;
+        }
+      }
+      if(n > 0) {
+        Log.Error("{0} topics still carry cctor.MqsDev - those devices will NOT load until Output/bin_a/Migrate has been run", n);
+      }
     }
 
     public void Tick() {
@@ -179,7 +205,7 @@ namespace X13.Periphery {
       }
     }
 
-    /// <summary>Gives a topic that names cctor.MqsDev its device object.</summary>
+    /// <summary>Gives a topic that carries MQTT-SN.model its device object.</summary>
     /// <remarks>Matched by name and not by topic, which is how the CCtor handler this replaces did
     /// it: a device that was renamed keeps the object it already had.</remarks>
     private void MqsDevSub(TopicEvent p, SubRec sr) {
@@ -187,7 +213,7 @@ namespace X13.Periphery {
         return;
       }
       Topic t = p.Source;
-      if(!t.GetField("cctor.MqsDev").Defined) {
+      if(!t.GetField(FLD_MODEL).Defined) {
         return;
       }
       var dev = _devs.FirstOrDefault(z => z.name == t.name);
@@ -284,7 +310,7 @@ namespace X13.Periphery {
           _devs.Add(dev);
           dt.SetAttribute(Topic.Attribute.Readonly);
           dt.SetField("editor", "MsStatus", Owner);
-          dt.SetField("cctor.MqsDev", string.Empty, Owner);
+          dt.SetField(FLD_MODEL, string.Empty, Owner);
         }
         dev._gate = gate;
         dev.addr = addr;

@@ -95,7 +95,7 @@ namespace X13.WebUI {
     }
 
     // A logram# vid resolves against Topic.root like any other, so without this every write
-    // below reached ANY topic in the tree - and bind/unbind are not cosmetic: cctor.LoBind is
+    // below reached ANY topic in the tree - and bind/unbind are not cosmetic: Logram.bind is
     // what LoVariable.ManifestChanged reads, so they rewire or sever running logic outside the
     // document the user has open. Part 9 settled the same question for the Inspector children
     // tree with TopicTreeController.IsWithinRoot; this is that guard for Logram. Two levels is
@@ -108,7 +108,7 @@ namespace X13.WebUI {
         || (topic.parent != null && IsDiagram(topic.parent.parent));
     }
 
-    // "bind"/"unbind" set or clear a wire (cctor.LoBind is the sink's own field, see
+    // "bind"/"unbind" set or clear a wire (Logram.bind is the sink's own field, see
     // LogramGraphController.ResolveOneWire) - Logram-specific, handled directly. Drop-
     // target compatibility (opposite polarity) is checked client-side before this is
     // even called (see logram-document.js #tryConnect); the guard here is just
@@ -130,7 +130,7 @@ namespace X13.WebUI {
         return ViewOpResult.Error("view_target_not_found", "Not part of a Logram diagram: " + topicPath);
       }
       if(string.Equals(cmd, "unbind", StringComparison.Ordinal)) {
-        topic.SetField("cctor.LoBind", JSC.JSValue.Null, _prim == null ? null : _prim());
+        topic.SetField("Logram.bind", JSC.JSValue.Null, _prim == null ? null : _prim());
         return ViewOpResult.Success();
       }
       // Pin context menu's checkable "Trace" (BuildPinMenu) - ports
@@ -153,7 +153,7 @@ namespace X13.WebUI {
         if(sourceTopic == topic) {
           return ViewOpResult.Error("bind_source_invalid", "Cannot bind a pin to itself");
         }
-        topic.SetField("cctor.LoBind", sourcePath);
+        topic.SetField("Logram.bind", sourcePath);
         return ViewOpResult.Success();
       }
       if(cmd != null && cmd.StartsWith(LogramPaletteBuilder.AddBlockCmdPrefix, StringComparison.Ordinal)) {
@@ -204,11 +204,11 @@ namespace X13.WebUI {
     // DTopic/non-Ext-LBDescr branch, see logram-document.js's #onSurfaceDrop for the
     // client half): creates a child topic under the diagram whose State is a COPY of
     // the dragged topic's current value (not a live reference) and whose
-    // cctor.LoBind points back at the dragged topic - LogramGraphController renders
+    // Logram.bind points back at the dragged topic - LogramGraphController renders
     // that exactly like any other variable (ChildrenSchema returns null for it, same
     // "no pin schema" rule). Auto-names like ES does: the source's own short name,
     // else "<sourceParent>_<sourceName>", else "<sourceName>_<i>" first free - and,
-    // same as ES, back-fills the DRAGGED topic's own cctor.LoBind to point at the new
+    // same as ES, back-fills the DRAGGED topic's own Logram.bind to point at the new
     // variable when it doesn't already have one (so a bare sensor topic with no
     // existing binding gets auto-wired both ways from a single drop).
     private static ViewOpResult ExecuteAddVariable(Topic diagram, JSC.JSValue args) {
@@ -235,14 +235,14 @@ namespace X13.WebUI {
       JSC.JSValue manifest = JSC.JSObject.CreateObject();
       manifest = JsLib.SetField(manifest, "Logram.top", new JSL.Number(top));
       manifest = JsLib.SetField(manifest, "Logram.left", new JSL.Number(left));
-      manifest = JsLib.SetField(manifest, "cctor.LoBind", new JSL.String(source.path));
+      manifest = JsLib.SetField(manifest, "Logram.bind", new JSL.String(source.path));
 
       JSC.JSValue state = source.GetState();
       Topic variable = Topic.Declare(diagram, name);
       Topic.Fill(variable, state != null && state.Defined ? JsLib.Clone(state) : JSC.JSValue.Null, manifest, null);
 
-      if(string.IsNullOrEmpty(source.GetField("cctor.LoBind").AsString(null))) {
-        source.SetField("cctor.LoBind", variable.path);
+      if(string.IsNullOrEmpty(source.GetField("Logram.bind").AsString(null))) {
+        source.SetField("Logram.bind", variable.path);
       }
       return ViewOpResult.Success();
     }
