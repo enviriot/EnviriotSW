@@ -43,7 +43,10 @@ namespace X13.Repository {
   internal sealed class CmdCreate : Cmd {
     public CmdCreate(Topic target, Topic author) : base(target, author) { }
     public override Phase Phase { get { return Phase.Struct; } }
-    public override TopicEvent Apply() { return TopicEvent.Created(Target, Author); }
+    // The manifest is read HERE, in the Struct phase, and carried on the event - not read again by
+    // whoever handles it. By the time events are published the Field phase has run, so the live
+    // manifest may already hold a field that has its own FieldChanged queued behind this.
+    public override TopicEvent Apply() { return TopicEvent.Created(Target, Target.GetField(string.Empty), Author); }
   }
 
   internal sealed class CmdMove : Cmd {
@@ -70,6 +73,16 @@ namespace X13.Repository {
     public override Phase Phase { get { return Phase.State; } }
     public override TopicEvent Apply() {
       JSValue old = Target.GetState();
+      // By INSTANCE here, and by value in CmdField. Not because that is right - a StateChanged
+      // raised for a write that changed nothing conflates "the value changed" with "a value
+      // arrived", and those are two different events.
+      //
+      // It stays for now because two consumers currently get their repeated samples out of it:
+      // ArchivistPl enqueues every StateChanged and ChartViewProvider turns each into a point, so
+      // tightening this today would silently drop a night of thermometer readings and the loss
+      // would surface in the archive weeks later. Producing repeated points is a sampling policy
+      // and belongs in Archivist, which already owns retention and rollup; that is a task of its
+      // own, and when it lands this joins CmdField in comparing by value.
       if (object.ReferenceEquals(old, Value)) {
         return null;   // written, but not changed: nothing happened and nobody is told
       }
@@ -78,19 +91,34 @@ namespace X13.Repository {
     }
   }
 
-  /// <summary>One write into the manifest. Several in a tick fold into the first one's command.</summary>
-  /// <remarks>Only the first survives the drain - Topic.SetField merges the rest into the
-  /// manifest it is building and answers false - so the event names the field written first and
-  /// carries the manifest as it stood before the whole batch.</remarks>
+  /// <summary>One write into the manifest, and one event.</summary>
+  /// <remarks>Several writes into one topic in a tick share a batch: between them they build a
+  /// single new manifest, and whichever command is applied first swaps it in. Each of them still
+  /// reports its own path, because a consumer that matches FieldPath against a name it knows has
+  /// to see its own write and not whichever happened to come first.</remarks>
   internal sealed class CmdField : Cmd {
     public readonly string Path;
     public readonly JSValue Value;
+    /// <summary>Shared by every write into this topic this tick; attached when the command is filed.</summary>
+    public Topic.FieldBatch Batch;
+
     public CmdField(Topic target, string path, JSValue value, Topic author) : base(target, author) {
       this.Path = path;
       this.Value = value;
     }
     public override Phase Phase { get { return Phase.Field; } }
-    public override TopicEvent Apply() { return Topic.SetField2(Target); }
+    public override TopicEvent Apply() {
+      Topic.SetField2(Target, Batch);
+      // Compared after the swap, because that is when both halves exist: oldManifest is what the
+      // batch displaced and the topic now carries the new one. The field had no guard of any kind,
+      // and it is the one that cost the most - MQTTPl rebuilds its MqSite on any FieldChanged
+      // under "MQTT.uri" without reading the value, and MqSite.Dispose sends the broker an
+      // UNSUBSCRIBE. Rewriting a uri with the uri it already had dropped a live subscription.
+      if (JsLib.SameValue(JsLib.Field(Batch.oldManifest, Path), Target.GetField(Path))) {
+        return null;
+      }
+      return TopicEvent.FieldChanged(Target, Path, Batch.oldManifest, Author);
+    }
   }
 
   /// <summary>A new registration asking for the state that is already there.</summary>

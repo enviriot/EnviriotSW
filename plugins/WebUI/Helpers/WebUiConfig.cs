@@ -21,9 +21,16 @@ namespace X13.WebUI.Helpers {
   internal sealed class WebUiConfig : IDisposable {
     // "local" resolves to the subnets of this machine's adapters, see NetworkAcl.
     public const string DefaultTrustedNets = "local";
-    public const int DefaultMaxImportBytes = 16 * 1024 * 1024;
-    private const int MinImportBytes = 1024;
-    private const int MaxImportBytesCeiling = 256 * 1024 * 1024;
+    /// <summary>Largest import body accepted, in bytes. Anything larger answers 413.</summary>
+    /// <remarks>The body is parsed in memory as one buffer, so this is the memory a single POST
+    /// can claim - which is why there was a limit to add at all: there was none, and the sender
+    /// chose. 16 MB is comfortably above a whole-tree .xst export, which is what people import.
+    /// <para>A constant, not a setting. It was a Config topic with a floor and a ceiling around
+    /// it, and the range existed only to keep the setting from being useful in the wrong
+    /// direction: zero would have refused every import, and a value near int.MaxValue would have
+    /// restored the very problem the limit was added for. A number nobody may set to a harmful
+    /// value and nobody has asked to raise is a constant.</para></remarks>
+    public const int MaxImportBytes = 16 * 1024 * 1024;
     public const string DefaultStaticPath = "..\\www";
 
     private const Topic.Attribute CfgAttr = Topic.Attribute.Required | Topic.Attribute.Config;
@@ -45,7 +52,6 @@ namespace X13.WebUI.Helpers {
     private volatile string _trustedNets = DefaultTrustedNets;
     private volatile string _trustedProxies = string.Empty;
     private volatile string _staticPathRaw = DefaultStaticPath;
-    private volatile int _maxImportBytes = DefaultMaxImportBytes;
 
     public WebUiConfig(Topic owner) {
       _owner = owner ?? Topic.root.Get("/$YS/WebUI", true);
@@ -69,16 +75,6 @@ namespace X13.WebUI.Helpers {
     public string TrustedNets { get { return _trustedNets; } }
 
     public string TrustedProxies { get { return _trustedProxies; } }
-
-    /// <summary>Largest import body accepted, in bytes. Anything larger answers 413.</summary>
-    /// <remarks>The body is parsed in memory as one buffer, so this is the memory a single POST
-    /// can claim - which is why there was a limit to add at all: there was none, and the sender
-    /// chose. 16 MB is comfortably above a whole-tree .xst export, which is what people import.
-    /// <para>An out-of-range setting falls back to the default rather than being honoured: zero
-    /// would refuse every import, and a value near int.MaxValue would restore the original
-    /// problem while looking deliberate.</para></remarks>
-    public int MaxImportBytes { get { return _maxImportBytes; } }
-
     /// <summary>Creates whatever is missing, primes every value, then follows all of it.</summary>
     /// <remarks>The groups are not created explicitly: EnsureCfg's path makes them on the way,
     /// and Xst.Export keeps a parent whose children were exported, so a Config leaf carries its
@@ -97,10 +93,6 @@ namespace X13.WebUI.Helpers {
         // Empty is meaningful here and must survive: it means X-Real-IP is believed from nobody.
         JsExtLib.EnsureCfg(_owner, "trustedProxies", CfgAttr, v => _trustedProxies = v ?? string.Empty,
           string.Empty),
-        // Under WebIDE because import is an IDE operation, guarded by the same network rule.
-        JsExtLib.EnsureCfg(_owner, "WebIDE/maxImportBytes", CfgAttr,
-          v => _maxImportBytes = v >= MinImportBytes && v <= MaxImportBytesCeiling ? v : DefaultMaxImportBytes,
-          DefaultMaxImportBytes),
       };
     }
 

@@ -38,11 +38,20 @@ namespace X13 {
 
     /// <summary>Works out which cctor handlers this change added, dropped or altered.</summary>
     /// <remarks>Two sources are merged: the topic's own manifest and, when the "type" field points
-    /// at one, the cctor of the type topic under /$YS/TYPES. A name present before and after with
-    /// the same value is not reported at all - only the difference is.</remarks>
+    /// at one, the cctor of the type topic under /$YS/TYPES.
+    /// <para>A name present before and after is reported only when its value differs - by
+    /// REFERENCE, which is a weaker claim than it reads: two equal strings built separately are
+    /// different to it. That gap used to show, because a rewrite of the same value arrived here as
+    /// a FieldChanged; it no longer does, since CmdField stops such a write from being published
+    /// at all. So the reference test is now a second line of defence rather than the only one, and
+    /// what it still cannot tell apart are two equal-looking objects.</para></remarks>
     internal static void Check(TopicEvent p) {
       SortedList<string, JSValue> lo = null, ln = null, lc = null;
-      JSValue to = null, tn = p.Source.GetField("type"), vn;
+      // "type" comes from the same snapshot as "cctor" does, and for the same reason: a Created
+      // event published after the Field phase would otherwise see a type written in that very tick
+      // and announce the type's handlers, which that write's own FieldChanged then announces again.
+      JSValue to = null, vn;
+      JSValue tn = p.Kind == EventKind.Created ? p.OldManifest.Field("type") : p.Source.GetField("type");
       if(p.Kind == EventKind.FieldChanged) {
         JSValue o = p.OldManifest.Field("cctor"), n = p.Source.GetField("cctor");
         to = p.OldManifest.Field("type");
@@ -51,7 +60,11 @@ namespace X13 {
           JsLib.Propertys(ref ln, n);
         }
       } else if(p.Kind == EventKind.Created) {
-        JsLib.Propertys(ref ln, p.Source.GetField("cctor"));
+        // The manifest the topic was DECLARED with, not the one it has now. A topic created and
+        // given its cctor by a separate write in the same tick used to be announced twice, both
+        // times as Created: once from here, reading a manifest the Field phase had already
+        // updated, and once from that write's own FieldChanged.
+        JsLib.Propertys(ref ln, p.OldManifest.Field("cctor"));
       } else if(p.Kind == EventKind.Removed) {
         JsLib.Propertys(ref lo, p.Source.GetField("cctor"));
       } else {
@@ -75,7 +88,7 @@ namespace X13 {
           vn = ln[k];
           if(!JSValue.ReferenceEquals(lo[k], vn)) {
             if(lc==null) {
-              lc = new SortedList<string, JSValue>();
+              lc = new SortedList<string, JSValue>(StringComparer.Ordinal);
             }
             lc.Add(k, vn);
           }
@@ -109,7 +122,7 @@ namespace X13 {
           cb.Invoke(t, a);
         }
         catch(Exception ex) {
-          Log.Warning("CCtor({0}, {1}, {2}) - {3}", name, t.path, a, ex);
+          Topic.PluginFailed("CCtor:" + name, t, ex);
         }
       }
     }

@@ -36,7 +36,13 @@ namespace X13.Repository {
     public readonly string FieldPath;
 
     internal readonly JSValue OldState;      // StateChanged, Removed
-    internal readonly JSValue OldManifest;   // FieldChanged
+    /// <summary>The manifest this event was computed against.</summary>
+    /// <remarks>FieldChanged: what the batch displaced. Created: what the topic was declared with,
+    /// which is NOT its manifest by the time anyone is told - Created is applied in the Struct
+    /// phase and published after the Field phase has run, so a field written in the same tick is
+    /// already in place. Reading the live manifest from a Created event therefore reports what a
+    /// FieldChanged in that same tick is about to report again.</remarks>
+    internal readonly JSValue OldManifest;   // FieldChanged, Created
     internal readonly SubRec Sub;            // Snapshot, Ready
 
     private TopicEvent(Topic source, EventKind kind, Topic author, string oldPath, string fieldPath, JSValue oldState, JSValue oldManifest, SubRec sub) {
@@ -50,8 +56,8 @@ namespace X13.Repository {
       this.Sub = sub;
     }
 
-    internal static TopicEvent Created(Topic t, Topic author) {
-      return new TopicEvent(t, EventKind.Created, author, null, null, null, null, null);
+    internal static TopicEvent Created(Topic t, JSValue manifest, Topic author) {
+      return new TopicEvent(t, EventKind.Created, author, null, null, null, manifest, null);
     }
     internal static TopicEvent Moved(Topic t, string oldPath, Topic author) {
       return new TopicEvent(t, EventKind.Moved, author, oldPath, null, null, null, null);

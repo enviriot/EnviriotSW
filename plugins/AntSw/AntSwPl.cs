@@ -13,7 +13,7 @@ using System.IO.Ports;
 
 namespace X13.Periphery {
   [Export(typeof(IPlugModul))]
-  [ExportMetadata("priority", 8)]
+  [ExportMetadata("priority", 9)]
   [ExportMetadata("name", "AntSw")]
   public class AntSwPl : IPlugModul {
     private const string OWNER_PATH = "/$YS/AntSw";

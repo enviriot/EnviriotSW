@@ -10,7 +10,12 @@ namespace X13.Repository {
   [System.ComponentModel.Composition.ExportMetadata("name", "Repository")]
   public class Repo : IPlugModul {
     internal static string configPath;
-    private const int PH_COUNT = 6;   // see Phase
+    /// <summary>How many phase lists there are. Derived, so it cannot drift from Phase.</summary>
+    /// <remarks>It was a 6 with "see Phase" beside it, and that comment was the only thing tying
+    /// the two together: add a phase, forget the constant, and the last one is never applied and
+    /// never published. Silently. One reflection call at type initialisation buys that away, and
+    /// nothing here needs a compile-time constant - every use is an array size or a loop bound.</remarks>
+    private static readonly int PH_COUNT = Enum.GetValues(typeof(Phase)).Length;
     private const int SAVE_RETRY_SEC = 30;   // after an export that could not be written
 
     #region internal Members
@@ -18,6 +23,7 @@ namespace X13.Repository {
     private readonly List<Cmd>[] _phases;              // what this tick was asked to do
     private readonly List<TopicEvent>[] _events;       // what came of it, in the same order
     private readonly Dictionary<Topic, int> _stateAt;  // topic -> its entry in the state phase
+    private readonly Dictionary<FieldKey, int> _fieldAt;   // topic+field -> its entry in the manifest phase
     private volatile Action<TopicEvent>[] _subscribers;
     private int _busyFlag;
     private DateTime? _saveConfigT;
@@ -102,16 +108,25 @@ namespace X13.Repository {
         return;
       }
       if(c is CmdRemove) {
-        // unsorted: every descendant gets a removal of its own anyway
-        foreach(Topic tmp in new Topic.Bill(c.Target, true, false)) {
+        // In name order, which costs nothing now that children are kept in it
+        foreach(Topic tmp in new Topic.Bill(c.Target, true)) {
           _phases[(int)Phase.Remove].Add(new CmdRemove(tmp, c.Author));
         }
         return;
       }
       CmdField fld = c as CmdField;
       if(fld != null) {
-        if(Topic.SetField(fld)) {
-          _phases[(int)Phase.Field].Add(fld);
+        // Every write is filed, not just the first: the batch keeps the manifest single, the
+        // commands keep their own paths. Two writes into the SAME field fold, like state does.
+        fld.Batch = Topic.SetField(fld);
+        List<Cmd> phase = _phases[(int)Phase.Field];
+        FieldKey key = new FieldKey(c.Target, fld.Path);
+        int at;
+        if(_fieldAt.TryGetValue(key, out at)) {
+          phase[at] = c;   // the later write wins, in the place the first one took
+        } else {
+          _fieldAt[key] = phase.Count;
+          phase.Add(c);
         }
         return;
       }
@@ -141,12 +156,12 @@ namespace X13.Repository {
       if((sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once) {
         evs.Add(TopicEvent.Snapshot(c.Target, sr));
       }
-      Topic.Bill b = null;   // unsorted: a snapshot has no order to keep
+      Topic.Bill b = null;
       if((sr.mask & SubRec.SubMask.Children) == SubRec.SubMask.Children) {
-        b = new Topic.Bill(c.Target, false, false);
+        b = new Topic.Bill(c.Target, false);
       }
       if((sr.mask & SubRec.SubMask.All) == SubRec.SubMask.All) {
-        b = new Topic.Bill(c.Target, true, false);
+        b = new Topic.Bill(c.Target, true);
       }
       if(b != null) {
         foreach(Topic tmp in b) {
@@ -178,6 +193,7 @@ namespace X13.Repository {
         _events[i] = new List<TopicEvent>(64);
       }
       _stateAt = new Dictionary<Topic, int>();
+      _fieldAt = new Dictionary<FieldKey, int>();
       _subscribers = new Action<TopicEvent>[0];
       _saveConfigT = null;
     }
@@ -225,7 +241,7 @@ namespace X13.Repository {
             Dispatch(cmd);
           }
           catch(Exception ex) {
-            Suppressed("Dispatch", cmd, ex);
+            Failed("Dispatch", cmd, ex);
           }
         }
 
@@ -240,7 +256,7 @@ namespace X13.Repository {
               }
             }
             catch(Exception ex) {
-              Suppressed("Apply", phase[i], ex);
+              Failed("Apply", phase[i], ex);
             }
           }
         }
@@ -252,7 +268,7 @@ namespace X13.Repository {
               CCtor.Check(evs[i]);
             }
             catch(Exception ex) {
-              Suppressed("CCtor", evs[i], ex);
+              Failed("CCtor", evs[i], ex);
             }
           }
         }
@@ -265,7 +281,7 @@ namespace X13.Repository {
               Topic.Publish(e);
             }
             catch(Exception ex) {
-              Suppressed("Publish", e, ex);
+              Failed("Publish", e, ex);
             }
             // One read of the field, then iterate that: a callback may unsubscribe - its own
             // registration or another's - and the loop must not be walking the list it changed.
@@ -276,7 +292,7 @@ namespace X13.Repository {
                 func.Invoke(e);
               }
               catch(Exception ex) {
-                Log.Error("{0}.{1}({2}) - {3}", func.Target!=null?func.Target.ToString():func.Method.DeclaringType.Name, func.Method.Name, e.ToString(), ex.Message);
+                PluginFailed((func.Target != null ? func.Target.ToString() : func.Method.DeclaringType.Name) + "." + func.Method.Name, e, ex);
               }
             }
           }
@@ -294,9 +310,10 @@ namespace X13.Repository {
             // later. A configuration silently not saved is the sort of loss found after a power
             // cut and not before it.
             _saveConfigT = DateTime.Now.AddSeconds(SAVE_RETRY_SEC);
-            Suppressed("Export", null, ex);
+            Failed("Export", null, ex);
           }
         }
+        _faults.Flush(DateTime.Now);
       }
       finally {
         for(int p = 0; p < PH_COUNT; p++) {
@@ -304,36 +321,50 @@ namespace X13.Repository {
           _events[p].Clear();
         }
         _stateAt.Clear();
+        _fieldAt.Clear();
         _busyFlag = 1;
       }
     }
 
-    /// <summary>Reports a failure the tick swallowed, at most once a second per site.</summary>
-    /// <remarks>Throttled because the tick runs 64 times a second: a systematic fault - a plugin
-    /// that throws on every value - would be reported 64 times a second and bury the very log
-    /// meant to explain it. The suppressed count goes into the next line, so a throttled fault
-    /// still reads as a flood and not as an isolated event.</remarks>
-    private void Suppressed(string where, object subject, Exception ex) {
-      Throttle th;
-      if(!_suppressed.TryGetValue(where, out th)) {
-        th = new Throttle();
-        _suppressed[where] = th;
-      }
-      th.count++;
-      DateTime now = DateTime.Now;
-      if(now < th.next) {
-        return;
-      }
-      int n = th.count;
-      th.count = 0;
-      th.next = now.AddSeconds(1);
-      Log.Error("Repo.{0}({1}){2} - {3}", where, subject == null ? "-" : subject.ToString(),
-        n > 1 ? string.Format(" [and {0} more]", n - 1) : string.Empty, ex.ToString());
+    /// <summary>A fault in the repository's own work: the tick swallowed it and carried on.</summary>
+    /// <remarks>Applying a change is the one thing here that nobody outside this assembly can
+    /// cause, so a throw is a bug in the repository. The change may be half made and no event will
+    /// be published for it - but the rest of the batch still goes through, because dropping it
+    /// would lose changes that had nothing to do with the failure, and because the alternative
+    /// once was to lose the repository altogether.</remarks>
+    internal void Failed(string where, object subject, Exception ex) {
+      _faults.Report(true, "Repo." + where, subject, ex);
     }
-    private readonly Dictionary<string, Throttle> _suppressed = new Dictionary<string, Throttle>();
-    private sealed class Throttle {
-      public DateTime next;
-      public int count;
+
+    /// <summary>A fault in somebody else's callback: a type constructor, a subscriber.</summary>
+    /// <remarks>The tree is already consistent by the time anything is delivered; the only
+    /// question a throw here answers is who does not get told. A warning, not an error, and the
+    /// remaining subscribers still get their turn.</remarks>
+    internal void PluginFailed(string who, object subject, Exception ex) {
+      _faults.Report(false, who, subject, ex);
+    }
+    private readonly FaultThrottle _faults = new FaultThrottle();
+    /// <summary>One topic's one field - what a manifest write is folded by within a tick.</summary>
+    /// <remarks>Reference equality on the topic, ordinal on the path: two Topic instances are
+    /// never equal to each other, and a field path is a name rather than text to be compared
+    /// loosely.</remarks>
+    private struct FieldKey : IEquatable<FieldKey> {
+      private readonly Topic _topic;
+      private readonly string _path;
+
+      public FieldKey(Topic topic, string path) {
+        _topic = topic;
+        _path = path;
+      }
+      public bool Equals(FieldKey other) {
+        return object.ReferenceEquals(_topic, other._topic) && string.Equals(_path, other._path, StringComparison.Ordinal);
+      }
+      public override bool Equals(object obj) {
+        return obj is FieldKey && Equals((FieldKey)obj);
+      }
+      public override int GetHashCode() {
+        return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(_topic) ^ (_path == null ? 0 : _path.GetHashCode());
+      }
     }
 
     /// <summary>Writes the configuration back out - but never a tree that was not fully read in.</summary>

@@ -44,9 +44,9 @@ namespace X13.WebUI {
     /// <summary>Calls <paramref name="name"/> and hands back the result, or a way to wait for it.</summary>
     /// <returns>An error when nothing is registered under that name - a caller that waited on it
     /// would wait forever - otherwise a Pending result.</returns>
-    public static ViewOpResult Begin(string name, JSC.JSValue[] args) {
+    public static ViewOpResult Begin(string name, Topic t, JSC.JSValue arg) {
       Entry e = new Entry() { Deadline = _clock.ElapsedMilliseconds + TimeoutMs };
-      if(!RPC.Call(name, args, v => Complete(e, ToResult(v)))) {
+      if(!RPC.Call(name, t, arg, v => Complete(e, ToResult(v)))) {
         return ViewOpResult.Error("action_no_handler", "No handler is registered for action: " + (name ?? "<null>"));
       }
       // Only tracked if it is still outstanding. A handler registered without a reply answers

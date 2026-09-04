@@ -73,15 +73,15 @@ namespace X13.MQTT {
     public bool verbose;
 
     #region RPC
-    private void ReconnectRpc(JSC.JSValue[] obj) {
-      string path;
-      // AsString folds the null and type checks in; only the arity test is left beside it.
-      if(obj == null || obj.Length != 1 || string.IsNullOrEmpty(path = obj[0].AsString(null))) {
+    /// <summary>Restarts the client bound to this topic.</summary>
+    /// <remarks>The missing return is the point: it used to log that there was no binding and then
+    /// dereference the very variable it had just called null. A menu action on a topic without an
+    /// MQTT binding threw instead of saying so, and RPC.Call does not catch - unlike CCtor.</remarks>
+    private void ReconnectRpc(Topic t, JSC.JSValue arg) {
+      var s = _sites.FirstOrDefault(z => z.Owner == t);
+      if(s == null) {
+        Log.Warning("No MQTT binding for {0}", t.path);
         return;
-      }
-      var s = _sites.FirstOrDefault(z => z.Owner.path==path);
-      if(s==null) {
-        Log.Warning("No MQTT binding for {0}", path);
       }
       System.Threading.ThreadPool.QueueUserWorkItem(s.Client.Restart);
     }

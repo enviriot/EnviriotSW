@@ -1,4 +1,4 @@
-﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
@@ -127,11 +127,28 @@ namespace X13 {
       }
     }
 
+    /// <summary>How long a pass of the engine loop takes, published to /$YS/Performance.</summary>
+    /// <remarks>The loop has about 17 mS to do a pass and nothing measured whether it did: what stood
+    /// here was a commented-out Stopwatch that printed an average to the debug log by hand, which
+    /// is exactly the shape of a measurement nobody takes.</remarks>
+    private long _tickTicks;
+    private long _periodTicks;
+    private long _periodMax;
+    private int _periodCount;
+    private long _lastPass;
+    private long _tickMax;
+    private int _tickCount;
+    private readonly FaultThrottle _faults = new FaultThrottle();
     private Mutex _singleInstance;
     private Thread _thread;
     private AutoResetEvent _tick;
     private volatile bool _terminate;
     private Timer _tickTimer;
+
+    /// <summary>0 while nobody is tearing down, 1 once somebody is. See Stop().</summary>
+    /// <remarks>Reset at the top of Start rather than by Stop, so that the latch also makes a repeated Stop a
+    /// no-op: only a fresh start makes the teardown available again.</remarks>
+    private int _stopping;
 
     /// <summary>How PrThread tells Start() whether the server actually came up.</summary>
     /// <remarks>Start() used to return true the moment the thread was created, while Init and
@@ -174,7 +191,17 @@ namespace X13 {
       Log.Info("Enviriot v.{0}", Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
     }
     internal bool Start() {
-      _singleInstance = new Mutex(true, "Global\\X13.enviriot");
+      // First, and not next to the other resets below: Start can fail before it reaches them -
+      // the mutex may be held, LoadPlugins may throw - and Main calls Stop on the way out either
+      // way. Leaving the latch set from a previous run would make that Stop a no-op and strand
+      // the AppDomain handlers this method is about to register.
+      _stopping = 0;
+
+      // false, not true: a named mutex is recursive for the thread that owns it, so creating it
+      // owned and then waiting on it took the ownership count to two while Stop releases once.
+      // The mutex stayed held after Stop, and a second Start in the same process would have been
+      // told there was already an instance running. Ownership comes from the WaitOne below, once.
+      _singleInstance = new Mutex(false, "Global\\X13.enviriot");
 
       AppDomain.CurrentDomain.UnhandledException += new UnhandledExceptionEventHandler(CurrentDomain_UnhandledException);
       AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
@@ -209,8 +236,19 @@ namespace X13 {
     /// <summary>Undoes Start, and survives being called when Start never got that far.</summary>
     /// <remarks>Both guards are needed now that the handles below are released: Start returns
     /// early when the mutex is already held or LoadPlugins fails, leaving _thread unstarted or
-    /// _tick null, and Main calls Stop on the way out regardless.</remarks>
+    /// _tick null, and Main calls Stop on the way out regardless.
+    /// <para>The latch is not tidiness, and the null checks below are no substitute for it: two
+    /// threads pass every one of them. Stop has a second caller that is easy to miss - Start
+    /// registers CurrentDomain_UnhandledException, that handler calls Stop, and the unregistration
+    /// is at the far end of a join that lasts up to ShutdownTimeoutMs. Shutdown is exactly when a
+    /// plugin's worker thread dies of having its database closed under it, so the arrangement is
+    /// Main stopping while a dying thread starts stopping too. Unguarded, the second one disposes
+    /// _tick and the container from under the engine thread the first is still joining - and
+    /// PrThread's _tick.WaitOne() has no guard of its own to survive that.</para></remarks>
     internal void Stop() {
+      if(Interlocked.CompareExchange(ref _stopping, 1, 0) != 0) {
+        return;
+      }
       _terminate = true;
       AutoResetEvent tickEv = _tick;
       if(tickEv != null) {
@@ -240,8 +278,20 @@ namespace X13 {
       }
       AppDomain.CurrentDomain.UnhandledException -= CurrentDomain_UnhandledException;
       AppDomain.CurrentDomain.AssemblyResolve -= CurrentDomain_AssemblyResolve;
+      // Released in a try because ownership of a mutex belongs to a THREAD: Start takes it with
+      // WaitOne on the caller's, and ReleaseMutex throws ApplicationException for anybody else.
+      // Stop does not always run on that thread - the unhandled-exception handler runs on whichever
+      // thread is dying - and the throw used to escape from here into that handler's blanket catch,
+      // so on the one path where the log matters most, everything below was skipped: the tick event
+      // undisposed, the plugin container never disposed, and Log.Finish() - the flush that would
+      // have written out what the crash was - not called. Disposing regardless is what actually
+      // frees the handle; the release is the polite half, and the process is ending either way.
       if(_singleInstance != null) {
-        _singleInstance.ReleaseMutex();
+        try {
+          _singleInstance.ReleaseMutex();
+        }
+        catch(ApplicationException) {
+        }
         _singleInstance.Dispose();
         _singleInstance = null;
       }
@@ -307,16 +357,39 @@ namespace X13 {
       _performanceSR = JsExtLib.EnsureCfg(Repository.Topic.root.Get("/$YS", true), "Performance",
         Repository.Topic.Attribute.DB | Repository.Topic.Attribute.Required, v => _performance = v, false);
 
-      _tickTimer = new Timer(Tick, null, 100, 15);  // Tick = 1000/64 = 15.625 mS
+      // 5, not 15, and the difference is measurable. The Windows timer granule is 15.625 mS and
+      // System.Threading.Timer schedules the next fire relative to the callback, not on a fixed
+      // grid: a request of 15 falls 0.625 mS short of the next granule, so any dispatch slip past
+      // that costs a WHOLE granule and the beat takes 31.25 instead. Measured: request 15 gave a
+      // 19.05 mS period (52 Hz), request 10 gave 17.40, request 5 gives 16.98 - about 59 Hz.
+      // A smaller request only buys slack; it cannot buy a shorter granule.
+      //
+      // So this is not 64 Hz and never was - /$YS/Performance/Period now says what it is. Getting
+      // to 15.625 would need timeBeginPeriod, which raises the timer resolution for the whole
+      // machine and its power profile with it; that is a bigger decision than a control loop that
+      // runs at 59 Hz instead of 64.
+      // Not armed once a teardown has begun. Stop() disposes the timer only after joining this
+      // thread, so the ordinary shutdown cannot orphan one - but it skips the join when the thread
+      // is not yet alive, and abandons it when the join times out and the abort does not take. This
+      // line sits at the far end of a startup Start() may have given up waiting for two minutes
+      // ago, so both are reachable, and what they leave behind is a timer nobody owns firing Tick
+      // into a disposed _tick. Re-read after the assignment: the check alone still loses to a Stop
+      // that lands between the two, and then it is this thread that has to clean up.
+      if(!_terminate) {
+        _tickTimer = new Timer(Tick, null, 100, 5);
+        if(_terminate) {
+          Timer orphan = _tickTimer;
+          _tickTimer = null;
+          if(orphan != null) {
+            orphan.Dispose();
+          }
+        }
+      }
       // Everything a caller of Start() was promised is now true: plugins initialised, started,
       // and the tick armed. Only here does Start() stop waiting.
       _startupOk = true;
       _startupDone.Set();
       int i;
-      //int j=1920;
-      //TimeSpan t = TimeSpan.Zero;
-      //var sw = new System.Diagnostics.Stopwatch();
-      //sw.Start();
       do {
         now = DateTime.Now;
         if(performanceDT < now) {
@@ -334,40 +407,95 @@ namespace X13 {
               perf_cpu = new Tuple<bool, DateTime, double>(true, now, cpu);
               perf.Get("Physical").SetState(Math.Round(proc.WorkingSet64 / 1048576.0, 2));  // MB
             }
+            // What the loop is actually for: it has one beat to do a pass, and until now nothing
+            // measured whether it did. Average and worst since the last publication, plus the
+            // longest single script callback - the one thing inside a pass that a user writes.
+            perf.Get("Tick").SetState(Math.Round(_tickCount == 0 ? 0 : _tickTicks * 1000.0 / (_tickCount * (double)System.Diagnostics.Stopwatch.Frequency), 3));  // mS, average
+            perf.Get("TickMax").SetState(Math.Round(_tickMax * 1000.0 / System.Diagnostics.Stopwatch.Frequency, 3));  // mS
+            perf.Get("Period").SetState(Math.Round(_periodCount == 0 ? 0 : _periodTicks * 1000.0 / (_periodCount * (double)System.Diagnostics.Stopwatch.Frequency), 3));  // mS, average
+            perf.Get("PeriodMax").SetState(Math.Round(_periodMax * 1000.0 / System.Diagnostics.Stopwatch.Frequency, 3));  // mS
+            perf.Get("Script").SetState(Math.Round(X13.JsExtLib.TakeMaxCallbackMs(), 3));  // mS
             perf.Get("Updated").SetState(X13.JsExtLib.Context.ProxyValue(now));
           } else {
             perf_cpu = new Tuple<bool, DateTime, double>(false, now, 0);
           }
+          // Reset either way: counted while nobody looks, the worst pass would otherwise be the
+          // worst since the process started and would say nothing about the last five minutes.
+          _tickTicks = 0;
+          _tickMax = 0;
+          _tickCount = 0;
+          _periodTicks = 0;
+          _periodMax = 0;
+          _periodCount = 0;
         }
         if(_isLinux && gcTick < now) {
           gcTick = now.AddSeconds(887);
           GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized);
         }
         _tick.WaitOne();
-        //sw.Stop();
-        //t+=sw.Elapsed;
-        //if(--j<=0) {
-        //  j=1920;
-        //  Log.Debug("Tick = {0:0.000} mS", t.TotalMilliseconds/1920);
-        //  t = TimeSpan.Zero;
-        //}
-        //sw.Restart();
-        JsExtLib.Tick();
+        long passStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        // How often a pass happens, as against how long one takes. The timer fires into an
+        // AutoResetEvent every 15 mS, and that event does not count: a Set onto an already-set
+        // event is lost, so a pass that overruns does not catch up afterwards - it silently skips
+        // beats. The period is where that shows, and a stall nothing else sees - a GC pause, the
+        // thread not being scheduled - shows here and not in the duration.
+        if(_lastPass != 0) {
+          long period = passStart - _lastPass;
+          _periodTicks += period;
+          _periodCount++;
+          if(period > _periodMax) {
+            _periodMax = period;
+          }
+        }
+        _lastPass = passStart;
+        // Guarded, and it was not. JsExtLib.Tick runs the script timers, and anything escaping it
+        // left this loop for good: the engine thread ended, the process carried on answering, and
+        // nothing ticked again - the same shape the repository's own tick had before it grew a
+        // finally, one level further out.
+        try {
+          JsExtLib.Tick();
+        }
+        catch(Exception ex) {
+          _faults.Report(true, "JsExtLib.Tick", null, ex);
+        }
         for(i = 0; i < _modules.Length; i++) {
+          long started = System.Diagnostics.Stopwatch.GetTimestamp();
           try {
             _modules[i].Tick();
           }
           catch(Exception ex) {
-            Log.Error("{0}.Tick() - {1}", _modules[i].GetType().FullName, ex.ToString());
+            // A plugin that throws goes on being ticked. Stopping it would turn one bad pass into
+            // a subsystem that never runs again - an MQTT that never reconnects - with nothing
+            // able to bring it back, and these faults are usually transient. What it no longer
+            // gets is a full stack trace on every beat: the throttle writes one and counts
+            // the rest, and says how many there were once they stop.
+            _faults.Report(false, _modules[i].GetType().FullName + ".Tick",
+              ((System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000 / System.Diagnostics.Stopwatch.Frequency) + " ms", ex);
           }
+        }
+        _faults.Flush(now);
+        long passTicks = System.Diagnostics.Stopwatch.GetTimestamp() - passStart;
+        _tickTicks += passTicks;
+        _tickCount++;
+        if(passTicks > _tickMax) {
+          _tickMax = passTicks;
         }
         if(today!=now.Date) {
           today = now.Date;
           Log.Info("{0} v.{1}", today.ToLongDateString(), Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
         }
       } while(!_terminate);
-      _tickTimer.Change(-1, -1);
-      //sw.Stop();
+      // Null when the arming above stood aside, and StopPlugins is far too important to lose to
+      // the NullReferenceException that used to follow: it runs on this thread and nowhere else.
+      Timer tickTimer = _tickTimer;
+      if(tickTimer != null) {
+        try {
+          tickTimer.Change(-1, -1);
+        }
+        catch(ObjectDisposedException) {
+          // Stop() got here first, which is the outcome this line wanted anyway.
+        }
+      }
       StopPlugins();
     }
     /// <summary>Affinity mask selecting the last logical CPU.</summary>

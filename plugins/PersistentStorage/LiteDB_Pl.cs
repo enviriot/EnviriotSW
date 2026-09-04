@@ -403,7 +403,10 @@ namespace X13.PersistentStorage {
         List<string> oldT = new List<string>();
         List<ObjectId> oldId = new List<ObjectId>();
 
-        foreach (var obj in _objects.FindAll().OrderBy(z => z["p"])) {
+        // Ordinal on the path itself, not whatever collation LiteDB compares BsonValues with:
+        // the load order has to be the tree order, and parents have to precede their children for
+        // the version check below to recognise a stale subtree by its prefix.
+        foreach (var obj in _objects.FindAll().OrderBy(z => z["p"].AsString, StringComparer.Ordinal)) {
           sTmp = obj["p"].AsString;
           if (oldT.Any(z => sTmp.StartsWith(z))) {
             oldId.Add(obj["_id"]);

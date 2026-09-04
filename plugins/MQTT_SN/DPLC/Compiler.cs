@@ -79,7 +79,7 @@ namespace X13.DevicePLC {
           module.Script.Root.Visit(p2);
         }
 
-        varList = new SortedList<string, string>();
+        varList = new SortedList<string, string>(StringComparer.Ordinal);
         ioList = new List<string>();
         uint mLen;
 

@@ -224,7 +224,7 @@ namespace X13.WebUI {
     /// those same topics stay behind DashboardAcl.
     ///
     /// Deliberately NOT routed through WebUiHost.Post: AQuery goes to the store synchronously,
-    /// and a chart asking for months of samples would stall the 64 Hz tick for the whole server.
+    /// and a chart asking for months of samples would stall the engine tick for the whole server.
     /// It runs on the HTTP thread, which is where H04 ran it and what ArchivistPl.AQuery - with
     /// its own try/catch - is written for.</remarks>
     private void ServeArchivist(HttpRequestEventArgs e, IPAddress client) {
@@ -388,7 +388,7 @@ namespace X13.WebUI {
             WriteResponse(e.Response, HttpStatusCode.NotFound);  // 404, not 403: stay invisible
             return;
           }
-          ImportUpload upload = ReadImportUpload(e.Request, _config.MaxImportBytes);
+          ImportUpload upload = ReadImportUpload(e.Request, WebUiConfig.MaxImportBytes);
           if(upload == null || upload.Data == null) {
             WriteJsonResponse(e.Response, HttpStatusCode.BadRequest, false, "import_file_missing", "Import file is missing");
           } else {
@@ -404,7 +404,7 @@ namespace X13.WebUI {
         // Its own status, and the limit is not a secret: the caller has to know what to aim under.
         Log.Warning("WebUI import refused - {0}", ex.Message);
         WriteJsonResponse(e.Response, (HttpStatusCode)413, false, "import_too_large",
-          "Import file exceeds the limit of " + _config.MaxImportBytes.ToString() + " bytes");
+          "Import file exceeds the limit of " + WebUiConfig.MaxImportBytes.ToString() + " bytes");
       }
       catch(Exception ex) {
         // The detail stays in the server log, keyed by an id the caller can quote. ex.Message went

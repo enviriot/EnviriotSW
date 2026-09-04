@@ -201,7 +201,7 @@ namespace X13.WebUI {
       if(actions == null || actions.Count == 0) return;
 
       List<MenuItemDto> addItems = new List<MenuItemDto>();
-      foreach(KeyValuePair<string, AddActionEntry> action in actions.OrderBy(z => z.Key)) {
+      foreach(KeyValuePair<string, AddActionEntry> action in actions.OrderBy(z => z.Key, StringComparer.Ordinal)) {
         if(ResourceBusy(topic, actions, action.Key, action.Value.Action)) continue;
         addItems.Add(BuildAddItem(action.Key, action.Value.Action, action.Value.SourcePath));
       }

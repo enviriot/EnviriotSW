@@ -298,14 +298,14 @@ namespace X13 {
       if(oi == null || !oi.IsNumber) {
         return;
       }
-      var idx = (int)oi;
+      long idx = (long)(double)oi;   // not (int): ids run to 2^52 by design, and truncating one loses it
       lock(_timerLock) {
-        if(_firing != null && (long)_firing.idx == (long)idx) {
+        if(_firing != null && (long)_firing.idx == idx) {
           _firing.cancelled = true;
         }
         TimerContainer t = _timer, tp = null;
         while(t != null) {
-          if((long)t.idx == (long)idx) {
+          if((long)t.idx == idx) {
             t.cancelled = true;
             if(tp == null) {
               _timer = t.next;
@@ -319,6 +319,31 @@ namespace X13 {
         }
       }
     }
+    /// <summary>Faults from script timers and completions, throttled like the engine loop's.</summary>
+    /// <remarks>Static because JsExtLib is. These two used to log a bare message, unthrottled: a
+    /// script timer that throws is a timer that throws on every firing, which is the most likely
+    /// flood of the three and was the only one with no ceiling at all.</remarks>
+    private static readonly FaultThrottle _faults = new FaultThrottle();
+    /// <summary>The longest script callback since this was last asked, in milliseconds.</summary>
+    /// <remarks>Published as /$YS/Performance/Script. A timer callback is the one thing inside a
+    /// pass of the engine loop that a user writes, so it is the one that can make the loop miss
+    /// its beat - and it was the only part of a pass nothing could see. Taking it resets it, so
+    /// the number always describes the interval since the last publication and not all of time.</remarks>
+    internal static double TakeMaxCallbackMs() {
+      return Interlocked.Exchange(ref _maxCallbackMs, 0);
+    }
+    private static void Longest(long since) {
+      double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - since) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+      double was;
+      do {
+        was = Interlocked.CompareExchange(ref _maxCallbackMs, 0, 0);
+        if(ms <= was) {
+          return;
+        }
+      } while(Interlocked.CompareExchange(ref _maxCallbackMs, ms, was) != was);
+    }
+    private static double _maxCallbackMs;
+
 
     internal static void Tick() {
       Action act;
@@ -327,7 +352,7 @@ namespace X13 {
           act();
         }
         catch(Exception ex) {
-          Log.Warning("JsExtLib.Tick(completion) - {0}", ex.Message);
+          _faults.Report(false, "JsExtLib.Tick(completion)", null, ex);
         }
       }
 
@@ -346,10 +371,12 @@ namespace X13 {
           _firing = cur;
         }
         try {
+          long cbStart = System.Diagnostics.Stopwatch.GetTimestamp();
           cur.func.Call(cur.func.Context.ThisBind, new JSC.Arguments());
+          Longest(cbStart);
         }
         catch(Exception ex) {
-          Log.Warning("JsTimer.Tick - {0}", ex.Message);
+          _faults.Report(false, "JsTimer.Tick", null, ex);
         }
         finally {
           // clearing _firing, reading cancelled and rescheduling have to be one atomic step,
@@ -368,6 +395,7 @@ namespace X13 {
           }
         }
       }
+      _faults.Flush(now);
     }
     #endregion Tick
 

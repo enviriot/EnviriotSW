@@ -2,6 +2,7 @@
 using NiL.JS.Core;
 using NiL.JS.Extensions;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Xml.Linq;
@@ -26,32 +27,61 @@ namespace X13.Repository {
       }
       return true;
     }
+
+    /// <summary>Reads a document and applies it - all of it, or none of it.</summary>
+    /// <remarks>Two passes. The first reads the XML into a plan and checks every name the document
+    /// asks for; the second creates the topics. Nothing is created until the whole document has
+    /// been read, so a document that cannot be applied leaves the tree exactly as it was.
+    /// <para>It used to create as it walked. A name the tree cannot carry - a subscription
+    /// wildcard, say - threw when the walk reached it, and everything before that point stayed:
+    /// half a package installed from the catalog, half a file uploaded from the IDE, and no way
+    /// for the caller to learn how far it got.</para>
+    /// <para>What the first pass does NOT reject is a malformed "m" or "s" attribute: that is
+    /// still a warning and the node is created without it, as before. Whether a document with one
+    /// unreadable attribute should be refused whole is a separate decision, not this one.</para>
+    /// </remarks>
     public static void Import(TextReader reader, string path) {
       XDocument doc;
       using(var r = new System.Xml.XmlTextReader(reader)) {
         doc = XDocument.Load(r);
       }
-
       if(string.IsNullOrEmpty(path) && doc.Root.Attribute("path") != null) {
         path = doc.Root.Attribute("path").Value;
       }
-
-      Import(doc.Root, null, path);
-    }
-    private static void Import(XElement xElement, Topic owner, string path) {
-      if(xElement == null || ((xElement.Attribute("n") == null || owner == null) && path == null)) {
-        return;
+      if(string.IsNullOrEmpty(path)) {
+        return;   // nothing to address the document at
       }
+      Topic.CheckPath(path, "Import");
+      Topic existing;
+      Topic.root.Exist(path, out existing);
+      Node plan = Prepare(doc.Root, existing, null);
+      if(plan != null) {   // null means the document is not newer than what is already there
+        Apply(plan, null, path);
+      }
+    }
+
+    /// <summary>One node the document asks for: read and checked, not yet created.</summary>
+    private sealed class Node {
+      public string Name;          // null for the root, which is addressed by path
+      public JSValue State;
+      public JSValue Manifest;
+      public readonly List<Node> Children = new List<Node>();
+    }
+
+    /// <summary>Reads one element and its subtree into a plan. Null when the document skips it.</summary>
+    /// <param name="existing">The topic this element would land on, when there is one already -
+    /// needed only for the version guard, and null all the way down for a subtree being created.</param>
+    private static Node Prepare(XElement x, Topic existing, string name) {
       Version ver;
-      Topic cur = null;
       bool setVersion;
-      if(xElement.Attribute("ver") != null && Version.TryParse(xElement.Attribute("ver").Value, out ver)) {
-        if(owner == null ? Topic.root.Exist(path, out cur) : owner.Exist(xElement.Attribute("n").Value, out cur)) {
+      if(x.Attribute("ver") != null && Version.TryParse(x.Attribute("ver").Value, out ver)) {
+        if(existing != null) {
           Version oldVer;
-          var ov_js = cur.GetField("version");
+          var ov_js = existing.GetField("version");
           string ov_s;
-          if(ov_js.Is<string>() && (ov_s = ov_js.Value as string) != null && ov_s.StartsWith("¤VR") && Version.TryParse(ov_s.Substring(3), out oldVer) && oldVer >= ver) {
-            return; // don't import older version
+          if(ov_js.Is<string>() && (ov_s = ov_js.Value as string) != null && ov_s.StartsWith("¤VR")
+              && Version.TryParse(ov_s.Substring(3), out oldVer) && oldVer >= ver) {
+            return null;   // don't import older version
           }
         }
         setVersion = true;
@@ -59,40 +89,51 @@ namespace X13.Repository {
         ver = default(Version);
         setVersion = false;
       }
-      JSValue state = null, manifest = null;
-      if(xElement.Attribute("m") != null) {
+      Node node = new Node { Name = name };
+      if(x.Attribute("m") != null) {
         try {
-          manifest = JsLib.ParseJson(xElement.Attribute("m").Value);
+          node.Manifest = JsLib.ParseJson(x.Attribute("m").Value);
         }
         catch(Exception ex) {
-          Log.Warning("Import({0}).m - {1}", xElement.ToString(), ex.Message);
+          Log.Warning("Import({0}).m - {1}", x.ToString(), ex.Message);
         }
       }
       if(setVersion) {
-        manifest = JsLib.SetField(manifest, "version", "¤VR" + ver.ToString());
+        node.Manifest = JsLib.SetField(node.Manifest, "version", "¤VR" + ver.ToString());
       }
-
-      if(xElement.Attribute("s") != null) {
+      if(x.Attribute("s") != null) {
         try {
-          state = JsLib.ParseJson(xElement.Attribute("s").Value);
+          node.State = JsLib.ParseJson(x.Attribute("s").Value);
         }
         catch(Exception ex) {
-          Log.Warning("Import({0}).s - {1}", xElement.ToString(), ex.Message);
+          Log.Warning("Import({0}).s - {1}", x.ToString(), ex.Message);
         }
       }
-
-
-      if(owner == null) {
-        cur = Topic.Declare(Topic.root, path);
-      } else {
-        cur = Topic.Declare(owner, xElement.Attribute("n").Value);
+      foreach(var xNext in x.Elements("i")) {
+        XAttribute n = xNext.Attribute("n");
+        if(n == null) {
+          continue;   // not addressable, and never was
+        }
+        Topic.CheckName(n.Value, "Import");
+        Topic child = null;
+        if(existing != null) {
+          existing.Exist(n.Value, out child);
+        }
+        Node next = Prepare(xNext, child, n.Value);
+        if(next != null) {
+          node.Children.Add(next);
+        }
       }
-      Topic.Fill(cur, state, manifest, null);
-      foreach(var xNext in xElement.Elements("i")) {
-        Import(xNext, cur, null);
-      }
+      return node;
     }
 
+    private static void Apply(Node node, Topic owner, string path) {
+      Topic cur = owner == null ? Topic.Declare(Topic.root, path) : Topic.Declare(owner, node.Name);
+      Topic.Fill(cur, node.State, node.Manifest, null);
+      for(int i = 0; i < node.Children.Count; i++) {
+        Apply(node.Children[i], cur, null);
+      }
+    }
     /// <summary>Writes the tree to a file, replacing it only once the new one is complete.</summary>
     /// <remarks>This was File.Create straight over the target, which truncates it before a single
     /// byte of the new document is written - so an export that failed part way, or a power cut

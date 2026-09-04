@@ -121,6 +121,36 @@ namespace X13 {
       // a path of separators only (".", "..") splits into zero segments and leaves c unset
       return c ?? JSC.JSValue.NotExists;
     }
+
+    /// <summary>Whether a write of <paramref name="b"/> over <paramref name="a"/> changed anything.</summary>
+    /// <remarks>JSValue.Equals is the engine's own "===": primitives by value - strings by
+    /// CompareOrdinal, and an Integer against the equal Double - undefined, NotExists and
+    /// NotExistsInObject as one state, and Object, Function, Date and Symbol by REFERENCE.
+    /// <para>That last one is the point rather than a shortcoming: an object is never walked, so
+    /// the cost of this stays constant however large a manifest grows, and the worst case is the
+    /// ordinal compare of a long string. The price is that an equal-looking but distinct object
+    /// still counts as a change - which is exactly what the ReferenceEquals this replaces did, so
+    /// nothing that used to be reported has stopped being reported.</para>
+    /// <para>False on any doubt, and the catch is there for that: StrictEqual.Check throws
+    /// NotImplementedException for value types it does not enumerate (Property,
+    /// SpreadOperatorResult). The two mistakes are not symmetric. An event wrongly suppressed is a
+    /// plugin that silently did not rebind - MQTT holding a stale uri, Logram a stale block - and
+    /// nothing in the log points at it. An event wrongly published costs one extra rebind. So
+    /// suppress only when equality is proved.</para></remarks>
+    public static bool SameValue(JSC.JSValue a, JSC.JSValue b) {
+      if(object.ReferenceEquals(a, b)) {
+        return true;
+      }
+      if(a == null || b == null) {
+        return false;
+      }
+      try {
+        return a.Equals(b);
+      }
+      catch(Exception) {
+        return false;
+      }
+    }
     public static JSC.JSValue Clone(JSC.JSValue org) {
       return Clone(org, null);
     }
@@ -243,7 +273,7 @@ namespace X13 {
         return;
       }
       if(l == null) {
-        l = new SortedList<string, JSC.JSValue>();
+        l = new SortedList<string, JSC.JSValue>(StringComparer.Ordinal);
       }
       foreach(var kv in o) {
         if(!l.ContainsKey(kv.Key)) {

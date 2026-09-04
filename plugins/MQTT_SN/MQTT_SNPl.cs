@@ -135,57 +135,34 @@ namespace X13.Periphery {
 
     public bool Statistic { get { return _statistic; } }
     #region RPC
-    /// <summary>Every RPC below takes exactly one argument: the path of the topic to act on.</summary>
-    /// <remarks>The guard was written out five times, byte for byte. AsString folds four of the
-    /// original five conditions into itself - it returns the default both for a null element and
-    /// for anything that is not a string - so only the arity check is left beside it.</remarks>
-    private static bool TrySinglePath(JSC.JSValue[] args, out string path) {
-      path = args != null && args.Length == 1 ? args[0].AsString(null) : null;
-      return !string.IsNullOrEmpty(path);
-    }
-    private void SendDisconnectRpc(JSC.JSValue[] obj) {
-      if(!TrySinglePath(obj, out string path)) {
-        return;
-      }
-      var d = _devs.FirstOrDefault(z => z.owner.path == path);
+    private void SendDisconnectRpc(Topic t, JSC.JSValue arg) {
+      var d = _devs.FirstOrDefault(z => z.owner == t);
       if(d != null) {
         d.Send(new MsDisconnect());
         d.Disconnect();
       }
     }
-    private void PlcBuildRpc(JSC.JSValue[] obj) {
-      if(!TrySinglePath(obj, out string path)) {
-        return;
-      }
-      var d = _plcs.FirstOrDefault(z => z.Path == path);
+    private void PlcBuildRpc(Topic t, JSC.JSValue arg) {
+      var d = _plcs.FirstOrDefault(z => z.Path == t.path);
       if(d != null) {
         d.Build();
       }
     }
-    private void PlcStartRpc(JSC.JSValue[] obj) {
-      if(!TrySinglePath(obj, out string path)) {
-        return;
-      }
-      var d = _plcs.FirstOrDefault(z => z.Path == path);
+    private void PlcStartRpc(Topic t, JSC.JSValue arg) {
+      var d = _plcs.FirstOrDefault(z => z.Path == t.path);
       if(d != null) {
         d.StartPlc();
       }
     }
-    private void PlcStopRpc(JSC.JSValue[] obj) {
-      if(!TrySinglePath(obj, out string path)) {
-        return;
-      }
-      var d = _plcs.FirstOrDefault(z => z.Path == path);
+    private void PlcStopRpc(Topic t, JSC.JSValue arg) {
+      var d = _plcs.FirstOrDefault(z => z.Path == t.path);
       if(d != null) {
         d.StopPlc();
       }
     }
-    private void PlcRunRpc(JSC.JSValue[] obj) {
-      if(!TrySinglePath(obj, out string path)) {
-        return;
-      }
-      var plc = _plcs.FirstOrDefault(z => z.Path == path);
-      var d = _devs.FirstOrDefault(z => path.StartsWith(z.owner.path+"/"));
+    private void PlcRunRpc(Topic t, JSC.JSValue arg) {
+      var plc = _plcs.FirstOrDefault(z => z.Path == t.path);
+      var d = _devs.FirstOrDefault(z => t.path.StartsWith(z.owner.path + "/"));
       if(plc != null) {
         plc.Run(d);
       }
@@ -199,11 +176,11 @@ namespace X13.Periphery {
       }
     }
 
-    private void RefreshPortsRpc(JSC.JSValue[] obj) {
+    private void RefreshPortsRpc(Topic t, JSC.JSValue arg) {
       MsGSerial.StartScan();
     }
 
-    private void RefreshNICRpc(JSC.JSValue[] obj) {
+    private void RefreshNICRpc(Topic t, JSC.JSValue arg) {
       var ug = _gates.OfType<MsGUdp>().FirstOrDefault();
       if(ug!=null) {
         ug.RefreshNIC();

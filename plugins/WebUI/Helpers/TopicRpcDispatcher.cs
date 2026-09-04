@@ -43,7 +43,7 @@ namespace X13.WebUI {
       }
 
       string name = args.AsString("name", null);
-      if(!IsValidChildName(name)) {
+      if(!Topic.IsValidName(name)) {
         return ViewOpResult.Error("rename_name_invalid", "Invalid topic name: " + (name ?? "<null>"));
       }
       if(string.Equals(topic.name, name, StringComparison.Ordinal)) return ViewOpResult.Success();
@@ -110,10 +110,10 @@ namespace X13.WebUI {
     /// "Action" can be reached this way, so a client cannot invoke a registered handler that was
     /// never offered to it. What the handler then does is its own business - this knows nothing
     /// about any plugin, which is the whole point of routing through a declared name.</para>
-    /// <para>args is appended only when the caller supplied some. Handlers written against the
-    /// original one-argument shape check their arity - MQTT_SN's PlcBuildRpc and friends return
-    /// silently on anything but Length == 1 - so passing an unasked-for second element would make
-    /// those actions stop working while still reporting success.</para></remarks>
+    /// <para>The topic goes beside the argument, not inside it. It used to be stringified to its
+    /// path as the first of an array, with args appended after - and every handler that checked
+    /// its arity then refused the call the moment an argument was supplied, doing nothing while
+    /// the client was told it had worked.</para></remarks>
     internal static ViewOpResult ExecuteAction(Topic topic, string actionName, JSC.JSValue args) {
       if(topic == null) {
         return ViewOpResult.Error("action_target_invalid", "Action target is invalid");
@@ -122,12 +122,8 @@ namespace X13.WebUI {
       if(string.IsNullOrWhiteSpace(actionName) || !MenuBuilder.ResolveActionDescriptor(topic, actionName, out action)) {
         return ViewOpResult.Error("action_not_found", "Action not found: " + (actionName ?? "<null>"));
       }
-      JSC.JSValue[] rpcArgs = args != null && args.Defined
-        ? new JSC.JSValue[] { new JSL.String(topic.path), args }
-        : new JSC.JSValue[] { new JSL.String(topic.path) };
-      return PendingRpc.Begin(actionName, rpcArgs);
+      return PendingRpc.Begin(actionName, topic, args);
     }
-
     private static ViewOpResult ExecuteAdd(Topic topic, string key, JSC.JSValue args, Topic prim) {
       if(topic == null) {
         return ViewOpResult.Error("add_target_invalid", "Add target is invalid");
@@ -144,7 +140,7 @@ namespace X13.WebUI {
 
       bool willful = action.AsBool("willful", false);
       string name = willful ? args.AsString("name", null) : key;
-      if(!IsValidChildName(name)) {
+      if(!Topic.IsValidName(name)) {
         return ViewOpResult.Error(willful ? "add_name_required" : "add_name_invalid", "Invalid child name: " + (name ?? "<null>"));
       }
       if(topic.Get(name, false) != null) {
@@ -160,11 +156,6 @@ namespace X13.WebUI {
         manifest.IsObject() ? JsLib.Clone(manifest) : null,
         prim);
       return ViewOpResult.Success();
-    }
-
-    private static bool IsValidChildName(string name) {
-      if(string.IsNullOrWhiteSpace(name)) return false;
-      return name.IndexOf('/') < 0 && name.IndexOf('#') < 0;
     }
 
     private static bool IsDescendantOf(Topic candidate, Topic ancestor) {
