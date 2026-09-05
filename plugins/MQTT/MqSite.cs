@@ -37,7 +37,7 @@ namespace X13.MQTT {
       _mask = SubRec.SubMask.Value;
       for(int i = 0; i < sl.Length; i++) {
         if(sl[i] == "+") {
-          _mask |= SubRec.SubMask.Chldren;
+          _mask |= SubRec.SubMask.Children;
           break;
         }
         if(sl[i] == "#") {
@@ -52,8 +52,10 @@ namespace X13.MQTT {
       }
       var act = this.Owner.GetField("Action");
       
-      JSC.JSValue txt;
-      if(act==null || !act.Any(z => z.Value.ValueType==JSC.JSValueType.Object && (txt=z.Value["name"]).ValueType == JSC.JSValueType.String && (txt.Value as string) == "MQTT.Reconnect")) {
+      // JsLib.IsObject, not ValueType==Object: the latter is TRUE for JSValue.Null (the null sits
+      // in Value, not in ValueType), so an Action entry that is literally null passed the guard
+      // and the z.Value["name"] below threw a TypeError, taking the whole registration with it.
+      if(act==null || !act.Any(z => z.Value.IsObject() && z.Value.AsString("name", null) == "MQTT.Reconnect")) {
         int i;
         JSL.Array act_n;
         if(act==null) {
@@ -76,6 +78,8 @@ namespace X13.MQTT {
     private bool ReadFlag(string path, bool def) {
       bool rv;
       var v1 = this.Owner.GetField(path);
+      // Deliberately a raw ValueType test, NOT AsBool(def): the else branch SEEDS the field with
+      // the default, and a reader with a default cannot tell "not set" from "set to the default".
       if(v1.ValueType==JSC.JSValueType.Boolean) {
          rv = (bool)v1;
       } else {
@@ -123,19 +127,19 @@ namespace X13.MQTT {
       }
     }
 
-    private void Changed(Perform p, SubRec sr) {
+    private void Changed(TopicEvent p, SubRec sr) {
       if(Client == null || Client.status != MqClient.Status.Connected) {
         Disconnected();
         Log.Warning("{0}.Changed({1}) - Client OFFLINE", Owner.path, p.ToString());
         return;
       }
-      if((p.Art == Perform.E_Art.subscribe || ((p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.create) && p.Prim != Owner)) && !p.src.CheckAttribute(Topic.Attribute.Internal)) {
-        var rp = remotePrefix + p.src.path.Substring(Owner.path.Length);
-        var payload = JsLib.Stringify(p.src.GetState() ?? JSC.JSValue.Null);
+      if((p.Kind == EventKind.Snapshot || ((p.Kind == EventKind.StateChanged || p.Kind == EventKind.Created) && p.Author != Owner)) && !p.Source.CheckAttribute(Topic.Attribute.Internal)) {
+        var rp = remotePrefix + p.Source.path.Substring(Owner.path.Length);
+        var payload = JsLib.Stringify(p.Source.GetState() ?? JSC.JSValue.Null);
         if(!string.IsNullOrEmpty(rp) && payload != null) {
           Client.Send(new MqPublish(rp, payload) { Retained = _retainedEn });
         }
-      } else if(p.Art == Perform.E_Art.subAck && _subEn) {
+      } else if(p.Kind == EventKind.Ready && _subEn) {
         Client.Subscribe(this);
       }
     }

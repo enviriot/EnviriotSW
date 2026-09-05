@@ -16,13 +16,46 @@ namespace X13.Periphery {
   [ExportMetadata("priority", 7)]
   [ExportMetadata("name", "MQTT_SN")]
   public class MQTT_SNPl : IPlugModul {
+    private const string OWNER_PATH = "/$YS/MQTT-SN";
+    private const int HEX_PREVIEW = 32;  // bytes of a frame that reach a log line
+    private const Topic.Attribute CfgAttr = Topic.Attribute.Required | Topic.Attribute.Config;
+    private const Topic.Attribute DbAttr = Topic.Attribute.Required | Topic.Attribute.DB;
+#if DEBUG
+    private const bool VerboseDefault = true;
+#else
+    private const bool VerboseDefault = false;
+#endif
+
     private Topic _owner;
-    private SubRec _verboserSR;
-    private Topic _stat;
+    private SubRec[] _cfg;
     private Random _rand;
+    private bool _statistic;
+
+    /// <summary>Flags belonging to DevicePLC, TWI and the gates, seeded here for all of them.</summary>
+    /// <remarks>Static because the topics are: /$YS/DevicePLC/verbose is one setting for every PLC
+    /// device, not one per device, yet DevicePLC and TWI are constructed per device and were each
+    /// seeding it in their own constructor - so the same topic was written as many times as there
+    /// were devices, and with EnsureCfg that would have been one subscription per device with
+    /// nothing to dispose them. MEF gives exactly one MQTT_SNPl (CreationPolicy.Shared), which is
+    /// what makes a static the same thing as an instance field here, minus threading a plugin
+    /// reference through two constructors for a diagnostic flag.
+    /// <para>gwRadius is the same story: MsGSerial and MsGUdp read /$YS/MQTT-SN/radius with
+    /// byte-for-byte identical code, and neither seeded it - the topic existed only if someone
+    /// created it by hand.</para></remarks>
+    internal static bool verbosePlc, verboseTwi;
+    internal static byte gwRadius;
 
     internal List<IMsGate> _gates;
     internal List<MsDevice> _devs;
+
+    /// <summary>The manifest field naming a topic as an MQTT-SN device, and its model.</summary>
+    /// <remarks>Was "cctor.MqsDev" while a registry called CCtor read that field on the core's
+    /// behalf. The registry is gone, so the prefix named nothing - and this was the only entry in
+    /// PredefinedTopics that sat outside this plugin's own namespace. The WIRE is unchanged: that
+    /// table pairs a ushort with a local field path, and only the string moved. Old trees are not
+    /// read; MQTT_SNPl.Init complains instead.</remarks>
+    internal const string FLD_MODEL = "MQTT-SN.model";
+    private SubRec _devSub;
     internal List<DevicePLC> _plcs;
 
     public MQTT_SNPl() {
@@ -39,30 +72,52 @@ namespace X13.Periphery {
       RPC.Register("MQTT_SN.PLC.Run", PlcRunRpc);
       RPC.Register("MQTT_SN.PLC.Start", PlcStartRpc);
       RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
-      RPC.Register("MqsDev", MqsDevCctor);
+      // Subscribed here rather than in Start, where this plugin's gates are opened: it replaces a
+      // CCtor.Register that stood on this line, and registration happened at Init too - so the
+      // first delivery still lands on the first tick, as it always did. SubMask.All also brings a
+      // Snapshot of what is already in the tree, which is what PersistentStorage (priority 2) has
+      // put there by the time this plugin (priority 7) is reached.
+      _devSub = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, FLD_MODEL, MqsDevSub);
       RPC.Register("MQTT_SN.RefreshPorts", RefreshPortsRpc);
       RPC.Register("MQTT_SN.RefreshNIC", RefreshNICRpc);
     }
 
+    /// <summary>Every setting this plugin owns, declared before the first gate exists.</summary>
+    /// <remarks>The order is load-bearing: both gates read <see cref="gwRadius"/> in their
+    /// constructors, so it has to hold its configured value by the time they are built. EnsureCfg
+    /// applies before it returns for exactly this reason - the subscription alone would not have
+    /// run yet, since Subscribe only queues a TopicEvent for the next Repo tick.
+    /// <para>radius is clamped in the apply rather than at the read sites: 1..3 is the range the
+    /// protocol defines, and anything else means "no radius", which is what both gates already
+    /// did with the raw value.</para></remarks>
     public void Start() {
-      _owner = Topic.root.Get("/$YS/MQTT-SN");
-      var verboseT = _owner.Get("verbose");
-      if(verboseT.GetState().ValueType != JSC.JSValueType.Boolean) {
-        verboseT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
-#if DEBUG
-        verboseT.SetState(true);
-#else
-        verboseT.SetState(false);
-#endif
-      }
-      _verboserSR = verboseT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, (p, s) => verbose = (_verboserSR.setTopic != null && _verboserSR.setTopic.GetState().As<bool>()));
-      _stat = _owner.Get("statistic");
-      if(_stat.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _stat.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
-        _stat.SetState(false);
-      }
+      _cfg = new SubRec[] {
+        JsExtLib.EnsureCfg(Owner, "verbose", CfgAttr, v => verbose = v, VerboseDefault),
+        JsExtLib.EnsureCfg(Owner, "statistic", CfgAttr, v => _statistic = v, false),
+        JsExtLib.EnsureCfg(Owner, "radius", CfgAttr, v => gwRadius = (byte)(v >= 1 && v <= 3 ? v : 0), 1),
+        JsExtLib.EnsureCfg(Topic.root.Get("/$YS/DevicePLC", true), "verbose", DbAttr, v => verbosePlc = v, VerboseDefault),
+        JsExtLib.EnsureCfg(Topic.root.Get("/$YS/TWI", true), "verbose", DbAttr, v => verboseTwi = v, VerboseDefault),
+      };
       _gates.Add(new MsGUdp(this));
       MsGSerial.Init(this);
+      WarnAboutOldFields();
+    }
+
+    /// <summary>Says so, loudly, when the tree still carries the pre-rename field name.</summary>
+    /// <remarks>Reading "cctor.MqsDev" as well would be a compatibility prop that never comes out
+    /// again; saying nothing would mean every device quietly failing to appear. So neither - the
+    /// count goes in the log once, at the only moment anyone is looking. In Start rather than Init
+    /// because the tree has to be loaded for the walk to see anything.</remarks>
+    private static void WarnAboutOldFields() {
+      int n = 0;
+      foreach(Topic t in Topic.root.all) {
+        if(t.GetField("cctor.MqsDev").Defined) {
+          n++;
+        }
+      }
+      if(n > 0) {
+        Log.Error("{0} topics still carry cctor.MqsDev - those devices will NOT load until Output/bin_a/Migrate has been run", n);
+      }
     }
 
     public void Tick() {
@@ -76,6 +131,17 @@ namespace X13.Periphery {
     }
 
     public void Stop() {
+      // Acquired in Init, so released here: Stop undoes whatever was reached, and Init counts.
+      if(_devSub != null) {
+        _devSub.Dispose();
+        _devSub = null;
+      }
+      // Released here because EnsureCfg hands ownership to the caller. The hand-rolled
+      // subscription this replaced was never released at all.
+      if(_cfg != null) {
+        foreach(var s in _cfg) s.Dispose();
+        _cfg = null;
+      }
       foreach(var g in _gates.ToArray()) {
         try {
           g.Stop();
@@ -85,97 +151,82 @@ namespace X13.Periphery {
       }
     }
 
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/MQTT-SN", true);
-        if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
-          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-          en.SetState(true);
+        // Is<bool>, NOT AsBool/AsString: this decides whether the config topic has to be CREATED
+        // and seeded. A reader with a default cannot tell "not set yet" from "set to the
+        // default", so the topic would never be created.
+        if(!Owner.GetState().Is<bool>()) {
+          Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          Owner.SetState(true);
           return true;
         }
-        return (bool)en.GetState();
-      }
-      set {
-        var en = Topic.root.Get("/$YS/MQTT-SN", true);
-        en.SetState(value);
+        return (bool)Owner.GetState();
       }
     }
     #endregion IPlugModul Members
 
     public bool verbose;
 
-    public bool Statistic {
-      get {
-        return _stat != null && (bool)_stat.GetState();
-      }
-    }
+    public bool Statistic { get { return _statistic; } }
     #region RPC
-    private void SendDisconnectRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
-        return;
-      }
-      var d = _devs.FirstOrDefault(z => z.owner.path == path);
+    private void SendDisconnectRpc(Topic t, JSC.JSValue arg) {
+      var d = _devs.FirstOrDefault(z => z.owner == t);
       if(d != null) {
         d.Send(new MsDisconnect());
         d.Disconnect();
       }
     }
-    private void PlcBuildRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
-        return;
-      }
-      var d = _plcs.FirstOrDefault(z => z.Path == path);
+    private void PlcBuildRpc(Topic t, JSC.JSValue arg) {
+      var d = _plcs.FirstOrDefault(z => z.Path == t.path);
       if(d != null) {
         d.Build();
       }
     }
-    private void PlcStartRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
-        return;
-      }
-      var d = _plcs.FirstOrDefault(z => z.Path == path);
+    private void PlcStartRpc(Topic t, JSC.JSValue arg) {
+      var d = _plcs.FirstOrDefault(z => z.Path == t.path);
       if(d != null) {
         d.StartPlc();
       }
     }
-    private void PlcStopRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
-        return;
-      }
-      var d = _plcs.FirstOrDefault(z => z.Path == path);
+    private void PlcStopRpc(Topic t, JSC.JSValue arg) {
+      var d = _plcs.FirstOrDefault(z => z.Path == t.path);
       if(d != null) {
         d.StopPlc();
       }
     }
-    private void PlcRunRpc(JSC.JSValue[] obj) {
-      string path;
-      if(obj == null || obj.Length != 1 || obj[0] == null || obj[0].ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(path = obj[0].Value as string)) {
-        return;
-      }
-      var plc = _plcs.FirstOrDefault(z => z.Path == path);
-      var d = _devs.FirstOrDefault(z => path.StartsWith(z.owner.path+"/"));
+    private void PlcRunRpc(Topic t, JSC.JSValue arg) {
+      var plc = _plcs.FirstOrDefault(z => z.Path == t.path);
+      var d = _devs.FirstOrDefault(z => t.path.StartsWith(z.owner.path + "/"));
       if(plc != null) {
         plc.Run(d);
       }
     }
 
-    private void MqsDevCctor(Topic t, Perform.E_Art a) {
+    /// <summary>Gives a topic that carries MQTT-SN.model its device object.</summary>
+    /// <remarks>Matched by name and not by topic, which is how the CCtor handler this replaces did
+    /// it: a device that was renamed keeps the object it already had.</remarks>
+    private void MqsDevSub(TopicEvent p, SubRec sr) {
+      if(p.Kind != EventKind.Created && p.Kind != EventKind.FieldChanged && p.Kind != EventKind.Snapshot) {
+        return;
+      }
+      Topic t = p.Source;
+      if(!t.GetField(FLD_MODEL).Defined) {
+        return;
+      }
       var dev = _devs.FirstOrDefault(z => z.name == t.name);
       if(dev == null) {
-        dev = new MsDevice(this, t);
-        _devs.Add(dev);
+        _devs.Add(new MsDevice(this, t));
       }
     }
 
-    private void RefreshPortsRpc(JSC.JSValue[] obj) {
+    private void RefreshPortsRpc(Topic t, JSC.JSValue arg) {
       MsGSerial.StartScan();
     }
 
-    private void RefreshNICRpc(JSC.JSValue[] obj) {
+    private void RefreshNICRpc(Topic t, JSC.JSValue arg) {
       var ug = _gates.OfType<MsGUdp>().FirstOrDefault();
       if(ug!=null) {
         ug.RefreshNIC();
@@ -185,10 +236,13 @@ namespace X13.Periphery {
     #endregion RPC
 
     internal bool ProcessInPacket(IMsGate gate, byte[] addr, byte[] buf, int start, int end) {
-      var msg = MsMessage.Parse(buf, start, end);
-      if(msg == null) {
+      MsMessage msg;
+      MsParseError perr;
+      if(!MsMessage.TryParse(buf, start, end, out msg, out perr)) {
+        // The reason, not just "bad message": an unknown type, a truncated frame and a body that
+        // contradicts its own header used to arrive here as the same null.
         if(verbose) {
-          Log.Warning("r {0}: {1}  bad message", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start));
+          Log.Warning("r {0}: {1}  {2}", gate.Addr2If(addr), MsMessage.HexPreview(buf, start, end - start, HEX_PREVIEW), perr.ToString());
         }
         return false;
       }
@@ -196,7 +250,7 @@ namespace X13.Periphery {
         return true;
       }
       if(verbose) {
-        Log.Debug("r {0}: {1}  {2}", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start), msg.ToString());
+        Log.Debug("r {0}: {1}  {2}", gate.Addr2If(addr), MsMessage.HexPreview(buf, start, end - start, HEX_PREVIEW), msg.ToString());
       }
       if(msg.MsgTyp == MsMessageType.SEARCHGW) {
         if((msg as MsSearchGW).radius == 0 || (msg as MsSearchGW).radius == gate.gwRadius) {
@@ -235,7 +289,7 @@ namespace X13.Periphery {
               ackAddr.AddRange(resp);
             } else {
               if(verbose) {
-                Log.Warning("r {0}: {1}  DhcpReq.hLen is too high", gate.Addr2If(addr), BitConverter.ToString(buf, start, end - start));
+                Log.Warning("r {0}: {1}  DhcpReq.hLen is too high", gate.Addr2If(addr), MsMessage.HexPreview(buf, start, end - start, HEX_PREVIEW));
               }
               ackAddr = null;
               break;
@@ -251,12 +305,12 @@ namespace X13.Periphery {
         var cm = msg as MsConnect;
         MsDevice dev = _devs.FirstOrDefault(z => z.owner != null && z.owner.name == cm.ClientId);
         if(dev == null) {
-          var dt = Topic.root.Get("/dev/" + cm.ClientId, true, _owner);
+          var dt = Topic.root.Get("/dev/" + cm.ClientId, true, Owner);
           dev = new MsDevice(this, dt);
           _devs.Add(dev);
           dt.SetAttribute(Topic.Attribute.Readonly);
-          dt.SetField("editor", "MsStatus", _owner);
-          dt.SetField("cctor.MqsDev", string.Empty, _owner);
+          dt.SetField("editor", "MsStatus", Owner);
+          dt.SetField(FLD_MODEL, string.Empty, Owner);
         }
         dev._gate = gate;
         dev.addr = addr;

@@ -12,6 +12,9 @@ using System.Text;
 
 namespace X13 {
   public partial class HAServer : ServiceBase {
+    /// <summary>The name the service is registered under in the SCM. Single source of truth.</summary>
+    internal const string SERVICE_NAME = "Enviriot";
+
     public static void InstallService(string name) {
       string[] args_i=new string[] { name, "/LogFile=..\\log\\install.log" };
       ManagedInstallerClass.InstallHelper(args_i);
@@ -38,11 +41,20 @@ namespace X13 {
       });
 
       // Configure service recovery property.
-      ServiceRecoveryProperty.ChangeRecoveryProperty("Enviriot", FailureActions, 60 * 60 * 24, "", false, "");
+      ServiceRecoveryProperty.ChangeRecoveryProperty(SERVICE_NAME, FailureActions, 60 * 60 * 24, "", false, "");
       Log.Info("The service recovery property is modified successfully");
-      ServiceController svc =  new ServiceController("Enviriot");
-      svc.Start();
-      svc.WaitForStatus(ServiceControllerStatus.Running, new TimeSpan(0, 0, 3));
+      using(ServiceController svc = new ServiceController(SERVICE_NAME)) {
+        svc.Start();
+        try {
+          svc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(30));
+          Log.Info("The {0} service is running", SERVICE_NAME);
+        }
+        catch(System.ServiceProcess.TimeoutException) {
+          // Startup imports the config and PersistentStorage copies the whole database to a
+          // backup first, so a slow start is not necessarily a failed one.
+          Log.Warning("The {0} service did not report Running within 30 s, see the log", SERVICE_NAME);
+        }
+      }
     }
     public static void UninstallService(string name) {
       string[] args_i=new string[] { "/u", name, "/LogFile=..\\log\\uninstall.log" };
@@ -55,20 +67,33 @@ namespace X13 {
                 new HAServer(cfgPath) 
             };
       ServiceBase.Run(ServicesToRun);
-      if(Programm.IsLinux) {
+      if(Program.IsLinux) {
         System.Threading.Thread.Sleep(5000);   // for mono-service 
       }
 
     }
 
-    private Programm _instance;
+    private Program _instance;
     public HAServer(string cfgPath) {
       InitializeComponent();
-      _instance=new Programm(cfgPath);
+      _instance=new Program(cfgPath);
     }
 
+    /// <summary>Starts the server and tells the SCM the truth about how it went.</summary>
+    /// <remarks>Start() now blocks until the plugins are up or have failed, so the SCM is asked
+    /// for the time that takes - without RequestAdditionalTime it gives roughly 30 s, and a
+    /// PersistentStorage that copies a large database to a backup first can want more.
+    /// <para>ExitCode before Stop() is what keeps the recovery actions configured in
+    /// InstallService working. They used to fire because the process died outright under
+    /// Environment.Exit(1) - the SCM read that as a crash. A service that simply stops is not a
+    /// failed one; a service that stops with a non-zero exit code is.</para></remarks>
     protected override void OnStart(string[] args) {
-      _instance.Start();
+      RequestAdditionalTime(Program.StartupTimeoutMs + 15000);
+      if(!_instance.Start()) {
+        Log.Error("The {0} service failed to start", SERVICE_NAME);
+        ExitCode = 1;
+        Stop();
+      }
     }
 
     protected override void OnStop() {

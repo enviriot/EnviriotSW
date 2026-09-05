@@ -87,10 +87,17 @@ class X13_wheather extends BaseComponent {
     }
   }
   reqArchive() {
+    if (!wsBond.apiToken) {
+      // The handshake has not landed yet, so there is no token to send. Retry shortly rather
+      // than waiting out the hourly timer this method normally re-arms.
+      this.timer = setTimeout(this.reqArchive.bind(this), 500);
+      return;
+    }
     let now = new Date();
     this.timer = setTimeout(this.reqArchive.bind(this), 3600000 - ((now.getMinutes() * 60 + now.getSeconds()) * 1000 + now.getMilliseconds()));
     now = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 30, 0);
-    let req = "/api/arch04?p=" + encodeURIComponent(JSON.stringify(this.t_path))
+    let req = "/api/archivist?t=" + encodeURIComponent(wsBond.apiToken)
+      + "&p=" + encodeURIComponent(JSON.stringify(this.t_path))
       + "&b=" + encodeURIComponent(JSON.stringify(new Date(now.getTime() - 49 * 60 * 60 * 1000)))
       + "&e=" + encodeURIComponent(JSON.stringify(now))
       + "&c=49";

@@ -1,4 +1,4 @@
-﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -28,7 +28,7 @@ namespace X13.Logram {
     }
 
     public void ManifestChanged() {
-      string ss = JsLib.OfString(_owner.GetField("cctor.LoBind"), null);
+      string ss = _owner.GetField(LogramPl.FLD_BIND).AsString(null);
       Topic st;
       LoVariable sv;
       if(ss!=null && _owner.Exist(ss, out st)) {
@@ -92,7 +92,7 @@ namespace X13.Logram {
           if(( bl = _links[i] as LoBlock )!=null) {
             bl.DeletePin(this);
           } else {
-            _links[i].Owner.SetField("cctor.LoBind", null, _owner);
+            _links[i].Owner.SetField(LogramPl.FLD_BIND, null, _owner);
           }
         }
         _links.Clear();
@@ -107,7 +107,22 @@ namespace X13.Logram {
         if(_src!=null) {
           _layer = _src.Layer;
           Route = _src.Route;
-          if(_owner.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
+          // Only a variable fed by another VARIABLE loses its persistence: its value is
+          // recomputed from that source on every tick, so storing it just means writing a value
+          // that gets overwritten right after load. A block's output pin also has a source - the
+          // block itself, see LoBlock.GetPin - but nothing recomputes it from upstream, the block
+          // IS where the value comes from. Clearing it there made the DB flag unholdable on any
+          // output, which silently disabled a documented feature: Counter's own constructor in
+          // base.xst tests the very same bit ("if((attr&12)!=4) this.SetState(\"Q\", 0)") so a
+          // counter marked DB keeps its count across a restart.
+          // A RING of variables is the third case, and it is not a derivation either: dragging a
+          // topic onto a diagram deliberately binds both ways (LogramViewProvider.ExecuteAddVariable
+          // back-fills the dragged topic's own Logram.bind to point at the new variable), so the
+          // two ends are each other's source. Nothing outside the ring recomputes it - the ring is
+          // where the value lives - and clearing DB there does not merely stop writing: the next
+          // save DELETES the stored state (LiteDB_Pl.Save), so a user setting marked DB
+          // was losing its value on every single load.
+          if(_src is LoVariable && _owner.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB) && !SourceRingContainsSelf()) {
             _owner.ClearAttribute(Topic.Attribute.Saved);
           }
           if(l_ch && (svo = _src as LoVariable)!=null) {
@@ -153,6 +168,23 @@ namespace X13.Logram {
       }
     }
     #endregion ILoItem Members
+
+    // True when following the source chain upwards comes back to this variable, i.e. this
+    // variable sits on a binding ring. Walks _src_new and NOT _src: Tick1 always does
+    // Interlocked.Exchange(ref _src, _src_new), so _src_new is the current-or-pending source of
+    // every item no matter which order LogramPl.Tick happened to call their Tick1 in - reading
+    // _src would make the answer depend on the order of the _TaskIn queue. `seen` is not an
+    // optimization but the termination condition: without it the walk spins forever on a ring
+    // that this variable is not itself part of.
+    private bool SourceRingContainsSelf() {
+      var seen = new HashSet<LoVariable>();
+      for(var v = _src_new as LoVariable; v != null && seen.Add(v); v = v._src_new as LoVariable) {
+        if(v == this) {
+          return true;
+        }
+      }
+      return false;
+    }
 
     #region IComparable<ILoItem> Members
     public int CompareTo(ILoItem other) {

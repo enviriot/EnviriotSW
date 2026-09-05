@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>X13.Archivist</RootNamespace>
+    <AssemblyName>Archivist</AssemblyName>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <OutputPath>..\..\Output\bin_d\</OutputPath>
+    <DebugType>full</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <OutputPath>..\..\Output\bin_r\</OutputPath>
+    <DebugType>pdbonly</DebugType>
+  </PropertyGroup>
+
+  <!-- Version attributes are generated into the server's tree by the UpdateVersionInfo task and
+       shared by every plugin, so each one compiles that single file as a link. -->
+  <ItemGroup>
+    <Compile Include="..\..\Server\Properties\VersionInfo.cs" Link="Properties\VersionInfo.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Server\Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LiteDB" Version="5.0.21" />
+    <PackageReference Include="NiL.JS" Version="2.6.1722" />
+    <!-- Pinned, not taken from LiteDB transitively. Every plugin ships into ONE flat folder, so
+         the last project built decides which copy of a shared dependency survives - and the
+         binding redirects in Server\app.config name exact versions (System.Buffers -> 4.0.5.0).
+         LiteDB asks for 4.5.1, whose assembly version is 4.0.3.0; letting that win made the
+         redirect point at an assembly that is not on disk and the server refused to start.
+         Keep this in step with PersistentStorage and with the redirect. -->
+    <PackageReference Include="System.Buffers" Version="4.6.1" />
+  </ItemGroup>
+
+  <!-- Framework assemblies outside the set the SDK references implicitly for net48. -->
+  <ItemGroup>
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.Data.DataSetExtensions" />
+  </ItemGroup>
+
+</Project>

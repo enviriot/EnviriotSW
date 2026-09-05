@@ -1,4 +1,5 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using NiL.JS.Extensions;
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -54,7 +55,7 @@ namespace X13.Periphery {
           return ret.ToArray();
         }
       case DType.String: {
-          var s = val.Value as string;
+          string s = val.AsString(null);
           if(string.IsNullOrEmpty(s)) {
             return _baEmty;
           } else {
@@ -62,8 +63,8 @@ namespace X13.Periphery {
           }
         }
       case DType.ByteArray: {
-          ByteArray ba;
-          if((ba = val as ByteArray) != null || (ba = val.Value as ByteArray) != null) {
+          // Same dual representation as CheckAddr - named once, in ByteArray.IsByteArray.
+          if(ByteArray.IsByteArray(val, out ByteArray ba)) {
             return ba.GetBytes();
           }
         }
@@ -139,16 +140,16 @@ namespace X13.Periphery {
 
     }
 
-    private void OwnerChanged(Perform p, SubRec sr) {
-      if(p.Art == Perform.E_Art.remove) {
+    private void OwnerChanged(TopicEvent p, SubRec sr) {
+      if(p.Kind == EventKind.Removed) {
         _pl._devs.Remove(this);
         this.Stop();
         return;
       }
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || p.Prim == owner) {
+      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || p.Author == owner) {
         return;
       }
-      if(p.Art == Perform.E_Art.changedField) {
+      if(p.Kind == EventKind.FieldChanged) {
         var fp = "." + (p.FieldPath ?? string.Empty);
         var pt = PredefinedTopics.FirstOrDefault(z => z.Item2 == fp);
         if(pt == null || pt.Item1 >= 0xFFC0) {
@@ -158,7 +159,7 @@ namespace X13.Periphery {
         if(!val.IsNull) {
           Send(new MsPublish(pt.Item1, Serialize(val, pt.Item3)));
         }
-      } else if(p.Art == Perform.E_Art.move) {
+      } else if(p.Kind == EventKind.Moved) {
         if(_oldName != owner.name) {
           Send(new MsPublish(0xFF00, Encoding.UTF8.GetBytes(owner.name)));  // _sName
           _state = State.Disconnected;
@@ -242,7 +243,13 @@ namespace X13.Periphery {
       ByteArray ba;
       for(int i = 2; i < 5; i++) {
         var a = owner.GetField(string.Format("MQTT-SN.phy{0}_addr", i));
-        if((ba = a as ByteArray) != null || (ba = a.Value as ByteArray) != null && ba.GetBytes().Length == addr.Length && ba.GetBytes().SequenceEqual(addr)) {
+        // The two representations are what ByteArray.IsByteArray exists for: a ByteArray is a
+        // JSValue subclass, so it may BE the value or sit inside its Value. Hand-written, that
+        // read was `(a as ByteArray) != null || (a.Value as ByteArray) != null && length && seq`,
+        // and && binds tighter than || - so the direct representation returned "address taken"
+        // without comparing the address at all. Every device carrying a phyN_addr looked like a
+        // collision, which is exactly what this method must not do: it decides DHCP allocation.
+        if(ByteArray.IsByteArray(a, out ba) && ba.GetBytes().Length == addr.Length && ba.GetBytes().SequenceEqual(addr)) {
           return true;
         }
       }
@@ -350,7 +357,7 @@ namespace X13.Periphery {
           } else if(idx != tmp.path.Length - 1) {
             retCode = MsReturnCode.InvalidTopicId;
           } else {
-            mask |= tmp.path[idx] == '#' ? SubRec.SubMask.All : SubRec.SubMask.Chldren;
+            mask |= tmp.path[idx] == '#' ? SubRec.SubMask.All : SubRec.SubMask.Children;
             if(tmp.path.Length > 1) {
               if(tmp.path[0] == '/' && !tmp.path.StartsWith(owner.path)) {
                 retCode = MsReturnCode.InvalidTopicId;
@@ -410,6 +417,9 @@ namespace X13.Periphery {
             ti.registred = true;
             if(ti.it != TopicIdType.PreDefined) {
               Send(new MsPublish(ti));
+              // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+              // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+              // from "set to the default", so the topic would never be created.
               if(ti.topic.GetField("MQTT-SN.tag").ValueType != NiL.JS.Core.JSValueType.String) {
                 ti.topic.SetField("MQTT-SN.tag", ti.tag, owner);
               }
@@ -590,7 +600,7 @@ namespace X13.Periphery {
                 _pl._devs.Add(dev);
                 dt.SetAttribute(Topic.Attribute.Readonly);
                 dt.SetField("editor", "MsStatus");
-                dt.SetField("cctor.MqsDev", string.Empty, owner);
+                dt.SetField(MQTT_SNPl.FLD_MODEL, string.Empty, owner);
               }
               dev._gate = this;
               dev.addr = fm.addr;
@@ -739,13 +749,13 @@ namespace X13.Periphery {
       if(rez == null) {
         if(tag == null) {
           var siv = tp.GetField("MQTT-SN.tag");
-          if(siv.ValueType != NiL.JS.Core.JSValueType.String || (tag = siv.Value as string) == null) {
+          if((tag = siv.AsString(null)) == null) {
             if(tp != owner) {
               tag = (tp.path.StartsWith(owner.path)) ? tp.path.Substring(owner.path.Length + 1) : tp.path;
             } else {
               return null;
             }
-          } else if((tag = siv.Value as string) == "---") {
+          } else if((tag = siv.AsString(null)) == "---") {
             return null;
           }
         }
@@ -792,9 +802,10 @@ namespace X13.Periphery {
     }
 
     private static void UpdateConverters(TopicInfo ti) {
-      JSC.JSValue msTmp;
       string sTmp;
-      if((msTmp = ti.topic.GetField("MQTT-SN.convIn")).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(sTmp = msTmp.Value as string)) {
+      // AsString already implies the type test: it returns the default for anything that is not
+      // a string, so IsNullOrEmpty covers both "wrong type" and "empty".
+      if(!string.IsNullOrEmpty(sTmp = ti.topic.GetField("MQTT-SN.convIn").AsString(null))) {
         try {
           ti.convIn = CreateConv(sTmp);
         }
@@ -805,7 +816,7 @@ namespace X13.Periphery {
       } else {
         ti.convIn = null;
       }
-      if((msTmp = ti.topic.GetField("MQTT-SN.convOut")).ValueType == JSC.JSValueType.String && !string.IsNullOrEmpty(sTmp = msTmp.Value as string)) {
+      if(!string.IsNullOrEmpty(sTmp = ti.topic.GetField("MQTT-SN.convOut").AsString(null))) {
         try {
           ti.convOut = CreateConv(sTmp);
         }
@@ -830,7 +841,7 @@ namespace X13.Periphery {
       } else {
         cur = owner.all.FirstOrDefault(z => {
           var nf = z.GetField("MQTT-SN.tag");
-          return nf.ValueType == NiL.JS.Core.JSValueType.String && (nf.Value as string) == tag;
+          return nf.AsString(null) == tag;
         });
         if(cur == null) {
           if(tag[0] == '/' && !tag.StartsWith(owner.path)) {
@@ -898,24 +909,28 @@ namespace X13.Periphery {
       }
     }
 
-    private void PublishTopic(Perform p, SubRec sb) {
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.Prim == owner && p.Art != Perform.E_Art.subscribe) || p.src == owner) {
+    private void PublishTopic(TopicEvent p, SubRec sb) {
+      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.Author == owner && p.Kind != EventKind.Snapshot) || p.Source == owner) {
         return;
       }
-      if(p.Art == Perform.E_Art.create) {
-        GetTopicInfo(p.src);
+      if(p.Kind == EventKind.Created) {
+        GetTopicInfo(p.Source);
         return;
       }
       TopicInfo ti = null;
       for(int i = _topics.Count - 1; i >= 0; i--) {
-        if(_topics[i].topic == p.src) {
+        if(_topics[i].topic == p.Source) {
           ti = _topics[i];
           break;
         }
       }
-      if(p.Art == Perform.E_Art.changedField && ti != null) {
-        var sTag = p.src.GetField("MQTT-SN.tag").Value as string;
-        if(ti.tag!=sTag) {
+      if(p.Kind == EventKind.FieldChanged && ti != null) {
+        string sTag = p.Source.GetField("MQTT-SN.tag").AsString(null);
+        // The emptiness test is the fix, not AsString: the field is user-editable, so anything that
+        // is not a string - including a removed field - read as null and went straight into
+        // ti.tag, which then unregistered the topic and re-registered it under a null tag. A tag
+        // that is not a usable string is no reason to touch the registration at all.
+        if(!string.IsNullOrEmpty(sTag) && ti.tag != sTag) {
           Send(new MsRegister(0xFFFF, ti.tag));  // unregister
           ti.tag = sTag;
           Send(new MsRegister(ti.TopicId, ti.tag));  // register
@@ -923,17 +938,17 @@ namespace X13.Periphery {
         UpdateConverters(ti);
         UpdateSuppressedInputs();
       }
-      if(ti == null && (p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.subscribe)) {
-        ti = GetTopicInfo(p.src, true);
+      if(ti == null && (p.Kind == EventKind.StateChanged || p.Kind == EventKind.Snapshot)) {
+        ti = GetTopicInfo(p.Source, true);
       }
       if(ti == null || ti.TopicId >= 0xFFC0 || !ti.registred) {
         return;
       }
-      if((p.Art == Perform.E_Art.changedState || p.Art == Perform.E_Art.subscribe)) {
+      if((p.Kind == EventKind.StateChanged || p.Kind == EventKind.Snapshot)) {
         if((ti.dType & DType.ExtensionType) == DType.None) {
           Send(new MsPublish(ti));
         }
-      } else if(p.Art == Perform.E_Art.remove) {          // Remove by device
+      } else if(p.Kind == EventKind.Removed) {          // Remove by device
         if(ti.it == TopicIdType.Normal && ti.registred) {
           Send(new MsRegister(0xFFFF, ti.tag));
         }
@@ -989,10 +1004,17 @@ namespace X13.Periphery {
           return;
         }
         if(ti.tag[0] == '.') {
-          if(ti.tag == ".cctor.MqsDev" && val.ValueType == JSC.JSValueType.String) {
-            var v = val.Value as string;
-            var type = "MQTT-SN/" + v.Substring(0, v.IndexOf('.'));
-            ti.topic.SetField("type", type, owner);
+          if(ti.tag == "." + MQTT_SNPl.FLD_MODEL && val.Is<string>()) {
+            string v = val.AsString(string.Empty);
+            int dot = v.IndexOf('.');
+            // IndexOf returns -1 when the device sends a name with no dot, and Substring(0, -1)
+            // throws - a malformed payload off the air took down the whole message handler. The
+            // value is expected to be <family>.<model>, so a leading dot is just as unusable.
+            if(dot > 0) {
+              ti.topic.SetField("type", "MQTT-SN/" + v.Substring(0, dot), owner);
+            } else {
+              Log.Warning("{0}.{1} - expected <family>.<model>, got \"{2}\"", ti.topic.path, MQTT_SNPl.FLD_MODEL, v);
+            }
           }
           ti.topic.SetField(ti.tag.Substring(1), val, owner);
         } else {
@@ -1074,10 +1096,13 @@ namespace X13.Periphery {
         return;
       }
       Topic ts = GetServiceTopic(owner, "stat"), pa = GetServiceTopic(ts, n2);
+      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
+      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
+      // from "set to the default", so the topic would never be created.
       if(ts.GetState() == null || ts.GetState().ValueType!=JSC.JSValueType.Date) {
         ts.SetState(X13.JsExtLib.Context.ProxyValue(DateTime.Now), owner);
       }
-      pa.SetState(JsLib.OfInt(pa.GetState(), 0)+1, owner);
+      pa.SetState(pa.GetState().AsInt(0)+1, owner);
 
       if(t==MsMessageType.CONNECT && dub) {  // Connect with clean session
         pa = GetServiceTopic(ts, "0_ConnectTime");
@@ -1099,13 +1124,12 @@ namespace X13.Periphery {
       List<byte> si = new List<byte>();
       si.Add(0);
       int idx, i;
-      JSC.JSValue sj;
       foreach(var ti in _topics) {
         var nt = NTTable.FirstOrDefault(z => ti.tag.StartsWith(z.Item1));
         if(nt==null || (nt.Item2 & DType.Input)!=DType.Input) {
           continue;
         }
-        if(ti.tag.Length > 2 && int.TryParse(ti.tag.Substring(2), out idx) && (sj = ti.topic.GetField("MQTT-SN.suppressed")).ValueType == JSC.JSValueType.Boolean && ((bool)sj)) {
+        if(ti.tag.Length > 2 && int.TryParse(ti.tag.Substring(2), out idx) && ti.topic.GetField("MQTT-SN.suppressed").AsBool(false)) {
           i = idx / 8;
           while(si.Count <= i) {
             si.Add(0);
@@ -1394,7 +1418,7 @@ namespace X13.Periphery {
       new Tuple<ushort, string, DType>(0xFF23, ".MQTT-SN.IPRouter",       DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFF24, ".MQTT-SN.IPBroker",       DType.ByteArray),
 
-      new Tuple<ushort, string, DType>(0xFFC0, ".cctor.MqsDev",           DType.String),
+      new Tuple<ushort, string, DType>(0xFFC0, "." + MQTT_SNPl.FLD_MODEL,  DType.String),
       new Tuple<ushort, string, DType>(0xFFC1, ".MQTT-SN.phy1_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC2, ".MQTT-SN.phy2_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC3, ".MQTT-SN.phy3_addr",      DType.ByteArray),
