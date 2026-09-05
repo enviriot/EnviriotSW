@@ -1,0 +1,95 @@
+<Project>
+
+  <!-- Replaces VersionUpdate.exe, a 6 KB binary that was committed at the repository root with
+       no source anywhere. The numbering it implemented was recovered by running it against a
+       copy of VersionInfo.cs and is reproduced here verbatim:
+
+         AssemblyVersion = major . minor . yyMM . (day * 1000 + counter)
+
+       where the first two components are left as they are found, the third is the current year
+       and month (2609 for September 2026), and the fourth combines the day of the month with a
+       per-day build counter. A Debug build adds one to the counter; a Release build rounds it up
+       to the next multiple of a hundred, so a version whose last two digits are zero marks a
+       release. The counter restarts when the day changes.
+
+       No Regex: RoslynCodeTaskFactory brings a fixed set of usings, and plain IndexOf parsing
+       keeps the task working without an extra <Using> element. -->
+
+  <UsingTask TaskName="UpdateVersionInfo" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <ProjectDir ParameterType="System.String" Required="true" />
+      <Configuration ParameterType="System.String" Required="true" />
+      <Version ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        string path = Path.Combine(ProjectDir, "Properties", "VersionInfo.cs");
+        if (!File.Exists(path)) {
+          Log.LogError("VersionInfo.cs not found at " + path);
+          return false;
+        }
+
+        const string AsmVer = "[assembly: AssemblyVersion(\"";
+        const string FileVer = "[assembly: AssemblyFileVersion(\"";
+
+        string[] lines = File.ReadAllLines(path);
+
+        // The old version is read from the AssemblyVersion line; the commented-out
+        // "1.0.*" sample above it starts with "//" and is skipped by StartsWith.
+        string major = "0", minor = "0";
+        int oldStamp = 0, oldCounter = 0;
+        bool found = false;
+        foreach (string line in lines) {
+          if (!line.StartsWith(AsmVer)) continue;
+          int from = AsmVer.Length, to = line.IndexOf('"', from);
+          if (to < 0) continue;
+          string[] parts = line.Substring(from, to - from).Split('.');
+          if (parts.Length != 4) continue;
+          major = parts[0];
+          minor = parts[1];
+          int.TryParse(parts[2], out oldStamp);
+          int.TryParse(parts[3], out oldCounter);
+          found = true;
+          break;
+        }
+        if (!found) {
+          Log.LogError("No [assembly: AssemblyVersion(\"a.b.c.d\")] line in " + path);
+          return false;
+        }
+
+        DateTime now = DateTime.Now;
+        int stamp = (now.Year % 100) * 100 + now.Month;
+        int day = now.Day * 1000;
+
+        // A counter from another day - or another month - carries no information, so it
+        // restarts from the day's base rather than being incremented.
+        int counter = (stamp == oldStamp && oldCounter >= day && oldCounter < day + 1000)
+                    ? oldCounter
+                    : day;
+
+        counter = string.Equals(Configuration, "Release", StringComparison.OrdinalIgnoreCase)
+                ? day + ((counter - day) / 100 + 1) * 100
+                : counter + 1;
+
+        Version = major + "." + minor + "." + stamp + "." + counter;
+
+        for (int i = 0; i < lines.Length; i++) {
+          if (lines[i].StartsWith(AsmVer))       lines[i] = AsmVer + Version + "\")]";
+          else if (lines[i].StartsWith(FileVer)) lines[i] = FileVer + Version + "\")]";
+        }
+
+        // UTF-8 without a BOM and CRLF endings, matching the file as it is committed.
+        File.WriteAllText(path, string.Join("\r\n", lines) + "\r\n", new System.Text.UTF8Encoding(false));
+        Log.LogMessage(MessageImportance.High, "VersionInfo " + Version);
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- BeforeBuild runs ahead of CoreCompile, so the rewritten file is the one that gets
+       compiled - here and in the six plugins that link it. -->
+  <Target Name="UpdateVersion" BeforeTargets="BeforeBuild">
+    <UpdateVersionInfo ProjectDir="$(MSBuildProjectDirectory)" Configuration="$(Configuration)" />
+  </Target>
+
+</Project>

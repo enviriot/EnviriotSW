@@ -18,7 +18,7 @@
     <DebugType>pdbonly</DebugType>
   </PropertyGroup>
 
-  <!-- Version attributes are generated into the server's tree by VersionUpdate.exe and
+  <!-- Version attributes are generated into the server's tree by the UpdateVersionInfo task and
        shared by every plugin, so each one compiles that single file as a link. -->
   <ItemGroup>
     <Compile Include="..\..\Server\Properties\VersionInfo.cs" Link="Properties\VersionInfo.cs" />

@@ -22,14 +22,10 @@
     <DebugType>pdbonly</DebugType>
   </PropertyGroup>
 
-  <!-- Was $(SolutionDir)VersionUpdate.exe $(ProjectDir): $(SolutionDir) is only defined when
-       MSBuild is handed the .sln, and $(ProjectDir) is not populated until the SDK's targets
-       are imported - i.e. after this body is evaluated - so both come from the reserved
-       property now. Unquoted on purpose: VersionUpdate.exe rejects a path without the
-       trailing separator, and a quoted trailing backslash would escape the quote for cmd. -->
-  <PropertyGroup>
-    <PreBuildEvent>$(MSBuildProjectDirectory)\..\VersionUpdate.exe $(MSBuildProjectDirectory)\ $(Configuration)</PreBuildEvent>
-  </PropertyGroup>
+  <!-- Stamps Properties\VersionInfo.cs before every build. Was a PreBuildEvent calling
+       VersionUpdate.exe, a committed binary with no source; the numbering it implemented now
+       lives in the imported file as an inline task, where it can be read and changed. -->
+  <Import Project="$(MSBuildProjectDirectory)\..\VersionUpdate.targets" />
 
   <!-- base.xst is the repository seed PersistentStorage pulls out of this assembly by
        manifest name ("X13.Repository.base.xst") when it starts against an empty database.

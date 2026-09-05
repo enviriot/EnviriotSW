@@ -3,8 +3,8 @@
   <!-- Shared by every project in the solution, rather than repeated ten times. -->
   <PropertyGroup>
     <!-- Each project keeps a hand-written Properties\AssemblyInfo.cs, and the plugins
-         additionally compile Server\Properties\VersionInfo.cs as a link - VersionUpdate.exe
-         rewrites that file on every build. Letting the SDK emit its own assembly attributes
+         additionally compile Server\Properties\VersionInfo.cs as a link - the UpdateVersionInfo
+         task rewrites that file on every build. Letting the SDK emit its own assembly attributes
          on top of those is a duplicate-attribute error, so it stays off. -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 
