@@ -788,6 +788,10 @@ namespace X13.WebUI {
         _pumpSaturated++;
       }
       ReportQueueDepth();
+      // After the queue rather than before it: an answer that arrived during this pass is
+      // delivered by the work item that carries it, and only what is still outstanding after
+      // that has any business being timed out.
+      PendingRpc.Sweep();
     }
 
     private static void ReportQueueDepth() {
