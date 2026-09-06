@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -20,6 +20,10 @@ namespace X13.WebUI.Helpers {
   // name would be one flat key that the prefix subscription below could never see inside.
   // The Inspector offers them under the names DashboardRO/DashboardRW - see the "path" entries
   // in the manifest catalog at /$YS/TYPES/Ext/Manifest.
+  /// <summary>Права дашборда: правило объявляется в манифесте самого топика.</summary>
+  /// <remarks>Разрешение идёт от ближайшего объявления вверх по дереву и вниз по поддереву, 
+  /// побеждает самый длинный совпавший путь; манифесты иначе не наследуются вовсе, поэтому правило задано явно.
+  /// Нет объявления - нет доступа, и без побочной записи в дерево.</remarks>
   internal static class DashboardAcl {
     // The manifest sub-object both fields live in. Subscribing to the container rather than
     // to each field is what lets one registration cover both: the dispatcher compares

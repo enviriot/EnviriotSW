@@ -7,6 +7,10 @@ using System.Text;
 using System.Threading;
 
 namespace X13 {
+  /// <summary>Журнал: консоль, файл и подписчики - панель лога в IDE и история в базе.</summary>
+  /// <remarks>Записи доставляются асинхронно, с потока пула, поэтому запись, сделанная раньше,
+  /// может приехать позже - тест, ждущий строку, обязан ждать нужную, а не любую. 
+  /// Finish() необратим: дескриптор ожидания взводится только в статическом конструкторе.</remarks>
   public static class Log {
     private static readonly bool _useDiagnostic;
     private static readonly bool _useConsole;

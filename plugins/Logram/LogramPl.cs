@@ -10,6 +10,10 @@ using NiL.JS.Extensions;
 using System.Collections.Concurrent;
 
 namespace X13.Logram {
+  /// <summary>Плагин Logram: держит объекты схемы и гоняет поток данных между ними.</summary>
+  /// <remarks>Топики забирает сам - подпиской на собственные поля манифеста плюс однократный обход дерева в Start,
+  /// потому что хранилище наполняет дерево раньше, а подписка сообщает только о будущем.
+  /// Задания копятся в очереди и разбираются послойно, поэтому цепочка блоков сходится за один проход тика.</remarks>
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 5)]
   [System.ComponentModel.Composition.ExportMetadata("name", "Logram")]

@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -11,6 +11,9 @@ namespace X13.WebUI {
   // Topic.root) and InspectorChildrenViewProvider (one instance per open Inspector
   // document, rooted at that document's topic). Extracted from what used to be
   // WorkspaceViewProvider's private methods; behavior is unchanged for Workspace.
+  /// <summary>Живое поддерево топиков для браузера: разворачивание, подписки и точечные обновления строк.</summary>
+  /// <remarks>Один и тот же контроллер обслуживает и дерево Workspace, укоренённое в корне,
+  /// и дерево Children документа Inspector, укоренённое на произвольном топике.</remarks>
   internal sealed class TopicTreeController : IDisposable {
     private readonly Action<JSC.JSObject> _send;
     private readonly Action<string, Action> _post;

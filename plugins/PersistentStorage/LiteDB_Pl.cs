@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using NiL.JS.Extensions;
@@ -76,6 +76,15 @@ namespace X13.PersistentStorage {
       _tr.Start();
       _tick.WaitOne();  // wait load
       _allSub = Topic.Subscribe(SubFunc);
+      // Рычага два, и помнить надо оба: UserVersion решает, читать ли base.xst вообще, а ver
+      // элемента внутри файла - применять ли именно его, потому что Xst.Prepare пропускает узел,
+      // у которого поле version не ниже ver. Забыл поднять число здесь - импорт не запустится;
+      // забыл поднять ver - запустится и молча ничего не изменит.
+      // TODO: при следующем изменении base.xst сделать гейтом отпечаток самого ресурса - CRC его
+      // байтов в этом же int, со сравнением != вместо <. Тогда правка файла сама включает импорт
+      // и рычаг остаётся один. Цена, которую это стоит назвать: один холостой проход импорта на
+      // первом старте существующих баз и после любой правки файла, а забытый ver отпечаток всё
+      // равно не ловит - это ловится только тестом.
       if(_db.UserVersion < 4) {
         _db.UserVersion = 4;
         ImportDefault();

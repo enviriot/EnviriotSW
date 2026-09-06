@@ -1,10 +1,14 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 
 namespace X13.Repository {
+  /// <summary>Репозиторий: дерево топиков, очередь изменений и тик, который её разбирает.</summary>
+  /// <remarks>Плагин с приоритетом 1, потому что до него дерева не существует, а свойство enabled каждый плагин читает из дерева.
+  /// Тик разбирает очередь по шести фазам, применяет команды и только после этого публикует события, поэтому подписчик видит картину целиком,
+  /// а не наполовину применённой.</remarks>
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 1)]
   [System.ComponentModel.Composition.ExportMetadata("name", "Repository")]

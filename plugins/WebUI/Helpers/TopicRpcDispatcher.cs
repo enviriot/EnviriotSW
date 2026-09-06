@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -7,6 +7,9 @@ using X13.Repository;
 using X13.WebUI.Helpers;
 
 namespace X13.WebUI {
+  /// <summary>Исполнитель команд над топиком: delete, rename, paste, add и action.</summary>
+  /// <remarks>Одна реализация на всех вызывающих - дерево, обе панели Inspector и кадр A дашборда;
+  /// Действие проверяется по манифесту: вызвать имя, которого топик не объявлял, нельзя.</remarks>
   internal static class TopicRpcDispatcher {
     internal static ViewOpResult Execute(Topic topic, string cmd, JSC.JSValue args, Topic prim = null) {
       try {

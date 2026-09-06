@@ -61,6 +61,9 @@ namespace X13.Periphery {
     Malformed,    // a message constructor rejected the body
   }
 
+  /// <summary>Кадр MQTT-SN: разбор заголовка и тела, общий для всех входов.</summary>
+  /// <remarks>TryReadHeader - единственное место, где читается короткий и расширенный заголовок, и он же решает, что вообще считать пакетом.
+  /// TryParse называет причину отказа типом, а не общим null, поэтому усечённый кадр отличим от неизвестного типа.</remarks>
   public class MsMessage {
     public const int MSG_MAX_LENGTH=50;
     /// <summary>Smallest frame the protocol allows: the length byte and the type byte.</summary>

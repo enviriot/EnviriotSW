@@ -5,6 +5,10 @@ using System.Linq;
 using System.Text;
 
 namespace X13.Repository {
+  /// <summary>Одна подписка: топик, на котором её сделали, маска и префикс поля.</summary>
+  /// <remarks>Запись остаётся на своём топике и в поддерево не копируется - доставка поднимается по цепочке родителей.
+  /// Поэтому перемещение поддерева ничего не теряет, а подписка и отписка стоят O(1) вместо обхода.
+  /// Владелец обязан освободить запись: пока она жива, события идут.</remarks>
   public class SubRec : IDisposable {
     public readonly Topic setTopic;
     public readonly SubMask mask;

@@ -9,6 +9,8 @@ using System.Threading;
 using X13.Repository;
 
 namespace X13.MQTT {
+  /// <summary>Одна связка топика с темой брокера: подписка в дереве и подписка у брокера.</summary>
+  /// <remarks>Dispose отправляет брокеру UNSUBSCRIBE, то есть пересоздание объекта видно снаружи, а не является внутренним делом плагина.</remarks>
   internal class MqSite : IDisposable {
     private Uri _uri;
     private MQTTPl _pl;

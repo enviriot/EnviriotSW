@@ -9,6 +9,10 @@ using System.Linq;
 using System.Text;
 
 namespace X13 {
+  /// <summary>Единый словарь чтения JSValue: строгие читатели, поля по составному пути, JSON.</summary>
+  /// <remarks>Заведён потому, что рукописные проверки типа расходились и молча пропускали пустое значение:
+  /// ValueType у JSValue.Null равен Object, а As<string>() превращает его в строку "null".
+  /// Внешние значения читаются только отсюда.</remarks>
   public static class JsLib {
 
     public static readonly char[] SPLITTER_OBJ = new char[] { '.' };

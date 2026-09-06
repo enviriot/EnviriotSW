@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -24,6 +24,11 @@ namespace X13.WebUI {
   //
   // Engine thread only, reached through WebUiHost.Post - H04 touched Topic straight from the
   // socket thread and from the subscription callback.
+  /// <summary>Сессия дашборда: табличный протокол на /api/dashboard.</summary>
+  /// <remarks>Кадры C - connect, P - publish, S - subscribe и A - action.
+  /// Доступ решается по каждому топику отдельно, правилом из его манифеста,
+  /// а топик сессии заводится лениво, на первом прошедшем проверку кадре:
+  /// точка открыта всем, и создание топика в момент подключения дало бы любому пиру наполнять дерево.</remarks>
   internal sealed class DashboardSession : IDisposable {
     private readonly Action<string> _send;
     private readonly Action<string, Action> _post;

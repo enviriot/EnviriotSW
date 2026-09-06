@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 
@@ -19,6 +19,9 @@ namespace X13.WebUI {
   // different signal source already claimed it, and prices it cheaply when the same
   // source did, which is what lets sinks fed by one source converge onto a shared trunk
   // instead of drawing separate overlapping lines.
+  /// <summary>Поиск ортогонального маршрута провода по сетке - A* по состояниям "клетка и направление".</summary>
+  /// <remarks>Модель стоимости и причины, по которым направление входит в состояние поиска,
+  /// расписаны в комментарии над этим классом.</remarks>
   internal static class LogramWireRouter {
     // No CellSize constant here any more: nothing in the solution referenced it (the
     // client keeps its own CELL = 16 and everything on the wire is sent in grid cells),

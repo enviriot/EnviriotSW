@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using System;
 using System.Collections.Generic;
@@ -6,6 +6,10 @@ using X13.Repository;
 using X13.WebUI.Helpers;
 
 namespace X13.WebUI {
+  /// <summary>Сессия IDE: разбор кадров req.*, маршрутизация по vid, отправка resp.* и evnt.*.</summary>
+  /// <remarks>Разбор и выполнение ставятся в очередь целиком, поэтому ответы одному клиенту сохраняют порядок,
+  /// а разрушение сессии происходит между заданиями, а не параллельно им.
+  /// Ответ resp.* означает "принято": новое значение приезжает отдельно, по подписке.</remarks>
   internal sealed class ViewSession : IDisposable {
     private readonly Action<JSC.JSObject> _send;
     private readonly Action<string, Action> _post;

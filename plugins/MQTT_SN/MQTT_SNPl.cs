@@ -12,6 +12,9 @@ using System.Threading;
 using System.IO.Ports;
 
 namespace X13.Periphery {
+  /// <summary>Плагин MQTT-SN: шлюзы на UART и UDP, устройства и компилятор DPLC.</summary>
+  /// <remarks>Устройство забирается подпиской на поле манифеста, а не реестром в ядре. 
+  /// Идентификатор поля в эфире и его локальный путь - разные вещи, поэтому переименование поля в дереве устройства не касается.</remarks>
   [Export(typeof(IPlugModul))]
   [ExportMetadata("priority", 7)]
   [ExportMetadata("name", "MQTT_SN")]

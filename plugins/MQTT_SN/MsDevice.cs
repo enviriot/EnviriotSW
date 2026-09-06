@@ -11,6 +11,12 @@ using System.Threading.Tasks;
 using X13.Repository;
 
 namespace X13.Periphery {
+  /// <summary>Одно устройство MQTT-SN: подключение и last will, регистрация идентификаторов топиков,
+  /// обмен значениями, keep-alive со спящими узлами.</summary>
+  /// <remarks>Топики устройства - обычное поддерево, поэтому запись в дерево доходит до устройства той же подпиской,
+  /// какой доходит до любого другого подписчика.
+  /// <para>Само реализует IMsGate: устройство, до которого сервер дотягивается напрямую, пересылает кадры
+  /// соседей через EncapsulatedMessage, то есть выступает шлюзом для тех, кто до сервера не достаёт.</para></remarks>
   internal class MsDevice : IMsGate {
     private const int ACK_TIMEOUT = 600;
     private const ushort RTC_EXCH = 0xFF07;

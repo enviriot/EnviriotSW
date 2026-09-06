@@ -11,6 +11,9 @@ using X13.Repository;
 using System.Threading;
 
 namespace X13.MQTT {
+  /// <summary>Плагин MQTT: подключения к брокерам и связки топиков с их темами.</summary>
+  /// <remarks>Привязку забирает подпиской на поле MQTT.uri и перестраивает MqSite на каждое его изменение,не читая значения.
+  /// Поэтому повторная запись того же uri стоила бы живой подписки у брокера - и поэтому репозиторий не публикует запись, ничего не изменившую.</remarks>
   [Export(typeof(IPlugModul))]
   [ExportMetadata("priority", 8)]
   [ExportMetadata("name", "MQTT")]

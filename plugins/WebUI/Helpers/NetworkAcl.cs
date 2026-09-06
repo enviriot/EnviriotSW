@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -11,6 +11,9 @@ namespace X13.WebUI.Helpers {
   // decision over a specification string, deliberately unaware of HTTP and of where the
   // string came from. That is the seam for the per-branch rules SCADA will need - the same
   // matcher will be handed a spec taken from a branch's manifest instead of a global topic.
+  /// <summary>Проверка сетевого доступа по строке-спецификации: local, CIDR или голый адрес.</summary>
+  /// <remarks>IsAllowed безусловно пропускает loopback - чтобы опечаткой в списке сетей нельзя было запереть себя снаружи собственной машины.
+  /// Там, где такое послабление недопустимо - выдача прав на топик, доверие заголовку X-Real-IP, - берётся IsInSpec.</remarks>
   internal static class NetworkAcl {
     // "local" expands to the subnets of the machine's own adapters. Enumerating interfaces
     // per request is far too expensive, and VPN/DHCP change the picture while running, so the

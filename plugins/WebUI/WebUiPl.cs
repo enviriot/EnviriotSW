@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.ComponentModel.Composition;
 using X13.Repository;
@@ -6,6 +6,10 @@ using X13.WebUI.Helpers;
 using NiL.JS.Extensions;
 
 namespace X13.WebUI {
+  /// <summary>Плагин WebUI: HTTP и websocket, статика, IDE и дашборды.</summary>
+  /// <remarks>Приоритет 10 - поднимается последним, когда остальные готовы отвечать. 
+  /// Tick разбирает очередь заданий, накопленную сокетными потоками,
+  /// поэтому вся работа сессий идёт на движковом потоке.</remarks>
   [Export(typeof(IPlugModul))]
   [ExportMetadata("priority", 10)]
   [ExportMetadata("name", "WebUI")]

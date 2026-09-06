@@ -10,6 +10,9 @@ using X13.Repository;
 
 
 namespace X13.Logram {
+  /// <summary>Блок схемы: скомпилированная функция Calculate и пины, через которые она получает и отдаёт значения.</summary>
+  /// <remarks>Пины - дочерние топики, и объекты для них создаются здесь же, в конструкторе. 
+  /// Тип блока разрешается полем type манифеста в /$YS/TYPES, откуда берётся исходник функции.</remarks>
   internal class LoBlock : ILoItem {
     private LogramPl _pl;
     private Topic _owner, _typeT;

@@ -14,6 +14,11 @@ using NiL.JS.Extensions;
 using System.Threading.Tasks;
 
 namespace X13 {
+  /// <summary>Движок скриптов: глобальный контекст NiL.JS, таймеры, XMLHttpRequest, доступ к архиву и объявление config-топиков.</summary>
+  /// <remarks>Контекст привязан к потоку, поэтому ActivateEngineOnThisThread зовётся первой
+  /// строкой движкового потока: функция захватывает контекст в момент компиляции, и без этого
+  /// скрипт нашёл бы setTimeout и Arch неопределёнными, не упав. Пользовательский JS исполняется
+  /// только на этом потоке.</remarks>
   public static class JsExtLib {
     public static readonly JSC.GlobalContext Context;
 

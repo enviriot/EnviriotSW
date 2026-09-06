@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
@@ -12,6 +12,11 @@ using System.Text;
 using System.Threading;
 
 namespace X13 {
+  /// <summary>Точка входа: консольный хост, служба Windows и движковый поток.</summary>
+  /// <remarks>Один экземпляр на машину - через глобальный мьютекс. 
+  /// Движковый поток тикает по таймеру и вызывает Tick() плагинов по возрастанию priority;
+  /// он же раз в несколько минут публикует счётчики в /$YS/Performance.
+  /// Start отвечает вызвавшему не в момент создания потока, а когда плагины подняты либо один из них отказал.</remarks>
   internal class Program {
     private static bool _isLinux;
 

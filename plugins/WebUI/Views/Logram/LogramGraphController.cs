@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using NiL.JS.Extensions;
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
@@ -21,6 +21,9 @@ namespace X13.WebUI {
   // diagram at once (no client-driven expand/collapse), is a fixed two-level tree
   // (diagram -> elements -> pins), and needs a graph-wide routing pass (see
   // LogramWireRouter) that has no equivalent in the generic tree machinery.
+  /// <summary>Схема Logram для браузера: раскладка элементов, маршрутизация проводов и рассылка строк.</summary>
+  /// <remarks>Построен не на общем дереве видов намеренно: диаграмма показывается целиком, без
+  /// разворачивания по частям, а маршрутизация требует знать занятость всей канвы сразу.</remarks>
   internal sealed class LogramGraphController : IDisposable {
     private readonly Action<JSC.JSObject> _send;
     private readonly Action<string, Action> _post;

@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -16,6 +16,10 @@ using JSL = NiL.JS.BaseLibrary;
 using WSN = WebSocketSharp.Net;
 
 namespace X13.WebUI {
+  /// <summary>Хост HTTP и websocket: статика, точки /api/*, сессии и общая очередь заданий.</summary>
+  /// <remarks>Сокетные потоки только кладут задание в очередь через Post, выполняет их Pump на движковом потоке.
+  /// Отсюда в слое видов нет блокировок; обратная сторона правила - всё, что может занять секунды,
+  /// обязано уйти обратно на поток пула, иначе встанет весь сервер.</remarks>
   internal sealed class WebUiHost : IDisposable {
     private readonly string _staticPath;
     private readonly string _staticPathWithSeparator;

@@ -7,6 +7,10 @@ using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.Repository {
+  /// <summary>Узел дерева: путь, состояние, манифест и атрибуты.</summary>
+  /// <remarks>Единственное, чем компоненты обмениваются между собой:
+  /// собственных каналов друг к другу у них нет, есть общий адрес - путь топика.
+  /// Структура меняется сразу и на потоке вызвавшего, а состояние, манифест и все события откладываются до тика репозитория.</remarks>
   public sealed class Topic : IComparable<Topic> {
     private object _sync;
 

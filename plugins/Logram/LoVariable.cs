@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -9,6 +9,10 @@ using X13.Repository;
 using System.Threading;
 
 namespace X13.Logram {
+  /// <summary>Переменная схемы: значение, его источник и список тех, кому передавать изменение.</summary>
+  /// <remarks>Источником может быть выход блока или привязка к чужому топику.
+  /// Переменная, питаемая другой переменной, ничего не хранит и теряет атрибут DB;
+  /// исключение - кольцо, где значение живёт в самом кольце и пересчитать его снаружи нечем.</remarks>
   internal class LoVariable : ILoItem {
     private LogramPl _pl;
     private Topic _owner;
