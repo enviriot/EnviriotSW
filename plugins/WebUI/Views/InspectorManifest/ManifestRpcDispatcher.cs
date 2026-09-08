@@ -6,7 +6,7 @@ using X13.Repository;
 namespace X13.WebUI {
   // RPC commands for the Inspector's "Manifest" tree - add/delete of manifest keys,
   // keyed off the schema catalog ManifestTreeController.ResolveFieldSchemaAt/
-  // ResolveAddDescriptor resolve ("mi", global + per-topic override) rather than
+  // ResolveAddDescriptor resolve ("mi", global schema + type + own manifest) rather than
   // State's "Fields". Ported from ES's InManifest.MenuItems/miAdd_Click/
   // miDelete_Click. Unlike StateRpcDispatcher, writes go straight through
   // Topic.SetField (a native dotted-path manifest write with the same merge/delete
@@ -31,8 +31,7 @@ namespace X13.WebUI {
       if(string.IsNullOrEmpty(fieldPath)) {
         return ViewOpResult.Error("delete_target_invalid", "Delete target is invalid");
       }
-      JSC.JSValue ownOverride;
-      JSC.JSValue schema = ManifestTreeController.ResolveFieldSchemaAt(rootTopic, fieldPath, out ownOverride);
+      JSC.JSValue schema = ManifestTreeController.ResolveFieldSchemaAt(rootTopic, fieldPath);
       if(schema != null && (schema.AsInt("attr", 0) & 1) != 0) {
         return ViewOpResult.Error("delete_target_required", "Required field cannot be deleted: " + fieldPath);
       }

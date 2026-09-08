@@ -2,7 +2,6 @@
 using JSC = NiL.JS.Core;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using X13.Repository;
 using X13.WebUI.Helpers;
 
@@ -11,13 +10,14 @@ namespace X13.WebUI {
   // (Topic.GetField(null)), walked recursively as an object-key tree - ported from ES's
   // InManifest.cs.
   //
-  // Everything structural is shared with StateTreeController through
-  // JsonTreeControllerBase. What stays here is what differs: the value source (the manifest),
-  // the schema catalog ("mi", from one fixed global topic /$YS/TYPES/Ext/Manifest merged with
-  // the topic's own entries, rather than State's per-topic "type" indirection), and writes
-  // that go through Topic.SetField directly instead of State's merge+SetState.
+  // Everything structural is shared with StateTreeController through JsonTreeControllerBase, and
+  // schema resolution through SchemaOverlay. Both trees lay their sources over one another by the
+  // same rule, and this one differs only in which sources and which catalog key
+  // (SchemaOverlay.ForManifest: the global /$YS/TYPES/Ext/Manifest schema, then the type topic's
+  // state, then the topic's own manifest, catalog "mi"). What stays here is the value source (the
+  // manifest), the "path" indirection of a catalog entry, and writes that go through
+  // Topic.SetField directly instead of State's merge+SetState.
   internal sealed class ManifestTreeController : JsonTreeControllerBase {
-    private const string ManifestSchemaTopicPath = "/$YS/TYPES/Ext/Manifest";
 
     internal ManifestTreeController(Action<JSC.JSObject> send, ViewTargetRegistry targets, Topic rootTopic, string viewName, Action<object> onRootGone = null, Action<string, Action> post = null, Func<Topic> prim = null)
       : base(send, targets, rootTopic, viewName, "inspmanifest", SubRec.SubMask.Field | SubRec.SubMask.Once, onRootGone, post, prim) {
@@ -55,15 +55,15 @@ namespace X13.WebUI {
 
     internal ViewOpResult BuildMenu(string vid, out List<MenuItemDto> items) {
       string fieldPath = VidHelper.GetFieldPath(vid);
-      JSC.JSValue ownOverride;
-      JSC.JSValue schema = ResolveFieldSchemaAt(_rootTopic, fieldPath, out ownOverride);
+      SchemaOverlay overlay = SchemaOverlay.ForManifest(_rootTopic).At(fieldPath);
+      JSC.JSValue schema = overlay == null ? null : overlay.Descriptor;
       JSC.JSValue value = ResolveValueAt(fieldPath);
       items = new List<MenuItemDto>();
 
       bool isReadonly = (schema.AsInt("attr", 0) & 2) != 0;
       bool isValueObject = value.IsObject();
       if(!isReadonly && isValueObject) {
-        List<MenuItemDto> addItems = BuildAddItems(schema, ownOverride, value, fieldPath);
+        List<MenuItemDto> addItems = BuildAddItems(overlay, value, fieldPath);
         if(addItems.Count > 0) {
           items.Add(new MenuItemDto() { Kind = MenuItemKind.Item, Text = "Add", Enabled = true, Willful = false, Children = addItems });
         }
@@ -81,54 +81,28 @@ namespace X13.WebUI {
       return ViewOpResult.Success();
     }
 
-    // Enumerates the "mi" catalog applicable at this node. At the root this is exactly the
-    // global schema's own top-level catalog (verified against InManifest.MenuItems: at the
-    // root, its v1.__proto__ check never fires, because only individual "mi" entries - never
-    // the whole catalog object - ever get a __proto__ assigned; a topic's own top-level "mi"
-    // override affects how its OWN existing manifest keys render, not what the root's Add menu
-    // offers). At any nested level, the entry's generic "mi" catalog is unioned with the
-    // corresponding own catalog, the topic's entries winning.
-    private List<MenuItemDto> BuildAddItems(JSC.JSValue schema, JSC.JSValue ownOverride, JSC.JSValue value, string fieldPath) {
+    // Enumerates the "mi" catalog applicable at this node - the union SchemaOverlay resolves out
+    // of the global schema, the type topic and the topic's own manifest. The root used to be an
+    // exception, offering the global catalog alone: ES chains a topic's own "mi" onto the generic
+    // entries for the root's CHILD rows (InManifest.UpdateType's IsGroupHeader ? _value :
+    // _manifest) but not onto the root's own Add menu, and the port copied that asymmetry. One
+    // rule now applies at every level, the root included.
+    private List<MenuItemDto> BuildAddItems(SchemaOverlay overlay, JSC.JSValue value, string fieldPath) {
       List<MenuItemDto> addItems = new List<MenuItemDto>();
-      bool isRoot = string.IsNullOrEmpty(fieldPath);
 
-      JSC.JSValue genericCatalog = schema.IsObject() ? schema["mi"] : null;
-      Dictionary<string, JSC.JSValue> catalog = new Dictionary<string, JSC.JSValue>(StringComparer.Ordinal);
-      if(genericCatalog.IsObject()) {
-        foreach(var kv in genericCatalog) catalog[kv.Key] = kv.Value;
-      }
-      if(!isRoot) {
-        JSC.JSValue overrideCatalog = ownOverride.IsObject() ? ownOverride["mi"] : null;
-        if(overrideCatalog.IsObject()) {
-          foreach(var kv in overrideCatalog) {
-            // Own wins, but merged per property rather than replacing: a partial own entry
-            // must not drop the generic "default" that the filter below requires.
-            JSC.JSValue generic;
-            catalog[kv.Key] = catalog.TryGetValue(kv.Key, out generic) ? MergeEntry(generic, kv.Value) : kv.Value;
-          }
-        }
-      }
-
-      if(catalog.Count == 0) {
+      if(overlay == null || overlay.CatalogIsEmpty) {
         // No schema catalog anywhere for this node - fall back to /$YS/TYPES/Core, same as
         // InManifest.MenuItems' identical "no mi" else-branch and StateTreeController's.
-        Topic coreTypes = Topic.root.Get("/$YS/TYPES/Core", false);
-        if(coreTypes != null) {
-          foreach(Topic coreType in coreTypes.children.OrderBy(z => z.name, StringComparer.Ordinal)) {
-            JSC.JSValue descriptor = coreType.GetState();
-            if(!descriptor.IsObject() || !descriptor["default"].Defined) continue;
-            addItems.Add(BuildAddMenuItem(coreType.name, descriptor, fieldPath));
-          }
+        foreach(var kv in SchemaOverlay.CoreCatalogEntries()) {
+          if(!kv.Value.IsObject() || !kv.Value["default"].Defined) continue;
+          addItems.Add(BuildAddMenuItem(kv.Key, kv.Value, fieldPath));
         }
         return addItems;
       }
 
-      foreach(var kv in catalog.OrderBy(z => z.Key, StringComparer.Ordinal)) {
+      foreach(var kv in overlay.CatalogEntries) {
         JSC.JSValue descriptor = kv.Value;
-        // IsObject, not ValueType != Object: the latter is FALSE for JSValue.Null, so a catalog
-        // entry that is literally null passed this guard and the descriptor["default"] read on the
-        // same line threw. Third instance of the same defect in this file family.
-        if(!descriptor.IsObject() || !descriptor["default"].Defined) continue;
+        if(!descriptor["default"].Defined) continue;
         // The already-present test has to follow "path" when the entry writes somewhere other
         // than its own key, or an entry like DashboardRO -> dashboard.netRO would keep being
         // offered after it had been added, and adding it again would answer add_target_exists.
@@ -175,7 +149,7 @@ namespace X13.WebUI {
 
       // Resolved once: the walk rebuilds a merged object per path segment, so calling it again
       // for the Enum branch below would repeat the whole thing.
-      JSC.JSValue schema = isRoot ? null : ResolveFieldSchemaAt(_rootTopic, fieldPath, out _);
+      JSC.JSValue schema = isRoot ? null : ResolveFieldSchemaAt(_rootTopic, fieldPath);
 
       string resolvedEditor;
       string icon;
@@ -217,99 +191,25 @@ namespace X13.WebUI {
       };
     }
 
-    private static JSC.JSValue GlobalManifestSchemaRoot() {
-      Topic schemaTopic = Topic.root.Get(ManifestSchemaTopicPath, false);
-      return schemaTopic == null ? null : schemaTopic.GetState();
-    }
-
-    // Walks schema["mi"][segment] per path segment, starting from the global
-    // /$YS/TYPES/Ext/Manifest schema, merging in the topic's own manifest "mi" entries at
-    // every level. outOwnOverride returns the paired entry from the topic's own tree at the
-    // same path (null if the topic declares nothing there) - callers building an Add-menu
-    // catalog for this node's children union entry["mi"] with outOwnOverride["mi"].
-    internal static JSC.JSValue ResolveFieldSchemaAt(Topic rootTopic, string fieldPath, out JSC.JSValue outOwnOverride) {
-      outOwnOverride = null;
-      if(string.IsNullOrEmpty(fieldPath)) return GlobalManifestSchemaRoot();
-
-      JSC.JSValue genericSource = GlobalManifestSchemaRoot();
-      JSC.JSValue ownSource = rootTopic.GetField(null);
-      JSC.JSValue merged = null;
-      JSC.JSValue ownEntry = null;
-
-      foreach(string segment in fieldPath.Split(JsLib.SPLITTER_OBJ, StringSplitOptions.RemoveEmptyEntries)) {
-        JSC.JSValue genericMi = genericSource.IsObject() ? genericSource["mi"] : null;
-        JSC.JSValue ownMi = ownSource.IsObject() ? ownSource["mi"] : null;
-
-        JSC.JSValue generic = genericMi.IsObject() ? genericMi[segment] : null;
-        JSC.JSValue own = ownMi.IsObject() ? ownMi[segment] : null;
-        if(!generic.IsObject() && !own.IsObject()) {
-          outOwnOverride = null;
-          return null;
-        }
-
-        merged = MergeEntry(generic, own);
-        ownEntry = own.IsObject() ? own : null;
-        // Descend the two source trees, not the merged view: "mi" is deliberately kept out of
-        // the merge (see MergeEntry), so the merged object carries no catalog to walk into.
-        genericSource = generic;
-        ownSource = own;
-      }
-      outOwnOverride = ownEntry;
-      return merged;
-    }
-
-    /// <summary>The generic entry with the topic's own entry laid over it - own wins per key.</summary>
-    /// <remarks>A fresh object every time. The previous implementation assigned __proto__ onto
-    /// the global schema's own live sub-objects, which had two consequences: the topic's entry
-    /// only acted as a fallback (a prototype cannot outrank the object's own properties), and
-    /// the assignment outlived the call, so the next topic resolved at the same path inherited
-    /// the previous one's manifest. The order is the point here - a topic knows better than the
-    /// global schema; generic-wins dates from when the menu could only come from the type.
-    /// "mi" is excluded on purpose: BuildAddItems and ResolveAddDescriptor union the two
-    /// catalogs per entry themselves, so that a partial own entry cannot hide the generic
-    /// "default" and make an Add item disappear.</remarks>
-    private static JSC.JSValue MergeEntry(JSC.JSValue generic, JSC.JSValue own) {
-      JSC.JSObject merged = JSC.JSObject.CreateObject();
-      if(generic.IsObject()) {
-        foreach(var kv in generic) if(kv.Key != "mi") merged[kv.Key] = kv.Value;
-      }
-      if(own.IsObject()) {
-        foreach(var kv in own) if(kv.Key != "mi") merged[kv.Key] = kv.Value;
-      }
-      // The generic catalog stays reachable as schema["mi"] for the Add-menu consumers.
-      JSC.JSValue genericMi = generic.IsObject() ? generic["mi"] : null;
-      if(genericMi.IsObject()) merged["mi"] = genericMi;
-      return merged;
+    // The descriptor SchemaOverlay resolves for one node, or null when no source declares that
+    // path. Kept as a named entry point so ManifestRpcDispatcher reads the schema the same way
+    // the rows do, without building an overlay of its own.
+    internal static JSC.JSValue ResolveFieldSchemaAt(Topic rootTopic, string fieldPath) {
+      SchemaOverlay overlay = SchemaOverlay.ForManifest(rootTopic).At(fieldPath);
+      return overlay == null ? null : overlay.Descriptor;
     }
 
     // Resolves a single add-action descriptor by key for ManifestRpcDispatcher's add:<key>
     // command - the union catalog BuildAddItems enumerates from, narrowed to one key, or the
     // /$YS/TYPES/Core fallback when there's no schema catalog at all.
     internal static JSC.JSValue ResolveAddDescriptor(Topic rootTopic, string fieldPath, string key) {
-      JSC.JSValue ownOverride;
-      JSC.JSValue schema = ResolveFieldSchemaAt(rootTopic, fieldPath, out ownOverride);
-      bool isRoot = string.IsNullOrEmpty(fieldPath);
-
-      JSC.JSValue genericCatalog = schema.IsObject() ? schema["mi"] : null;
-      JSC.JSValue genericEntry = genericCatalog.IsObject() ? genericCatalog[key] : null;
-      JSC.JSValue ownEntry = null;
-      if(!isRoot) {
-        JSC.JSValue overrideCatalog = ownOverride.IsObject() ? ownOverride["mi"] : null;
-        if(overrideCatalog.IsObject()) ownEntry = overrideCatalog[key];
-      }
-      // Own first, same order BuildAddItems now uses; merged when both exist so a partial own
-      // entry keeps the generic "default".
-      bool genericOk = genericEntry.IsObject();
-      bool ownOk = ownEntry.IsObject();
-      if(genericOk || ownOk) {
-        JSC.JSValue descriptor = genericOk && ownOk ? MergeEntry(genericEntry, ownEntry) : (ownOk ? ownEntry : genericEntry);
-        if(descriptor["default"].Defined) return descriptor;
+      SchemaOverlay overlay = SchemaOverlay.ForManifest(rootTopic).At(fieldPath);
+      if(overlay != null && !overlay.CatalogIsEmpty) {
+        JSC.JSValue descriptor = overlay.CatalogEntry(key);
+        return (descriptor != null && descriptor["default"].Defined) ? descriptor : null;
       }
 
-      Topic coreTypes = Topic.root.Get("/$YS/TYPES/Core", false);
-      Topic coreType = coreTypes == null ? null : coreTypes.Get(key, false);
-      if(coreType == null) return null;
-      JSC.JSValue coreDescriptor = coreType.GetState();
+      JSC.JSValue coreDescriptor = SchemaOverlay.CoreCatalogEntry(key);
       return (coreDescriptor.IsObject() && coreDescriptor["default"].Defined) ? coreDescriptor : null;
     }
   }

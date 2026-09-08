@@ -2,7 +2,6 @@
 using JSC = NiL.JS.Core;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using X13.Repository;
 using X13.WebUI.Helpers;
 
@@ -15,9 +14,12 @@ namespace X13.WebUI {
   // expanded node are just JSValue object properties, resolved on demand.
   //
   // Everything structural - expansion bookkeeping, child reconciliation, evnt.add/upd/del
-  // shaping - lives in JsonTreeControllerBase, shared with ManifestTreeController. What stays
-  // here is what actually differs: the value source (state, not manifest), the "Fields"
-  // schema catalog with its "type" indirection, and how a row/menu is built from it.
+  // shaping - lives in JsonTreeControllerBase, shared with ManifestTreeController; schema
+  // resolution lives in SchemaOverlay, shared with it too. Both trees lay their sources over one
+  // another by the same rule, and this one differs only in which sources and which catalog key
+  // (SchemaOverlay.ForState: the type topic's state, then the topic's own manifest, catalog
+  // "Fields"). What stays here is the value source (state, not manifest) and how a row or a menu
+  // is built once the schema is resolved.
   internal sealed class StateTreeController : JsonTreeControllerBase {
 
     internal StateTreeController(Action<JSC.JSObject> send, ViewTargetRegistry targets, Topic rootTopic, string viewName, Action<object> onRootGone = null, Action<string, Action> post = null, Func<Topic> prim = null)
@@ -54,14 +56,15 @@ namespace X13.WebUI {
 
     internal ViewOpResult BuildMenu(string vid, out List<MenuItemDto> items) {
       string fieldPath = VidHelper.GetFieldPath(vid);
-      JSC.JSValue manifest = ResolveFieldManifestAt(_rootTopic, fieldPath);
+      SchemaOverlay schema = SchemaOverlay.ForState(_rootTopic).At(fieldPath);
+      JSC.JSValue manifest = schema == null ? null : schema.Descriptor;
       JSC.JSValue value = ResolveValueAt(fieldPath);
       items = new List<MenuItemDto>();
 
       bool isReadonly = (manifest.AsInt("attr", 0) & 2) != 0;
       bool isValueObject = value.IsObject();
       if(!isReadonly && isValueObject) {
-        List<MenuItemDto> addItems = BuildAddItems(manifest, value, fieldPath);
+        List<MenuItemDto> addItems = BuildAddItems(schema, value, fieldPath);
         if(addItems.Count > 0) {
           items.Add(new MenuItemDto() { Kind = MenuItemKind.Item, Text = "Add", Enabled = true, Willful = false, Children = addItems });
         }
@@ -79,36 +82,25 @@ namespace X13.WebUI {
       return ViewOpResult.Success();
     }
 
-    private List<MenuItemDto> BuildAddItems(JSC.JSValue manifest, JSC.JSValue value, string fieldPath) {
+    private List<MenuItemDto> BuildAddItems(SchemaOverlay schema, JSC.JSValue value, string fieldPath) {
       List<MenuItemDto> addItems = new List<MenuItemDto>();
-      JSC.JSValue fields = ResolveFields(manifest);
-      if(fields.IsObject()) {
-        foreach(var kv in fields.OrderBy(z => z.Key, StringComparer.Ordinal)) {
-          JSC.JSValue descriptor = kv.Value;
-          // IsObject, not ValueType != Object: the latter is FALSE for JSValue.Null, so a catalog
-        // entry that is literally null passed this guard and the descriptor["default"] read on the
-        // same line threw. Third instance of the same defect in this file family.
-        if(!descriptor.IsObject() || !descriptor["default"].Defined) continue;
+      if(schema != null && !schema.CatalogIsEmpty) {
+        foreach(var kv in schema.CatalogEntries) {
+          if(!kv.Value["default"].Defined) continue;
           if(value[kv.Key].Defined) continue;
-          addItems.Add(BuildAddMenuItem(kv.Key, descriptor, fieldPath));
+          addItems.Add(BuildAddMenuItem(kv.Key, kv.Value, fieldPath));
         }
         return addItems;
       }
 
-      // No declared Fields schema on this node (own manifest or its type) - fall back to the
-      // Core types catalog (Boolean/Double/Object/String/...), same fallback ES's
-      // InValue.MenuItems uses (_data.Connection.CoreTypes.children) when it hits its own
-      // "no Fields" else-branch, and the same /$YS/TYPES/Core fallback
-      // MenuBuilder.ResolveAddActions already uses for topic children. These are
-      // always "willful" (user names the new field) per their own manifest, so - unlike Fields
-      // entries - there's no fixed key to filter as "already present".
-      Topic coreTypes = Topic.root.Get("/$YS/TYPES/Core", false);
-      if(coreTypes != null) {
-        foreach(Topic coreType in coreTypes.children.OrderBy(z => z.name, StringComparer.Ordinal)) {
-          JSC.JSValue descriptor = coreType.GetState();
-          if(!descriptor.IsObject() || !descriptor["default"].Defined) continue;
-          addItems.Add(BuildAddMenuItem(coreType.name, descriptor, fieldPath));
-        }
+      // No Fields catalog anywhere for this node - fall back to the Core types catalog
+      // (Boolean/Double/Object/String/...), same fallback ES's InValue.MenuItems uses
+      // (_data.Connection.CoreTypes.children) when it hits its own "no Fields" else-branch.
+      // These are always "willful" (user names the new field) per their own manifest, so - unlike
+      // Fields entries - there's no fixed key to filter as "already present".
+      foreach(var kv in SchemaOverlay.CoreCatalogEntries()) {
+        if(!kv.Value.IsObject() || !kv.Value["default"].Defined) continue;
+        addItems.Add(BuildAddMenuItem(kv.Key, kv.Value, fieldPath));
       }
       return addItems;
     }
@@ -188,70 +180,25 @@ namespace X13.WebUI {
       return null;
     }
 
-    // Walks manifest["Fields"][segment] per path segment, starting from the root topic's own
-    // manifest - mirrors how InValue.UpdateData/UpdateType passes _manifest["Fields"][key] down
-    // as each child InValue's own manifest. Shared (internal static) so StateRpcDispatcher can
-    // resolve the same Fields catalog for add:/delete without duplicating the walk.
+    // The descriptor SchemaOverlay resolves for one node, or null when no source declares that
+    // path. Kept as a named entry point so StateRpcDispatcher and CheckWritable read the schema
+    // the same way the rows do, without each building an overlay of its own.
     internal static JSC.JSValue ResolveFieldManifestAt(Topic rootTopic, string fieldPath) {
-      JSC.JSValue manifest = rootTopic.GetField(null);
-      if(string.IsNullOrEmpty(fieldPath)) return manifest;
-      foreach(string segment in fieldPath.Split(JsLib.SPLITTER_OBJ, StringSplitOptions.RemoveEmptyEntries)) {
-        JSC.JSValue fields = ResolveFields(manifest);
-        if(!fields.IsObject()) return null;
-        manifest = fields[segment];
-        if(manifest == null || !manifest.Defined) return null;
-      }
-      return manifest;
-    }
-
-    // manifest["Fields"] if the manifest declares it directly, else - when the manifest instead
-    // declares "type" - the type topic's own STATE "Fields" (e.g.
-    // /$YS/TYPES/LoBlock/Binary/AND's manifest is only {"attr":...,"type":"Ext/LBDescr"}; its
-    // "src" field's editor:"JS" lives in Ext/LBDescr's state Fields.src, not on AND itself).
-    // ES's InValue.cs never reads "type" for this - because by the time WPF's DTopic hands
-    // InValue a manifest, DTopic.ProtoDeep has already spliced the type topic's state in as
-    // that manifest's live JS __proto__, so a plain manifest["Fields"] property read
-    // transparently inherits it. The server has no such live prototype chain, so this
-    // replicates the (single-level - type is resolved once per topic manifest, not re-resolved
-    // for each nested Fields entry, matching ProtoDeep's one-time chaining) fallback
-    // explicitly. Applied uniformly at every path segment, though in practice only the root
-    // topic manifest (fieldPath == "") is ever expected to declare "type".
-    private static JSC.JSValue ResolveFields(JSC.JSValue manifest) {
-      // Reads go through JsLib rather than a hand-written `ValueType == Object` test: that test
-      // is TRUE for JSValue.Null (its Value is what is null), so it let a null manifest through
-      // to an indexer that throws. GetField checks both halves at every hop.
-      JSC.JSValue own = manifest.Field("Fields");
-      if(own.IsObject()) return own;
-
-      string typePath = manifest.AsString("type", null);
-      if(string.IsNullOrWhiteSpace(typePath)) return own;
-
-      Topic typeTopic = TypeHelper.ResolveTypeTopic(typePath);
-      JSC.JSValue typeState = typeTopic == null ? null : typeTopic.GetState();
-      JSC.JSValue inherited = typeState.Field("Fields");
-      return inherited.Defined ? inherited : own;
+      SchemaOverlay schema = SchemaOverlay.ForState(rootTopic).At(fieldPath);
+      return schema == null ? null : schema.Descriptor;
     }
 
     // Resolves a single add-action descriptor by key for StateRpcDispatcher's add:<key>
-    // command, via the exact same two-tier lookup BuildAddItems uses to populate the menu: the
-    // node's own (or type-inherited) Fields[key] entry, or - when there's no Fields catalog at
-    // all - the /$YS/TYPES/Core child of that name.
+    // command, out of the same catalog BuildAddItems enumerates - or, when there is none at all,
+    // the /$YS/TYPES/Core child of that name.
     internal static JSC.JSValue ResolveAddDescriptor(Topic rootTopic, string fieldPath, string key) {
-      JSC.JSValue manifest = ResolveFieldManifestAt(rootTopic, fieldPath);
-      JSC.JSValue fields = ResolveFields(manifest);
-      if(fields.IsObject()) {
-        JSC.JSValue descriptor = fields[key];
-        // JsLib.IsObject, not a hand-rolled ValueType test: a Fields catalog entry that is
-        // literally null ({"Fields":{"x":null}}) yields JSValue.Null here, whose ValueType IS
-        // Object - so the obvious form passed and the indexer below threw a TypeError. The
-        // correct form was already three lines above, for `fields`.
-        return (descriptor.IsObject() && descriptor["default"].Defined) ? descriptor : null;
+      SchemaOverlay schema = SchemaOverlay.ForState(rootTopic).At(fieldPath);
+      if(schema != null && !schema.CatalogIsEmpty) {
+        JSC.JSValue descriptor = schema.CatalogEntry(key);
+        return (descriptor != null && descriptor["default"].Defined) ? descriptor : null;
       }
 
-      Topic coreTypes = Topic.root.Get("/$YS/TYPES/Core", false);
-      Topic coreType = coreTypes == null ? null : coreTypes.Get(key, false);
-      if(coreType == null) return null;
-      JSC.JSValue coreDescriptor = coreType.GetState();
+      JSC.JSValue coreDescriptor = SchemaOverlay.CoreCatalogEntry(key);
       return (coreDescriptor.IsObject() && coreDescriptor["default"].Defined) ? coreDescriptor : null;
     }
   }
