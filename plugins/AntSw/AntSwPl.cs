@@ -4,6 +4,7 @@ using JSL = NiL.JS.BaseLibrary;
 using System;
 using System.ComponentModel.Composition;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using X13.Repository;
@@ -15,6 +16,7 @@ namespace X13.Periphery {
   [ExportMetadata("priority", 8)]
   [ExportMetadata("name", "AntSw")]
   public class AntSwPl : IPlugModul {
+    private const string OWNER_PATH = "/$YS/AntSw";
     private Topic _owner, _verbose, _di;
     private Transport _transport;
     private int _st;
@@ -38,14 +40,28 @@ namespace X13.Periphery {
     private Topic _accessT;
     private int _access;
     private SubRec _accessSub;
-    // Remote-node EEPROM config editor (web_loc/SetupRemote.html). Requests arrive
-    // per WS session on /$YS/AntSw/cfg/req/<sid> and are answered on
-    // .../rsp/<sid> — see CfgRemote and ApiV04's "G" handler. That subtree is
-    // under /$YS/, so it is not under /export, /Public or /local and therefore
-    // can never be reached from a browser directly, whatever the filters say.
+    // Remote-node EEPROM config editor (web_loc/Setup.html). One request, one
+    // answer - which the dashboard protocol expresses directly: the page sends
+    // "A <cid> /local/asw/cfg AntSw.CfgRemote {line}" and the answer comes back
+    // against the same cid.
+    //
+    // This replaces a pair of topics per WS session under /$YS/AntSw/cfg/
+    // {req,rsp}/<sid>. That existed only because the browser API of the time
+    // had nowhere else to put the correlation: a topic tree is pub/sub, so
+    // "whose answer is this" had to be encoded in the path, one child per
+    // session, created and dropped as sessions came and went. The cid carries
+    // the correlation itself now, so the topics went with it.
+    private const string CFG_ACTION = "AntSw.CfgRemote";
     private CfgRemote _cfg;
-    private Topic _cfgReqT, _cfgRspT;
-    private SubRec _cfgReqSub;
+    private Topic _cfgT;
+    private bool _cfgRpcRegistered;
+    private int _cfgSeq;
+    // Outstanding RPC calls by the session id handed to CfgRemote, holding the
+    // line so the reply can be trimmed back to just the result. CfgRemote
+    // answers exactly once per Submit - on a parse error, on a timeout, or on
+    // completion - which is what RPC.Register's async form requires.
+    private readonly Dictionary<string, KeyValuePair<string, Action<JSC.JSValue>>> _cfgRpc
+      = new Dictionary<string, KeyValuePair<string, Action<JSC.JSValue>>>();
 
     #region IPlugModul Members
     public void Init() {
@@ -58,10 +74,10 @@ namespace X13.Periphery {
     }
 
     public void Start() {
-      _owner = Topic.root.Get("/$YS/AntSw");
+      _owner = Topic.root.Get(OWNER_PATH);
       _verbose = _owner.Get("verbose");
       if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
 #if DEBUG
         _verbose.SetState(true);
 #else
@@ -79,14 +95,16 @@ namespace X13.Periphery {
         con.Get("txcfg").SetState(0);
       }
       _di = Topic.root.Get("/export/out", true, _owner);
-      // Pre-create every output topic here, before a browser is typically
-      // subscribed. Topic.Get() fires a Perform.E_Art.create the first time a
-      // topic is created, and ApiV04.SubChanged() forwards *every* Perform to
-      // subscribers - including that create, whose GetState() is still
-      // unset at that point. That serializes to an empty value ("P\t<path>\t"
-      // with nothing after the last tab), which the browser's JSON.parse()
-      // throws on. This bites intermediate container topics too: Get("con1/
-      // status") auto-creates "con1" along the way, but only "status" ever
+      // Pre-create every output topic here, before anything subscribes.
+      // Topic.Get() fires an EventKind.Created the first time a topic is
+      // created, and a subscriber sees that create with GetState() still
+      // unset. Whoever serializes it then has a value-less node on its hands -
+      // the browser API of the time turned it into an empty "P\t<path>\t" that
+      // JSON.parse() threw on. The browser reaches these topics through
+      // asw_ws_gateway now, but the hazard belongs to the create event rather
+      // than to any one consumer, so the pre-creation stays. This bites
+      // intermediate container topics too:
+      // Get("con1/status") auto-creates "con1" along the way, but only "status" ever
       // gets SetState() - "con1" itself is left state-less forever unless we
       // explicitly set it too. So every node on the path needs a value here,
       // not just the leaves.
@@ -106,30 +124,21 @@ namespace X13.Periphery {
         remi.Get("pwrFwd", true, _owner).SetState(0);
         remi.Get("pwrRev", true, _owner).SetState(0);
       }
-      // LAN CIDR for /local/* WS access — same create-if-missing/DB-persisted
-      // pattern Transport.cs already uses for "port". ApiV04.CheckAccess reads
-      // it via /local's own "WebUI.Filter" field, which is where it looks up
-      // any top-level topic's access filter.
-      // Counterpart of SW/Server's gateway_config.json "trusted_nets", but a
-      // SINGLE CIDR, not a comma-separated list: WebUI.Filter is parsed by
-      // CheckAccess as one "a.b.c.d/bits" and teaching it a list is a change
-      // to shared Enviriot code, not to this plugin. Deliberate known gap.
-      var cidrT = _owner.Get("lan_cidr", true, _owner);
-      string cidr;
-      if(cidrT.GetState().ValueType != JSC.JSValueType.String || string.IsNullOrEmpty(cidr = cidrT.GetState().Value as string)) {
-        cidrT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-        cidr = "192.168.0.0/16";
-        cidrT.SetState(cidr, _owner);
-      }
+      // No access declaration is written from here. Which networks may read or
+      // write these trees over /api/dashboard is stated in the topics' own
+      // manifests (dashboard.netRO / dashboard.netRW, offered by the Inspector
+      // as DashboardRO / DashboardRW) and is an operator setting: writing it
+      // from Start() would put it back to whatever this code said on every
+      // restart, and silently undo an edit made in the IDE. The tri-state is
+      // unaffected either way - it gates writes at runtime inside Request().
       var localT = Topic.root.Get("/local", true, _owner);
-      localT.SetField("WebUI.Filter", cidr, _owner);
       localT.SetState(0);
       var localAswT = localT.Get("asw", true, _owner);
       localAswT.SetState(0);
       _accessT = localAswT.Get("access", true, _owner);
       if(!_accessT.GetState().IsNumber) {
         // Boot default 1 (Local): usable from the LAN, closed to remote.
-        // DB-persisted from here on, same as "port"/"lan_cidr" above — an
+        // DB-persisted from here on, same as Transport's "port" — an
         // operator's chosen state (e.g. 2/Remote) survives a restart instead
         // of silently resetting to 1 every time. This is a deliberate
         // difference from SW/Server, which always boots from its config file;
@@ -142,54 +151,124 @@ namespace X13.Periphery {
         _access = 1;
         _accessT.SetState(_access, _owner);
       }
-      // Once|Value, not Value alone: Topic.Publish only ever calls a subscriber
-      // whose mask carries Once or All (Topic.cs, the OnceOrAll test) — "Once"
-      // meaning "scope is this topic itself", as opposed to Chldren/All, NOT
-      // "deliver a single time". With Value alone the SubRec is registered but
-      // never invoked, which silently left _access frozen at its boot value.
-      // Same combination ApiV04 uses for an exact-path subscribe.
+      // Once|Value, not Value alone: publication hands the event to the topic
+      // itself under OnceOrAll, to its parent under Children|All and to further
+      // ancestors under All (Topic.cs, Deliver) — so "Once" means "scope is
+      // this topic itself", as opposed to Children/All, NOT "deliver a single
+      // time". With Value alone the SubRec is registered but never invoked,
+      // which silently left _access frozen at its boot value. The rewrite kept
+      // this rule; only the code expressing it moved.
       _accessSub = _accessT.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Value, AccessChanged);
 
-      var cfgT = _owner.Get("cfg", true, _owner);
-      cfgT.SetState(0);
-      _cfgReqT = cfgT.Get("req", true, _owner);
-      _cfgReqT.SetState(0);
-      _cfgRspT = cfgT.Get("rsp", true, _owner);
-      _cfgRspT.SetState(0);
+      // The topic the configuration action hangs off. Under /local because the
+      // page that calls it, Setup.html, is the LAN-only build - but which
+      // networks actually reach it is decided by that subtree's own
+      // dashboard.netRW declaration, not from here.
+      _cfgT = localAswT.Get("cfg", true, _owner);
+      if(!_cfgT.CheckAttribute(Topic.Attribute.Required)) {
+        // Declared once, not on every start: the descriptor is ours to publish,
+        // but an operator who edited the label should keep it. Same
+        // create-if-missing shape MQTT_SN uses for its own actions.
+        var act = new JSL.Array(1);
+        var a0 = JSC.JSObject.CreateObject();
+        a0["name"] = CFG_ACTION;
+        a0["text"] = "Remote node configuration";
+        act[0] = a0;
+        _cfgT.SetField("Action", act, _owner);
+        _cfgT.SetState(0, _owner);
+        // DB, like /local/asw/access next to it: without it neither the topic
+        // nor the descriptor survives a restart, the guard above would be false
+        // every time, and an edited label would be overwritten on every start.
+        _cfgT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+      }
+      if(!_cfgRpcRegistered) {
+        // RPC.Register throws on a duplicate name and there is no way to undo
+        // it, so this is guarded rather than left to the assumption that Start()
+        // runs once per process.
+        RPC.Register(CFG_ACTION, CfgRpc);
+        _cfgRpcRegistered = true;
+      }
       _reqSub = rt.Subscribe(SubRec.SubMask.All | SubRec.SubMask.Value, Request);
       _transport = new Transport(this);
       _cfg = new CfgRemote(_transport, CfgReply);
-      // Subscribed last, after _cfg exists — CfgRequested calls into it, and
-      // the subscribe itself can deliver immediately.
-      // All|Value: one child per WS session, created by ApiV04 as sessions
-      // come and go, so this has to cover the subtree rather than one topic.
-      // Per-session and not one shared request topic on purpose: Repo's
-      // EnquePerf collapses several setState performs for the same topic
-      // inside one tick, which would silently swallow one of two concurrent
-      // requests.
-      _cfgReqSub = _cfgReqT.Subscribe(SubRec.SubMask.All | SubRec.SubMask.Value, CfgRequested);
     }
 
-    private void CfgRequested(Perform p, SubRec sr) {
-      if(_cfg == null || p.Art != Perform.E_Art.changedState || p.Prim == _owner || p.src == _cfgReqT) {
+    /// <summary>One CFGGET/CFGSET line in, one answer out.</summary>
+    /// <remarks>The argument is an object with one property, "line", holding
+    /// the tab-separated command - the same text asw_ws_gateway passes to
+    /// asw_core over IPC, so one cfglink.js serves both backends. It travels
+    /// inside JSON rather than as a frame field of its own precisely because
+    /// it contains tabs, which the frame itself is split on; JSON escapes them.
+    /// <para>The answer is the result verbatim - "OK" and the values, or "ERR"
+    /// and a reason - which PendingRpc turns into ok:true with that string as
+    /// its data. An ERR is deliberately not reported as ok:false: it is the
+    /// device's answer, not a failure of the call, and the pages have always
+    /// parsed OK/ERR themselves.</para></remarks>
+    private void CfgRpc(Topic t, JSC.JSValue arg, Action<JSC.JSValue> reply) {
+      var cfg = _cfg;
+      if(cfg == null) {
+        reply(Err("offline", "The switch transport is not running"));
         return;
       }
-      var v = p.src.GetState();
-      if(v.ValueType != JSC.JSValueType.String) {
+      string line = arg == null ? null : arg.AsString("line", null);
+      if(string.IsNullOrEmpty(line)) {
+        reply(Err("bad_args", "No command line was supplied"));
         return;
       }
-      // Topic name is the session id; ApiV04 listens on the matching rsp child.
-      _cfg.Submit(p.src.name, v.Value as string);
+      string session;
+      lock(_cfgRpc) {
+        session = "rpc" + (++_cfgSeq).ToString(CultureInfo.InvariantCulture);
+        _cfgRpc[session] = new KeyValuePair<string, Action<JSC.JSValue>>(line, reply);
+      }
+      cfg.Submit(session, line);
+    }
+
+    private static JSC.JSValue Err(string code, string message) {
+      var o = JSC.JSObject.CreateObject();
+      o["error"] = code;
+      o["message"] = message;
+      return o;
     }
 
     private void CfgReply(string session, string payload) {
-      _cfgRspT.Get(session, true, _owner).SetState(payload, _owner);
+      KeyValuePair<string, Action<JSC.JSValue>> pending;
+      bool found;
+      lock(_cfgRpc) {
+        found = _cfgRpc.TryGetValue(session, out pending);
+        if(found) _cfgRpc.Remove(session);
+      }
+      if(!found) {
+        // A late answer after Stop() cleared the table, or a session this
+        // plugin never handed out. Nowhere to send it, and no reason to log an
+        // operator-visible error for something only shutdown produces.
+        return;
+      }
+      // CfgRemote echoes the request line back ahead of the result, which is
+      // what the old G/R pair correlated on. The cid does that now, so the echo
+      // is trimmed and the caller gets the result alone.
+      string line = pending.Key;
+      string result = payload != null && line != null
+                      && payload.Length > line.Length && payload.StartsWith(line, StringComparison.Ordinal)
+                      ? payload.Substring(line.Length + 1)
+                      : payload;
+      pending.Value(result);
     }
 
     public void Stop() {
       _reqSub.Dispose();
       _accessSub.Dispose();
-      _cfgReqSub.Dispose();
+      // Answer whatever is still in flight. PendingRpc would eventually time
+      // these out on its own, but that backstop is 30 seconds and says only
+      // "did not answer"; a page waiting on a switch that has just been shut
+      // down should hear so at once.
+      KeyValuePair<string, Action<JSC.JSValue>>[] inFlight;
+      lock(_cfgRpc) {
+        inFlight = _cfgRpc.Values.ToArray();
+        _cfgRpc.Clear();
+      }
+      foreach(var pending in inFlight) {
+        pending.Value(Err("offline", "The switch transport stopped"));
+      }
       var tr = Interlocked.Exchange(ref _transport, null);
       if(tr!=null) {
         tr.Dispose();
@@ -197,19 +276,21 @@ namespace X13.Periphery {
     }
 
     // /local/asw/access, 0/1/2 — see state.h in SW/Server for the exact same
-    // three states. Request() below gates on _access, ApiV04 reads the topic
-    // for its /export/req write ACL; nothing else derives from this.
-    private void AccessChanged(Perform p, SubRec sr) {
-      // changedState only: a Once subscribe also replays the current value once
-      // at Subscribe() time (Art == subscribe), and Start() has already read
+    // three states. Request() below gates on _access; across the link
+    // asw_ws_gateway keeps its own cached copy of this topic and gates writes
+    // from clients outside trusted_nets on it. Nothing else here derives from
+    // this.
+    private void AccessChanged(TopicEvent p, SubRec sr) {
+      // StateChanged only: a Once subscribe also replays the current value once
+      // at Subscribe() time (EventKind.Snapshot), and Start() has already read
       // _access straight from the topic by then — acting on that replay would
       // just re-publish the same value for nobody.
-      // Prim == _owner is our own re-assert below; ignoring it is what keeps
+      // Author == _owner is our own re-assert below; ignoring it is what keeps
       // this from looping.
-      if(p.Art != Perform.E_Art.changedState || p.Prim == _owner) {
+      if(p.Kind != EventKind.StateChanged || p.Author == _owner) {
         return;
       }
-      var v = p.src.GetState();
+      var v = p.Source.GetState();
       int n = v.IsNumber ? (int)v : -1;
       if(n < 0 || n > 2) {
         // Garbage from a client. asw_core just drops such a CMD and stays
@@ -221,13 +302,23 @@ namespace X13.Periphery {
         return;
       }
       _access = n;
-      // No write-back on the normal path: the client that wrote this gets its
-      // confirmation from ApiV04.SubChanged, which does not suppress self-echo
-      // under /local/ (see the comment there). Re-asserting the same value
-      // here instead would have depended on Repo's setState dedup — which
-      // compares JSValues by REFERENCE, so whether a re-assert of an identical
-      // small int propagates at all is a NiL.JS implementation detail. Not
-      // something to hang the UI on.
+      // Write the accepted value back, from us rather than from the client.
+      //
+      // The Lock/Local/Remote tab was built against a web API that relayed a
+      // write back to the session that made it: the tab sends a request and
+      // redraws only when a value arrives. The dashboard endpoint suppresses
+      // exactly that echo - DashboardSession.SubChangedCore drops any event
+      // whose Author is the session's own owner - so without this the tab
+      // would sit on its old state until the page was reloaded.
+      //
+      // Re-asserting an identical number does reach subscribers: CmdState
+      // compares the old and new JSValue by INSTANCE, not by value (Cmd.cs),
+      // and upstream's comment there says that is staying. Our own AntGen
+      // relies on the same fact from the other side - it de-duplicates in the
+      // plugin because repeated identical numbers otherwise publish on every
+      // poll. Author is _owner, so the guard at the top of this method ignores
+      // the notification and this cannot loop.
+      _accessT.SetState(_access, _owner);
     }
 
     public void Tick() {
@@ -274,19 +365,19 @@ namespace X13.Periphery {
         break;
       }
     }
+    // Lazy, and resolved here rather than in Init(): the server reads enabled
+    // before Init() runs (Program.InitPlugins), so a field filled in by Start()
+    // would still be null at that point.
+    public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
+
     public bool enabled {
       get {
-        var en = Topic.root.Get("/$YS/AntSw", true);
-        if(en.GetState().ValueType != JSC.JSValueType.Boolean) {
-          en.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
-          en.SetState(true);
+        if(Owner.GetState().ValueType != JSC.JSValueType.Boolean) {
+          Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
+          Owner.SetState(true);
           return true;
         }
-        return (bool)en.GetState();
-      }
-      set {
-        var en = Topic.root.Get("/$YS/AntSw", true);
-        en.SetState(value);
+        return (bool)Owner.GetState();
       }
     }
     #endregion IPlugModul Members
@@ -529,18 +620,34 @@ namespace X13.Periphery {
         }
       } else {
         switch(cmd.param) {
-        case 2: // Reset - ClearConsoleState() on the device: ConSel/ConSlot/ConStat -> defaults.
-                // ClearSlot() also zeroes AntCfg[].oRxCfg/oTxCfg for the released band, but
-                // never pushes that via cons_bin_refresh (calls are commented out in parser.c),
-                // so rxcfg/txcfg have to be cleared here too, same as case 5 below.
-          _di.Get("con"+addr.ToString()+"/status", true, _owner).SetState(0);
-          _di.Get("con"+addr.ToString()+"/sel", true, _owner).SetState(0);
-          _di.Get("con"+addr.ToString()+"/slot", true, _owner).SetState(0);
-          _di.Get("con"+addr.ToString()+"/rxcfg", true, _owner).SetState(0);
-          _rxCfg[addr-1] = 0;
-          _di.Get("con"+addr.ToString()+"/txcfg", true, _owner).SetState(0);
-          _txCfg[addr-1] = 0;
-          Log.Warning("AntSw.con" + addr.ToString()+" reset");
+        case 2:  // BUS_EV_RESET - the console says it has reset and lost its
+                 // state. It sends this itself once its link is up (bus.c in
+                 // Console) and after an address change. Nobody asked for it,
+                 // so it is a warning; a release is not, and no longer shares
+                 // this code.
+          Log.Warning("AntSw.con" + addr.ToString()+" device reset");
+          ClearConsole(addr);
+          break;
+        case 43: // BUS_EV_RELEASE_MAIN
+        case 44: // BUS_EV_RELEASE_AUX
+                 // ClearConsoleState() on the device: an ordinary band release.
+                 // ClearSlot() also zeroes AntCfg[].oRxCfg/oTxCfg for the
+                 // released band, but never pushes that via cons_bin_refresh
+                 // (calls are commented out in parser.c), so rxcfg/txcfg have
+                 // to be cleared here too.
+                 // Behind Verbose, like every other Log.Debug in this plugin
+                 // (Transport.cs does the same): the level alone suppresses
+                 // nothing -- Log.Process writes every record to console and
+                 // file, and its file threshold is the literal LogLevel.Debug.
+                 // "Not verbose" is this plugin's own flag, /$YS/AntSw/verbose.
+          if(Verbose) Log.Debug("AntSw.con" + addr.ToString()+" release");
+          ClearConsole(addr);
+          break;
+        case 41: // BUS_EV_ERROR_OFFLINE - the mainboard's poll counter dropped
+                 // it. Same news also reaches OnFail as an F frame; both call
+                 // the same method so the two cannot drift.
+          Log.Warning("AntSw.con" + addr.ToString()+" link lost");
+          ConsoleOffline(addr);
           break;
         case 3: // Ptt Off (console released PTT, TX -> RX) - cons_bin_log(5, cAddr, PTT_MAIN_OFF), bus 0 in parser.c
           _di.Get("con"+addr.ToString()+"/status", true, _owner).SetState(2);
@@ -559,16 +666,46 @@ namespace X13.Periphery {
         case 4: // Ptt On (remote confirmed TX active) - cons_bin_log(5, adr, PTT_MAIN_ON), bus 1 in parser.c
           _di.Get("con"+addr.ToString()+"/status", true, _owner).SetState(3);
           break;
-        case 5: // Device Online
-          _di.Get("con"+(addr).ToString()+"/status", true, _owner).SetState(0);
-          _di.Get("con"+addr.ToString()+"/rxcfg", true, _owner).SetState(0);
-          _rxCfg[addr-1] = 0;
-          _di.Get("con"+addr.ToString()+"/txcfg", true, _owner).SetState(0);
-          _txCfg[addr-1] = 0;
-          Log.Warning("AntSw.con" + addr.ToString()+"/status = 0");
+        case 5:  // BUS_EV_ONLINE - the poll counter declared it present again.
+                 // Not necessarily a reboot (a cable, a connector), but what it
+                 // held is not trustworthy either way. sel/slot are cleared here
+                 // too, as NodeStateLost() does on the device; leaving them was
+                 // how a console came back showing a selection it no longer had.
+          Log.Warning("AntSw.con" + addr.ToString()+" link up");
+          ClearConsole(addr);
           break;
         }
       }
+    }
+
+    // "Whatever this node held is gone" - the four shapes of it. Kept as methods
+    // because the same news arrives on two paths, an E event mirrored by
+    // parseEvent and an F frame from a failed exchange, and handling them apart
+    // is how they drift. Names match clear_console / console_offline /
+    // remote_free / remote_offline in SW/Server/core/src/state.c.
+    private void ConsoleState(byte addr, int status) {
+      _di.Get("con"+addr.ToString()+"/status", true, _owner).SetState(status);
+      _di.Get("con"+addr.ToString()+"/sel", true, _owner).SetState(0);
+      _di.Get("con"+addr.ToString()+"/slot", true, _owner).SetState(0);
+      _di.Get("con"+addr.ToString()+"/rxcfg", true, _owner).SetState(0);
+      _rxCfg[addr-1] = 0;
+      _di.Get("con"+addr.ToString()+"/txcfg", true, _owner).SetState(0);
+      _txCfg[addr-1] = 0;
+    }
+
+    private void ClearConsole(byte addr) { ConsoleState(addr, 0); }        // present, idle
+    private void ConsoleOffline(byte addr) { ConsoleState(addr, 255); }    // PLS_OFFLINE
+
+    private void RemoteFree(int rem) {
+      _remoteSt[rem] = 0;
+      _remoteStAux[rem] = 0;
+      PublishRemStatus(rem);
+    }
+
+    private void RemoteOffline(int rem) {
+      _remoteSt[rem] = 255;
+      _remoteStAux[rem] = 255;
+      PublishRemStatus(rem);
     }
     private void OnEventRemote(Command cmd) {
       byte rem = (byte)(cmd.addr-17);
@@ -582,11 +719,22 @@ namespace X13.Periphery {
         return;
       }
       switch(cmd.param) {
-      case 2: // Reset - this remote (re)came online: RemMain/RemAux -> ADDR_NONE
-        _remoteSt[rem] = 0;
-        _remoteStAux[rem] = 0;
-        PublishRemStatus(rem);
-        Log.Warning("AntSw.rem" + (rem+1).ToString()+" reset");
+      case 2:  // BUS_EV_RESET - the remote says it has reset and lost its state.
+               // It sends this itself once its link is up (bus.c in Remote) and
+               // after an address change. Nobody asked for it, so it is a
+               // warning; a release is not, and no longer shares this code.
+        Log.Warning("AntSw.rem" + (rem+1).ToString()+" device reset");
+        RemoteFree(rem);
+        break;
+      case 43: // BUS_EV_RELEASE_MAIN
+      case 44: // BUS_EV_RELEASE_AUX - ClearSlot() on the device, i.e. the
+               // ordinary "an owner let go of this remote".
+        if(Verbose) Log.Debug("AntSw.rem" + (rem+1).ToString()+" release");
+        RemoteFree(rem);
+        break;
+      case 41: // BUS_EV_ERROR_OFFLINE - the poll counter dropped it.
+        Log.Warning("AntSw.rem" + (rem+1).ToString()+" link lost");
+        RemoteOffline(rem);
         break;
       case 3: // Ptt Off
         _di.Get("con"+con.ToString()+"/status", true, _owner).SetState(2);
@@ -594,15 +742,76 @@ namespace X13.Periphery {
       case 4: // Ptt On
         _di.Get("con"+con.ToString()+"/status", true, _owner).SetState(3);
         break;
-      case 5: // Device Online
-        _remoteSt[rem] = 0;
-        PublishRemStatus(rem);
-        Log.Warning("AntSw.rem" + (rem+1).ToString()+"/status = 0");
+      case 5:  // BUS_EV_ONLINE - the poll counter declared it present again.
+               // Not necessarily a reboot, but what it held is not trustworthy.
+        Log.Warning("AntSw.rem" + (rem+1).ToString()+" link up");
+        RemoteFree(rem);
         break;
       }
     }
+    // What the node actually complained about. Bare numbers mean a trip to
+    // bus_def.h every time something goes wrong on the air, which is the worst
+    // moment for it. Mirrors fail_name() in SW/Server/core/src/state.c.
+    private static string FailName(ushort param) {
+      switch(param) {
+      case 0x21: return "unknown command";
+      case 0x22: return "frame error";
+      case 0x23: return "bus fail";
+      case 0x24: return "timeout";
+      case 0x25: return "unknown event";
+      case 0x26: return "buffer overflow";
+      case 0x27: return "bad ext event";
+      case 0x28: return "bad ext parameter";
+      case 0x29: return "offline";
+      case 0x30: return "state inconsistent";
+      case 0x31: return "switch state";
+      case 0x32: return "PA state warning";
+      case 0x33: return "PA state error";
+      case 0x37: return "band switch";
+      default:   return "unknown error";
+      }
+    }
+
+    // Every failure the devices report, including the ones no branch below acts
+    // on. OnFail() used to handle 41 and 48-51 and drop the rest without a
+    // word, so a buffer overflow, a framing error, a PA fault or a dead antenna
+    // matrix left no trace anywhere.
+    //
+    // Two exceptions, both deliberate:
+    //   41       announces itself in the branches below, together with what it
+    //            means for the node.
+    //   0x27/28  are answers to our own config Get/Set. The operator already
+    //            sees them as ERR from CFGGET/CFGSET, and a Setup page being
+    //            read code by code would otherwise fill the log with them --
+    //            so they stay behind Verbose.
+    //
+    // The mainboard's own bus layer reports with addr = (bus << 4), i.e. device
+    // 0, which is neither a console nor a remote -- hence the last case.
+    private void LogFail(byte addr, ushort param) {
+      if(param == 41) {
+        return;
+      }
+      string who;
+      if(addr >= 1 && addr <= 8) {
+        who = "con" + addr.ToString();
+      } else if(addr >= 17 && addr <= 24) {
+        who = "rem" + (addr - 16).ToString();
+      } else if(addr == 32) {
+        who = "mainboard";
+      } else {
+        who = "bus" + (addr >> 4).ToString();
+      }
+      string msg = "AntSw." + who + " error 0x" + param.ToString("X2") + " " + FailName(param);
+      if(param == 0x27 || param == 0x28) {
+        if(Verbose) Log.Debug(msg);
+      } else {
+        Log.Warning(msg);
+      }
+    }
+
     private void OnFail(Command cmd) {
       int addr;
+      LogFail(cmd.addr, cmd.param);
       switch(cmd.addr) {
       case 1:
       case 2:
@@ -620,12 +829,12 @@ namespace X13.Periphery {
           // (FW/Mainboard/Source/PARSER/parser.c:1064), and the startup poll of
           // 129 reports 0xFF for an absent console. The remote branch below has
           // always stored 255 for the same event.
-          addr = cmd.addr-1;
-          _di.Get("con"+(addr+1).ToString()+"/status", true, _owner).SetState(255);
-          _di.Get("con"+(addr+1).ToString()+"/rxcfg", true, _owner).SetState(0);
-          _rxCfg[addr] = 0;
-          _di.Get("con"+(addr+1).ToString()+"/txcfg", true, _owner).SetState(0);
-          _txCfg[addr] = 0;
+          //
+          // The same news also arrives as an E event when the mainboard's poll
+          // counter drops the node; both paths call ConsoleOffline so the two
+          // cannot drift.
+          Log.Warning("AntSw.con" + cmd.addr.ToString()+" link lost");
+          ConsoleOffline(cmd.addr);
           break;
         }
         break;
@@ -639,78 +848,66 @@ namespace X13.Periphery {
       case 24:
         switch(cmd.param) {
         case 41:
+          // The owner loses the remote, so it loses its selection with it -
+          // sel/slot go too, which is what the device does (ReleaseSlot).
           addr = cmd.addr - 17;
-          if(_remoteSt[addr]>=1 && _remoteSt[addr]<=8) {
-            int con = _remoteSt[addr]-1;
-            _di.Get("con"+(con+1).ToString()+"/status", true, _owner).SetState(0);
-            _di.Get("con"+(con+1).ToString()+"/rxcfg", true, _owner).SetState(0);
-            _rxCfg[con] = 0;
-            _di.Get("con"+(con+1).ToString()+"/txcfg", true, _owner).SetState(0);
-            _txCfg[con] = 0;
-          }
-          _remoteSt[addr] = 255;
-          _remoteStAux[addr] = 255;
-          PublishRemStatus(addr);
+          if(_remoteSt[addr]>=1 && _remoteSt[addr]<=8)
+            ClearConsole(_remoteSt[addr]);
+          Log.Warning("AntSw.rem" + (addr+1).ToString()+" link lost");
+          RemoteOffline(addr);
           break;
         case 48:
         case 49:
         case 50:
         case 51:
+          // A recoverable fault: the remote stays present, but free.
           addr = cmd.addr - 17;
-          if(_remoteSt[addr]>=1 && _remoteSt[addr]<=8) {
-            int con = _remoteSt[addr]-1;
-            _di.Get("con"+(con+1).ToString()+"/status", true, _owner).SetState(0);
-            _di.Get("con"+(con+1).ToString()+"/rxcfg", true, _owner).SetState(0);
-            _rxCfg[con] = 0;
-            _di.Get("con"+(con+1).ToString()+"/txcfg", true, _owner).SetState(0);
-            _txCfg[con] = 0;
-          }
-          _remoteSt[addr] = 0;
-          _remoteStAux[addr] = 0;
-          PublishRemStatus(addr);
+          if(_remoteSt[addr]>=1 && _remoteSt[addr]<=8)
+            ClearConsole(_remoteSt[addr]);
+          RemoteFree(addr);
           break;
         }
         break;
       }
     }
 
-    private void Request(Perform p, SubRec sr) {
+    private void Request(TopicEvent p, SubRec sr) {
       byte con;
       int tmp;
       // _access == 0 (Lock) means no request is acted on at all, whoever sent
-      // it — the LAN/remote distinction is ApiV04's job, not this one's.
-      if(_access == 0 || p.Prim==_owner || p.src.path.Length < 17 || !p.src.path.StartsWith("/export/req/con") || !byte.TryParse(p.src.path.Substring(15, 1), out con) || con==0 || con > 8) {
+      // it — the LAN/remote distinction belongs to whatever served the client
+      // (DashboardAcl here, trusted_nets in asw_ws_gateway), not to this.
+      if(_access == 0 || p.Author==_owner || p.Source.path.Length < 17 || !p.Source.path.StartsWith("/export/req/con") || !byte.TryParse(p.Source.path.Substring(15, 1), out con) || con==0 || con > 8) {
         return;
       }
-      switch(p.src.name) {
+      switch(p.Source.name) {
       case "ptt":
-        if(p.src.GetState().ValueType==JSC.JSValueType.Boolean) {
-          _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)(((bool)p.src.GetState())?4:3)));  
+        if(p.Source.GetState().ValueType==JSC.JSValueType.Boolean) {
+          _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)(((bool)p.Source.GetState())?4:3)));  
         }
-        p.src.SetState(JSC.JSObject.Null, _owner);
+        p.Source.SetState(JSC.JSObject.Null, _owner);
         break;
       case "band":
-        if(p.src.GetState().IsNumber && (tmp = (int)p.src.GetState())>0 && tmp <= 8) {
+        if(p.Source.GetState().IsNumber && (tmp = (int)p.Source.GetState())>0 && tmp <= 8) {
           _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)((tmp-1)*2 + 64)));  
         }
-        p.src.SetState(0, _owner);
+        p.Source.SetState(0, _owner);
         break;
       case "rxcfg":
-        if(p.src.GetState().IsNumber && (tmp = (int)p.src.GetState())>0 && tmp <= 8) {
+        if(p.Source.GetState().IsNumber && (tmp = (int)p.Source.GetState())>0 && tmp <= 8) {
           _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)((tmp-1)*2 + 96)));  
         }
-        p.src.SetState(0, _owner);
+        p.Source.SetState(0, _owner);
         break;
       case "txcfg":
-        if(p.src.GetState().IsNumber && (tmp = (int)p.src.GetState())>0 && tmp <= 8) {
+        if(p.Source.GetState().IsNumber && (tmp = (int)p.Source.GetState())>0 && tmp <= 8) {
           _transport.Write(new Command(CommandCode.Event, (byte)(32+con), (byte)((tmp-1)*2 + 97)));  
         }
-        p.src.SetState(0, _owner);
+        p.Source.SetState(0, _owner);
         break;
       }
     }
 
-    public Topic Owner { get { return _owner; } }
     public bool Verbose { get { return _verbose != null && (bool)_verbose.GetState(); } }
   }
 }

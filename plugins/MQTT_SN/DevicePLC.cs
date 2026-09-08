@@ -13,7 +13,6 @@ namespace X13.Periphery {
     private readonly int _idx;
     private readonly Topic _owner;
     private readonly Action<byte[]> _pub;
-    private readonly Topic _verbose;
     private bool _plcStoped;
     private bool PlcStoped {
       get {
@@ -37,22 +36,14 @@ namespace X13.Periphery {
       _idx = System.Threading.Interlocked.Increment(ref _cntCom);
       this._owner = owner;
       this._pub = pub;
-      this._verbose = Topic.root.Get("/$YS/DevicePLC/verbose");
-      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-#if DEBUG
-        _verbose.SetState(true);
-#else
-        _verbose.SetState(false);
-#endif
-      }
       _st = 0;
       _owner.SetState(0);
     }
 
+    /// <summary>/$YS/DevicePLC/verbose, declared once by the plugin rather than per device.</summary>
     public bool Verbose {
       get {
-        return _verbose != null && (bool)_verbose.GetState();
+        return MQTT_SNPl.verbosePlc;
       }
     }
     public string Path { get { return _owner.path; } }
@@ -60,9 +51,8 @@ namespace X13.Periphery {
     #region RPC Members
     public X13.DevicePLC.EP_Compiler Build() {
       var st = _owner.Get("src", false, _owner);
-      if(st == null || st.GetState().ValueType != JSC.JSValueType.String || !(st.GetState().Value is string src)) {
-        src = string.Empty;
-      }
+      // One read instead of three, and AsString carries the type test and the default with it.
+      string src = st == null ? string.Empty : st.GetState().AsString(string.Empty);
       var c = new X13.DevicePLC.EP_Compiler();
       c.CMsg += C_CMsg;
       return c.Parse(src)?c:null;
@@ -123,10 +113,10 @@ namespace X13.Periphery {
       }
       _owner.parent.SetField("Children", ch_t, _owner);
       string sTag;
-      var varLst = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").Value as string) != null && sTag.StartsWith("M")).ToArray();
+      var varLst = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").AsString(null)) != null && sTag.StartsWith("M")).ToArray();
       var rereg = new List<Tuple<Topic, string>>();
       foreach(var t in varLst) {
-        sTag = t.GetField("MQTT-SN.tag").Value as string;
+        sTag = t.GetField("MQTT-SN.tag").AsString(null);
         var vt = c.varList.FirstOrDefault(z => t.name == z.Key.Replace('.', '_'));
         if(vt.Key==null) {
           rereg.Add(new Tuple<Topic, string>(t, string.Empty));

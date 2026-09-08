@@ -34,7 +34,7 @@ namespace X13.Periphery {
       var pt = _pl.Owner.Get("port", true, _pl.Owner);
       string pn;
       if(pt.GetState().ValueType != NiL.JS.Core.JSValueType.String || string.IsNullOrEmpty(pn = pt.GetState().Value as string)) {
-        pt.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
+        pt.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         pn = "com2";
         pt.SetState(pn, _pl.Owner);
       }

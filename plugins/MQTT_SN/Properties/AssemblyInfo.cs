@@ -16,3 +16,7 @@ using System.Runtime.InteropServices;
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 [assembly: Guid("1fdb212a-7216-4915-937f-0b600ce76964")]
+
+// Same reason as Logram and PersistentStorage: everything here is internal, so without this the
+// plugin cannot be covered at all. See todo.md item 2.
+[assembly: InternalsVisibleTo("X13.Tests")]

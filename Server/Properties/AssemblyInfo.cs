@@ -11,10 +11,15 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCulture("")]
 
-// Setting ComVisible to false makes the types in this assembly not visible 
-// to COM components.  If you need to access a type in this assembly from 
+// Setting ComVisible to false makes the types in this assembly not visible
+// to COM components.  If you need to access a type in this assembly from
 // COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
+
+// The host-side classes worth unit-testing (LogramWireRouter and friends) are internal
+// on purpose - they are implementation detail of the WebUI view providers, not API - so
+// the test assembly is let in rather than widening them to public just to be reachable.
+[assembly: InternalsVisibleTo("X13.Tests")]
 
 // Die folgende GUID bestimmt die ID der Typbibliothek, wenn dieses Projekt für COM verfügbar gemacht wird
 [assembly: Guid("d45aa126-4914-4971-adb9-ee63d83960da")]

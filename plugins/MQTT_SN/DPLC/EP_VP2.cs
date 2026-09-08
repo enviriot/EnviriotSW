@@ -1,4 +1,5 @@
 ﻿using System;
+using NiL.JS.Extensions;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -1037,21 +1038,33 @@ namespace X13.DevicePLC {
       }
       throw new NotSupportedException("Field name in " + node.ToString());
     }
+    /// <summary>Value of an integer constant operand, or a compile error naming where it is.</summary>
+    /// <remarks>These operands are folded into instruction arguments, so a fractional constant
+    /// cannot be represented. It already failed - unboxing JSValue.Value straight to int threw
+    /// InvalidCastException, which Compiler logged without saying where. The refusal is the same,
+    /// only now it names the line and the reason.</remarks>
+    private int ConstInt(Constant c, CodeNode node) {
+      if(!c.Value.Is<int>()) {
+        throw new NotSupportedException(_compiler.Where(node) + "operand must be an integer constant, got " + c.Value.ToString());
+      }
+      return (int)c.Value;
+    }
+
     private void AddCommon(CodeNode node, Expression a, Expression b) {
       var c1 = a as Constant;
       var c2 = b as Constant;
       if(c1 != null && c2 != null) {
-        LoadConstant(node, (int)(c1.Value.Value) + (int)(c2.Value.Value));
-      } else if(c1 != null && (int)(c1.Value.Value) == 1) {
+        LoadConstant(node, ConstInt(c1, node) + ConstInt(c2, node));
+      } else if(c1 != null && ConstInt(c1, node) == 1) {
         b.Visit(this);
         _compiler.cur.AddInst(EP_InstCode.INC, 1, 1);
-      } else if(c1 != null && (int)(c1.Value.Value) == -1) {
+      } else if(c1 != null && ConstInt(c1, node) == -1) {
         b.Visit(this);
         _compiler.cur.AddInst(EP_InstCode.DEC, 1, 1);
-      } else if(c2 != null && (int)(c2.Value.Value) == 1) {
+      } else if(c2 != null && ConstInt(c2, node) == 1) {
         a.Visit(this);
         _compiler.cur.AddInst(EP_InstCode.INC, 1, 1);
-      } else if(c2 != null && (int)(c2.Value.Value) == -1) {
+      } else if(c2 != null && ConstInt(c2, node) == -1) {
         a.Visit(this);
         _compiler.cur.AddInst(EP_InstCode.DEC, 1, 1);
       } else {

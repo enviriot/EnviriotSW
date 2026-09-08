@@ -70,32 +70,34 @@ namespace CSWindowsServiceRecoveryProperty
             try
             {
                 // Open the service control manager.
-                hSCManager = Win32.OpenSCManager(null, null, Win32.SERVICE_QUERY_CONFIG);
+                hSCManager = Win32.OpenSCManager(null, null, Win32.SC_MANAGER_CONNECT);
                 if (hSCManager.IsInvalid)
                 {
                     throw new Win32Exception();
                 }
 
                 // Open the service.
-                hService = Win32.OpenService(hSCManager, scName, Win32.SERVICE_ALL_ACCESS);
+                // ChangeServiceConfig2 is all we do here, and it needs only SERVICE_CHANGE_CONFIG
+                hService = Win32.OpenService(hSCManager, scName, Win32.SERVICE_CHANGE_CONFIG);
                 if (hService.IsInvalid)
                 {
                     throw new Win32Exception();
                 }
 
                 int numActions = scActions.Count;
-                int[] falureActions = new int[numActions * 2];
+                // Native SC_ACTION is exactly two 32-bit fields with no padding, so an int
+                // array of {Type, Delay} pairs is a valid blob on both x86 and x64.
+                int[] failureActions = new int[numActions * 2];
                 bool needShutdownPrivilege = false;
-                int i = 0;
 
-                // We need to copy the actions in scFailureActionArray to an 
+                // We need to copy the actions in scFailureActionArray to an
                 // unmanaged memory through Marshal.Copy.
 
-                foreach (SC_ACTION scAction in scActions)
+                for (int n = 0; n < numActions; n++)
                 {
-                    falureActions[i] = scAction.Type;
-                    falureActions[++i] = scAction.Delay;
-                    i++;
+                    SC_ACTION scAction = scActions[n];
+                    failureActions[2 * n] = scAction.Type;
+                    failureActions[2 * n + 1] = scAction.Delay;
 
                     if (scAction.Type == (int)SC_ACTION_TYPE.RebootComputer)
                     {
@@ -110,11 +112,11 @@ namespace CSWindowsServiceRecoveryProperty
                 }
 
                 // Allocate memory.
-                hGlobal = Marshal.AllocHGlobal(falureActions.Length * Marshal.SizeOf(typeof(int)));
+                hGlobal = Marshal.AllocHGlobal(failureActions.Length * Marshal.SizeOf(typeof(int)));
 
                 // Copies data from a one-dimensional, managed 32-bit signed integer 
                 // array to an unmanaged memory pointer.
-                Marshal.Copy(falureActions, 0, hGlobal, falureActions.Length);
+                Marshal.Copy(failureActions, 0, hGlobal, failureActions.Length);
 
                 // Set the SERVICE_FAILURE_ACTIONS struct.
                 SERVICE_FAILURE_ACTIONS scFailureActions = new SERVICE_FAILURE_ACTIONS();
@@ -200,10 +202,22 @@ namespace CSWindowsServiceRecoveryProperty
 
                 // Enable privileges in the specified access token.
                 int retLen = 0;
-                if (!Win32.AdjustTokenPrivileges(hToken, false, ref tokenPrivileges,
-                    0, IntPtr.Zero, ref retLen))
+                bool ok = Win32.AdjustTokenPrivileges(hToken, false, ref tokenPrivileges,
+                    0, IntPtr.Zero, ref retLen);
+                // Capture immediately: any other managed call in between can clobber the code.
+                int err = Marshal.GetLastWin32Error();
+                if (!ok)
                 {
-                    throw new Win32Exception();
+                    throw new Win32Exception(err);
+                }
+                // AdjustTokenPrivileges reports success even when it assigned nothing, so the
+                // real outcome is only visible here. Without this the reboot recovery action
+                // would be registered and then silently never fire.
+                if (err == Win32.ERROR_NOT_ALL_ASSIGNED)
+                {
+                    throw new Win32Exception(err,
+                        "The process does not hold " + Win32.SE_SHUTDOWN_NAME +
+                        ", required for the 'Restart Computer' recovery action");
                 }
             }
             finally

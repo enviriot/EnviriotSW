@@ -1,4 +1,5 @@
 ﻿///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+using NiL.JS.Extensions;
 using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 using System;
@@ -12,7 +13,6 @@ using System.Threading;
 namespace X13.Periphery {
   internal class TWI : IMsExt {
     private readonly Topic _owner;
-    private readonly Topic _verbose;
     private readonly Action<byte[]> _pub;
     private readonly SubRec _deviceChangedsSR;
     private readonly List<TwiDevice> _devs;
@@ -24,26 +24,17 @@ namespace X13.Periphery {
       this._pub = pub;
       this._devs = new List<TwiDevice>();
       this._reqs = new Queue<TwiPack>();
-      this._verbose = Topic.root.Get("/$YS/TWI/verbose");
-      if(_verbose.GetState().ValueType != JSC.JSValueType.Boolean) {
-        _verbose.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB);
-#if DEBUG
-        _verbose.SetState(true);
-#else
-        _verbose.SetState(false);
-#endif
-      }
-
       _flag = 1;
-      _deviceChangedsSR = this._owner.Subscribe(SubRec.SubMask.Chldren | SubRec.SubMask.Field, "type", DeviceChanged);
+      _deviceChangedsSR = this._owner.Subscribe(SubRec.SubMask.Children | SubRec.SubMask.Field, "type", DeviceChanged);
       if(Verbose) {
         Log.Debug("{0}.Created", _owner.path);
       }
     }
 
+    /// <summary>/$YS/TWI/verbose, declared once by the plugin rather than per bus.</summary>
     public bool Verbose {
       get {
-        return _verbose != null && (bool)_verbose.GetState();
+        return MQTT_SNPl.verboseTwi;
       }
     }
 
@@ -130,16 +121,14 @@ namespace X13.Periphery {
         }
       }
     }
-    private void DeviceChanged(Perform p, SubRec sr) {
-      var d = _devs.FirstOrDefault(z => z.owner == p.src);
+    private void DeviceChanged(TopicEvent p, SubRec sr) {
+      var d = _devs.FirstOrDefault(z => z.owner == p.Source);
       if(d != null) {
         _devs.Remove(d);
         d.Dispose();
       }
-      JSC.JSValue jType;
-      if((p.Art == Perform.E_Art.create || p.Art == Perform.E_Art.changedField || p.Art == Perform.E_Art.subscribe) && (jType = p.src.GetField("type")).ValueType == JSC.JSValueType.String
-        && jType.Value != null && (jType.Value as string).StartsWith("TWI")) {
-        _devs.Add(new TwiDevice(p.src, this));
+      if((p.Kind == EventKind.Created || p.Kind == EventKind.FieldChanged || p.Kind == EventKind.Snapshot) && p.Source.GetField("type").AsString(string.Empty).StartsWith("TWI")) {
+        _devs.Add(new TwiDevice(p.Source, this));
       }
     }
     private Task<JSC.JSValue> TwiReq(int[] arr) {
@@ -182,8 +171,9 @@ namespace X13.Periphery {
         this._twi = twi;
         JSC.JSValue jSrc;
         var jType = owner.GetField("type");
-        if(jType.ValueType == JSC.JSValueType.String && jType.Value != null && Topic.root.Get("$YS/TYPES", false).Exist(jType.Value as string, out var tt)
-          && (jSrc = JsLib.GetField(tt.GetState(), "src")).ValueType == JSC.JSValueType.String) {
+        var types = Topic.root.Get("$YS/TYPES", false);  // null until PersistentStorage seeds it, and always null when that plugin is off
+        if(types != null && jType.AsString(null) is string tp && types.Exist(tp, out var tt)
+          && (jSrc = tt.GetState().Field("src")).Is<string>()) {
         } else {
           jSrc = null;
         }
@@ -194,7 +184,7 @@ namespace X13.Periphery {
             _ctx.DefineVariable("setInterval").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
             _ctx.DefineVariable("setAlarm").Assign(X13.JsExtLib.Context.ProxyValue(new Func<JSC.JSValue, JSC.JSValue, JSC.JSValue>(SetAlarm)));
 
-            if(_ctx.Eval(jSrc.Value as string) is JSL.Function f) {
+            if(_ctx.Eval(jSrc.AsString(string.Empty)) is JSL.Function f) {
               f.prototype["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));
               f.prototype["SetState"] = X13.JsExtLib.Context.ProxyValue(new Action<string, JSC.JSValue>(SetState));
               f.prototype["GetField"] = X13.JsExtLib.Context.ProxyValue(new Func<string, string, JSC.JSValue>(GetField));
