@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>X13.Tests</RootNamespace>
+    <!-- Имя сборки задано жёстко и переименованию не подлежит: шесть проектов уже открыли
+         тестам свои internal через [assembly: InternalsVisibleTo("X13.Tests")], и другое имя
+         молча закроет доступ обратно - ошибкой это станет только при компиляции теста. -->
+    <AssemblyName>X13.Tests</AssemblyName>
+    <Prefer32Bit>false</Prefer32Bit>
+    <IsPackable>false</IsPackable>
+
+    <!-- Directory.Build.props гасит генерацию атрибутов на всё решение: там у каждого проекта
+         есть рукописный Properties\AssemblyInfo.cs. У тестов его нет и заводить незачем -
+         проще вернуть проекту штатную генерацию. -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+
+    <!-- Не bin_d: сервер набирает плагины сканированием собственного каталога через MEF,
+         и X13.Tests.dll вместе с адаптерами тест-платформы оказалась бы среди кандидатов. -->
+    <OutputPath>..\Output\tests\</OutputPath>
+
+    <!-- Тест-платформа тянет те же System.*, что и net48, но других версий; без
+         перенаправлений хост падает на загрузке адаптера. GenerateBindingRedirectsOutputType
+         нужен отдельно - иначе для библиотеки X13.Tests.dll.config не создаётся. -->
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+
+  <!-- Test.Sdk даёт хост и интеграцию со сборкой: без него vstest.console проект не подхватит.
+       Адаптер называется NUnit3TestAdapter по историческим причинам - его 6.x обслуживает NUnit 4,
+       и никакого NUnit4TestAdapter не существует.
+       Analyzers ловят ошибки в самих проверках при компиляции - перепутанный порядок аргументов и
+       подобное, что иначе доходит до человека в виде странно упавшего теста. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="NUnit" Version="4.6.1" />
+    <PackageReference Include="NUnit3TestAdapter" Version="6.3.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.14.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Ссылки на все проекты решения сразу: InternalsVisibleTo выдан всеми шестью, значит
+       тест может понадобиться любому из них, а добавлять ссылку задним числом - лишний повод
+       не написать тест. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Server\Server.csproj" />
+    <ProjectReference Include="..\plugins\Archivist\Archivist.csproj" />
+    <ProjectReference Include="..\plugins\Logram\Logram.csproj" />
+    <ProjectReference Include="..\plugins\MQTT\MQTT.csproj" />
+    <ProjectReference Include="..\plugins\MQTT_SN\MQTT_SN.csproj" />
+    <ProjectReference Include="..\plugins\PersistentStorage\PersistentStorage.csproj" />
+    <ProjectReference Include="..\plugins\WebUI\WebUI.csproj" />
+  </ItemGroup>
+
+</Project>

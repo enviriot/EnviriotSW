@@ -1,5 +1,8 @@
 name: Release
 
+# Выпуск: полная пересборка Release, архив, тег и релиз. Только по кнопке.
+# Проверка коммитов - отдельный workflow (ci.yml): там Debug и тесты. Оба вызывают
+# один и тот же .github/script/Build.ps1, разными режимами.
 on:
   workflow_dispatch:
     inputs:
@@ -12,7 +15,8 @@ on:
         type: boolean
         default: false
 
-# Нужно и для push обновлённого VersionInfo.cs, и для создания тега и релиза.
+# Нужно для создания тега и релиза. Ветку workflow больше не трогает: номер выпуска считается
+# от последнего тега, и коммитить в репозиторий нечего.
 permissions:
   contents: write
 
@@ -27,20 +31,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0   # нужны теги, чтобы поймать повторный выпуск той же версии
+          fetch-depth: 0   # нужны теги: из них Build.ps1 считает номер выпуска
 
       - uses: microsoft/setup-msbuild@v2
 
-      - name: Собрать и упаковать
+      - name: Собрать Release и упаковать
         id: pack
         shell: pwsh
-        run: '& .github/script/Release.ps1'
+        run: '& .github/script/Build.ps1 -Mode Pack'
 
       - uses: actions/upload-artifact@v7
         with:
           name: enviriot-${{ steps.pack.outputs.version }}
           path: ${{ steps.pack.outputs.zip }}
 
+      # Номер выводится от последнего тега, поэтому новый свободен по построению. Проверка
+      # осталась как защита от второго выпуска, запущенного одновременно с этим.
       - name: Проверить, что тег свободен
         if: ${{ !inputs.dry_run }}
         shell: pwsh
@@ -50,29 +56,7 @@ jobs:
           $existing = git ls-remote --tags origin "refs/tags/$env:TAG"
           if ($LASTEXITCODE -ne 0) { throw 'git ls-remote завершился с ошибкой' }
           if ($existing) {
-            throw "Тег $env:TAG уже существует - эта версия выпущена. Соберите заново, чтобы получить следующий номер."
-          }
-
-      # UpdateVersionInfo переписывает VersionInfo.cs при каждой сборке; без возврата
-      # изменения в ветку следующий прогон в тот же день получил бы тот же номер.
-      - name: Зафиксировать VersionInfo.cs
-        if: ${{ !inputs.dry_run }}
-        shell: pwsh
-        env:
-          VERSION: ${{ steps.pack.outputs.version }}
-          BRANCH: ${{ github.ref_name }}
-        run: |
-          git config user.name  'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Server/Properties/VersionInfo.cs
-          git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host 'VersionInfo.cs не изменился, коммит не нужен.'
-          } else {
-            git commit -m "Version $env:VERSION"
-            if ($LASTEXITCODE -ne 0) { throw 'git commit завершился с ошибкой' }
-            git push origin "HEAD:$env:BRANCH"
-            if ($LASTEXITCODE -ne 0) { throw 'git push завершился с ошибкой' }
+            throw "Тег $env:TAG уже существует - похоже, выпуск запущен дважды одновременно."
           }
 
       - name: Создать релиз

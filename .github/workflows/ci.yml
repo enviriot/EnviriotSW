@@ -1,0 +1,39 @@
+name: CI
+
+# Каждый новый коммит и запуск по кнопке: полная пересборка Debug и тесты.
+# Выпуск живёт отдельно, в release.yml - там Release и упаковка архива.
+# Обе стороны вызывают один и тот же .github/script/Build.ps1, разными режимами.
+on:
+  # Фильтр по веткам задан явно, чтобы пуш тега (v.0.5.2609.8100, который создаёт
+  # release.yml) не запускал сборку второй раз: с фильтром branches теги не подходят.
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+# Пуш поверх пуша в ту же ветку отменяет предыдущий прогон: интересен результат
+# последнего коммита, а сборка занимает минуты.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Собрать Debug и прогнать тесты
+        id: tests
+        shell: pwsh
+        run: '& .github/script/Build.ps1 -Mode Test'
+
+      # always(): отчёт нужен именно тогда, когда шаг выше упал - в нём видно, какой
+      # тест и на чём. Скрипт выставляет outputs до проверки кода возврата vstest.
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && steps.tests.outputs.trx != '' }}
+        with:
+          name: test-results-${{ steps.tests.outputs.version }}
+          path: ${{ steps.tests.outputs.trx }}

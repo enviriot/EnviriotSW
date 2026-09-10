@@ -1,16 +1,31 @@
 <Project>
 
-  <!-- Replaces VersionUpdate.exe, a 6 KB binary that was committed at the repository root with
-       no source anywhere. The numbering it implemented was recovered by running it against a
-       copy of VersionInfo.cs and is reproduced here verbatim:
+  <!-- The only place a human sets the version: move 0.5 to 0.6 here and nowhere else.
+       Everything after major.minor is computed - see the comment below. -->
+  <PropertyGroup>
+    <VersionBaseline>0.5</VersionBaseline>
+    <VersionCompany>X13</VersionCompany>
+    <VersionProduct>Enviriot</VersionProduct>
+  </PropertyGroup>
+
+  <!-- Generates Server\Properties\VersionInfo.cs, which is deliberately NOT in version control:
+       it is a build artefact. Keeping it under git was what left every working copy dirty, forced
+       the release workflow to commit a version bump back into the branch, and turned one line into
+       a conflict on every dev -> master merge. It also never really carried the number between two
+       machines - it carried two copies of it that drifted apart.
 
          AssemblyVersion = major . minor . yyMM . (day * 1000 + counter)
 
-       where the first two components are left as they are found, the third is the current year
-       and month (2609 for September 2026), and the fourth combines the day of the month with a
-       per-day build counter. A Debug build adds one to the counter; a Release build rounds it up
-       to the next multiple of a hundred, so a version whose last two digits are zero marks a
-       release. The counter restarts when the day changes.
+       major.minor come from VersionBaseline, the third component is the current year and month
+       (2609 for September 2026), and the fourth combines the day of the month with a per-day
+       build counter that restarts when the day changes.
+
+       This task only ever counts up by one. The rounding to a whole hundred that marks a release
+       lives in .github\script\Build.ps1 now, along with the rest of the release numbering: a
+       release number is derived from the last release TAG, which is shared through git the way a
+       committed file never was. Two consequences worth knowing: an accidental Release build from
+       the IDE no longer spends a release number, and Build.ps1 passes its result in through the
+       BuildVersion property, which this task then writes verbatim.
 
        No Regex: RoslynCodeTaskFactory brings a fixed set of usings, and plain IndexOf parsing
        keeps the task working without an extra <Using> element. -->
@@ -19,77 +34,126 @@
              AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <ProjectDir ParameterType="System.String" Required="true" />
-      <Configuration ParameterType="System.String" Required="true" />
+      <Baseline ParameterType="System.String" Required="true" />
+      <Company ParameterType="System.String" Required="true" />
+      <Product ParameterType="System.String" Required="true" />
+      <!-- Set by Build.ps1 for a release, empty for every other build. -->
+      <RequestedVersion ParameterType="System.String" />
+      <!-- The commit built from: "aefa27c", "aefa27c-dirty", or empty when git said nothing. -->
+      <Commit ParameterType="System.String" />
       <Version ParameterType="System.String" Output="true" />
     </ParameterGroup>
     <Task>
       <Code Type="Fragment" Language="cs"><![CDATA[
         string path = Path.Combine(ProjectDir, "Properties", "VersionInfo.cs");
-        if (!File.Exists(path)) {
-          Log.LogError("VersionInfo.cs not found at " + path);
-          return false;
+        string ver = RequestedVersion;
+
+        if (string.IsNullOrEmpty(ver)) {
+          string[] baseParts = (Baseline ?? string.Empty).Split('.');
+          string major = baseParts.Length > 0 && baseParts[0].Length > 0 ? baseParts[0] : "0";
+          string minor = baseParts.Length > 1 && baseParts[1].Length > 0 ? baseParts[1] : "0";
+
+          // The counter is read back out of the file this task wrote last time, and that is the
+          // whole of what it means: the n-th build made on THIS machine today. A missing file is
+          // normal rather than an error - nothing puts one in a fresh clone.
+          const string AsmVer = "[assembly: AssemblyVersion(\"";
+          int oldStamp = 0, oldCounter = 0;
+          if (File.Exists(path)) {
+            foreach (string line in File.ReadAllLines(path)) {
+              if (!line.StartsWith(AsmVer)) continue;
+              int from = AsmVer.Length, to = line.IndexOf('"', from);
+              if (to < 0) continue;
+              string[] parts = line.Substring(from, to - from).Split('.');
+              if (parts.Length != 4) continue;
+              int.TryParse(parts[2], out oldStamp);
+              int.TryParse(parts[3], out oldCounter);
+              break;
+            }
+          }
+
+          DateTime now = DateTime.Now;
+          int stamp = (now.Year % 100) * 100 + now.Month;
+          int day = now.Day * 1000;
+          // A counter from another day - or another month - carries no information, so it
+          // restarts from the day's base rather than being incremented.
+          int counter = (stamp == oldStamp && oldCounter >= day && oldCounter < day + 1000)
+                      ? oldCounter + 1
+                      : day + 1;
+          ver = major + "." + minor + "." + stamp + "." + counter;
         }
 
-        const string AsmVer = "[assembly: AssemblyVersion(\"";
-        const string FileVer = "[assembly: AssemblyFileVersion(\"";
+        // Written whole rather than line-patched: the file is generated, so it holds nothing worth
+        // preserving, and both readers of it - the counter above and Build.ps1 - then know exactly
+        // what shape to expect.
+        StringBuilder text = new StringBuilder();
+        text.Append("///<remarks>Generated by VersionUpdate.targets - not in version control, do not edit.<remarks>\r\n");
+        text.Append("using System.Reflection;\r\n");
+        text.Append("\r\n");
+        text.Append("[assembly: AssemblyCompany(\"").Append(Company).Append("\")]\r\n");
+        text.Append("[assembly: AssemblyProduct(\"").Append(Product).Append("\")]\r\n");
+        text.Append("[assembly: AssemblyTrademark(\"\")]\r\n");
+        text.Append("\r\n");
+        text.Append("[assembly: AssemblyVersion(\"").Append(ver).Append("\")]\r\n");
+        text.Append("[assembly: AssemblyFileVersion(\"").Append(ver).Append("\")]\r\n");
+        text.Append("[assembly: AssemblyInformationalVersion(\"").Append(ver).Append("\")]\r\n");
 
-        string[] lines = File.ReadAllLines(path);
-
-        // The old version is read from the AssemblyVersion line; the commented-out
-        // "1.0.*" sample above it starts with "//" and is skipped by StartsWith.
-        string major = "0", minor = "0";
-        int oldStamp = 0, oldCounter = 0;
-        bool found = false;
-        foreach (string line in lines) {
-          if (!line.StartsWith(AsmVer)) continue;
-          int from = AsmVer.Length, to = line.IndexOf('"', from);
-          if (to < 0) continue;
-          string[] parts = line.Substring(from, to - from).Split('.');
-          if (parts.Length != 4) continue;
-          major = parts[0];
-          minor = parts[1];
-          int.TryParse(parts[2], out oldStamp);
-          int.TryParse(parts[3], out oldCounter);
-          found = true;
-          break;
-        }
-        if (!found) {
-          Log.LogError("No [assembly: AssemblyVersion(\"a.b.c.d\")] line in " + path);
-          return false;
+        // The commit goes in AssemblyMetadata and NOT into AssemblyInformationalVersion, where a
+        // "+<sha>" suffix would be the conventional place for it. csc fills the numeric
+        // PRODUCTVERSION of the Win32 version resource by parsing that attribute as four numbers,
+        // and writes 0,0,0,0 for anything it cannot parse - which a hash suffix guarantees. The
+        // file's version tab showed zeroes for exactly that reason once. AssemblyMetadata never
+        // reaches the version resource at all.
+        if (!string.IsNullOrEmpty(Commit)) {
+          text.Append("[assembly: AssemblyMetadata(\"Commit\", \"").Append(Commit).Append("\")]\r\n");
         }
 
-        DateTime now = DateTime.Now;
-        int stamp = (now.Year % 100) * 100 + now.Month;
-        int day = now.Day * 1000;
-
-        // A counter from another day - or another month - carries no information, so it
-        // restarts from the day's base rather than being incremented.
-        int counter = (stamp == oldStamp && oldCounter >= day && oldCounter < day + 1000)
-                    ? oldCounter
-                    : day;
-
-        counter = string.Equals(Configuration, "Release", StringComparison.OrdinalIgnoreCase)
-                ? day + ((counter - day) / 100 + 1) * 100
-                : counter + 1;
-
-        Version = major + "." + minor + "." + stamp + "." + counter;
-
-        for (int i = 0; i < lines.Length; i++) {
-          if (lines[i].StartsWith(AsmVer))       lines[i] = AsmVer + Version + "\")]";
-          else if (lines[i].StartsWith(FileVer)) lines[i] = FileVer + Version + "\")]";
-        }
-
-        // UTF-8 without a BOM and CRLF endings, matching the file as it is committed.
-        File.WriteAllText(path, string.Join("\r\n", lines) + "\r\n", new System.Text.UTF8Encoding(false));
-        Log.LogMessage(MessageImportance.High, "VersionInfo " + Version);
+        // UTF-8 without a BOM and CRLF endings, matching the rest of the tree.
+        File.WriteAllText(path, text.ToString(), new System.Text.UTF8Encoding(false));
+        Version = ver;
+        Log.LogMessage(MessageImportance.High,
+          "VersionInfo " + ver + (string.IsNullOrEmpty(Commit) ? string.Empty : " commit " + Commit));
       ]]></Code>
     </Task>
   </UsingTask>
 
-  <!-- BeforeBuild runs ahead of CoreCompile, so the rewritten file is the one that gets
-       compiled - here and in the six plugins that link it. -->
+  <!-- BeforeBuild runs ahead of CoreCompile, so the generated file is the one that gets compiled -
+       here and in the six plugins that link it. -->
   <Target Name="UpdateVersion" BeforeTargets="BeforeBuild">
-    <UpdateVersionInfo ProjectDir="$(MSBuildProjectDirectory)" Configuration="$(Configuration)" />
+
+    <!-- Which commit the build came from - the one thing about a build that means the same on
+         every machine, and the reason no counter has to travel between them. ContinueOnError covers
+         "git is not on PATH" and IgnoreExitCode "this is not a repository": a build from a source
+         archive simply records no commit.
+         git diff rather than git status on purpose - status counts untracked files, and
+         VersionInfo.cs is untracked now, so it would report every single build as dirty.
+         2>NUL is not cosmetic: ConsoleToMSBuild captures stderr alongside stdout, so a routine
+         git remark (the CRLF-normalisation notice, say) would land inside the sha itself - and
+         Exec logs any line shaped like "warning: ..." as a build warning on top of that. -->
+    <Exec Command="git rev-parse --short HEAD 2>NUL" WorkingDirectory="$(MSBuildProjectDirectory)"
+          ConsoleToMSBuild="true" IgnoreExitCode="true" ContinueOnError="true"
+          StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitSha" />
+      <Output TaskParameter="ExitCode" PropertyName="_GitShaExit" />
+    </Exec>
+    <Exec Command="git diff --quiet HEAD 2>NUL" WorkingDirectory="$(MSBuildProjectDirectory)"
+          IgnoreExitCode="true" ContinueOnError="true"
+          StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="_GitDirtyExit" />
+    </Exec>
+
+    <PropertyGroup>
+      <_GitCommit Condition=" '$(_GitShaExit)' == '0' and '$(_GitSha)' != '' ">$(_GitSha)</_GitCommit>
+      <!-- git diff exits 1 when the tracked files differ from HEAD. The "-dirty" spelling is
+           git's own, the one git describe appends. -->
+      <_GitCommit Condition=" '$(_GitCommit)' != '' and '$(_GitDirtyExit)' == '1' ">$(_GitCommit)-dirty</_GitCommit>
+    </PropertyGroup>
+
+    <UpdateVersionInfo ProjectDir="$(MSBuildProjectDirectory)"
+                       Baseline="$(VersionBaseline)"
+                       Company="$(VersionCompany)"
+                       Product="$(VersionProduct)"
+                       RequestedVersion="$(BuildVersion)"
+                       Commit="$(_GitCommit)" />
   </Target>
 
 </Project>

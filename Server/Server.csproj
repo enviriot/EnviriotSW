@@ -22,10 +22,23 @@
     <DebugType>pdbonly</DebugType>
   </PropertyGroup>
 
-  <!-- Stamps Properties\VersionInfo.cs before every build. Was a PreBuildEvent calling
+  <!-- Generates Properties\VersionInfo.cs before every build. Was a PreBuildEvent calling
        VersionUpdate.exe, a committed binary with no source; the numbering it implemented now
        lives in the imported file as an inline task, where it can be read and changed. -->
   <Import Project="$(MSBuildProjectDirectory)\..\VersionUpdate.targets" />
+
+  <!-- The generated file is listed by hand rather than left to the SDK's **\*.cs glob. The glob
+       is evaluated when the project is loaded, and on a fresh clone - a CI checkout, above all -
+       the file does not exist yet: the target that writes it has not run. The glob then matches
+       nothing, and enviriot.exe compiles with no version attributes at all and reports 0.0.0.0,
+       while the six plugins, evaluated after the server has already built, link it and get the
+       real number. An explicit Include has no such timing: the item is the path, and the file
+       only has to exist by the time csc runs. Remove first, or the two would collide as a
+       duplicate Compile item on every build after the first. -->
+  <ItemGroup>
+    <Compile Remove="Properties\VersionInfo.cs" />
+    <Compile Include="Properties\VersionInfo.cs" />
+  </ItemGroup>
 
   <!-- base.xst is the repository seed PersistentStorage pulls out of this assembly by
        manifest name ("X13.Repository.base.xst") when it starts against an empty database.

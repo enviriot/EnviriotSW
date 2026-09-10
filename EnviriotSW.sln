@@ -22,6 +22,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WebUI", "WebUI", "{ADE7D7DA
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebUI.www", "Output\www\WebUI.www.csproj", "{90763063-66CF-2620-E851-FB7CAD2E07A4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "X13.Tests", "Tests\X13.Tests.csproj", "{AE7C18F8-CE87-438F-8BEB-BE19014B02F9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +61,9 @@ Global
 		{90763063-66CF-2620-E851-FB7CAD2E07A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{90763063-66CF-2620-E851-FB7CAD2E07A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{90763063-66CF-2620-E851-FB7CAD2E07A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE7C18F8-CE87-438F-8BEB-BE19014B02F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE7C18F8-CE87-438F-8BEB-BE19014B02F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE7C18F8-CE87-438F-8BEB-BE19014B02F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

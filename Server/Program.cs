@@ -191,9 +191,30 @@ namespace X13 {
     private Repository.Topic _performanceT;
     private Repository.SubRec _performanceSR;
 
+    private static readonly string _version = Assembly.GetExecutingAssembly().GetName().Version.ToString(4);
+    private static readonly string _commit = GetCommit();
+
+    /// <summary>Коммит, из которого собрана эта сборка, либо null.</summary>
+    /// <remarks>Номер версии - это локальный счётчик сборок за день, поэтому на двух машинах он
+    /// повторяется и сам по себе сборку не опознаёт; опознаёт её как раз коммит, который
+    /// VersionUpdate.targets кладёт в AssemblyMetadata из хеша HEAD ("aefa27c", при
+    /// незакоммиченных правках "aefa27c-dirty").
+    /// <para>Именно AssemblyMetadata, а не AssemblyInformationalVersion, где суффиксу "+хеш" было
+    /// бы самое место: числовое PRODUCTVERSION в ресурсе версии компилятор получает разбором
+    /// этого атрибута на четыре числа и пишет 0,0,0,0 для всего, что разобрать не смог.</para>
+    /// <para>null - сборка собрана без git, из архива с исходниками.</para></remarks>
+    private static string GetCommit() {
+      foreach (AssemblyMetadataAttribute meta in Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyMetadataAttribute>()) {
+        if (meta.Key == "Commit") {
+          return meta.Value;
+        }
+      }
+      return null;
+    }
+
     internal Program(string cfgPath) {
       X13.Repository.Repo.configPath = cfgPath;
-      Log.Info("Enviriot v.{0}", Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
+      Log.Info("Enviriot v.{0}, commit {1}", _version, _commit ?? "-");
     }
     internal bool Start() {
       // First, and not next to the other resets below: Start can fail before it reaches them -
@@ -487,7 +508,7 @@ namespace X13 {
         }
         if(today!=now.Date) {
           today = now.Date;
-          Log.Info("{0} v.{1}", today.ToLongDateString(), Assembly.GetExecutingAssembly().GetName().Version.ToString(4));
+          Log.Info("{0} v.{1}", today.ToLongDateString(), _version);
         }
       } while(!_terminate);
       // Null when the arming above stood aside, and StopPlugins is far too important to lose to
