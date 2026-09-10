@@ -23,8 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: microsoft/setup-msbuild@v2
-
+      # microsoft/setup-msbuild здесь намеренно нет: он только добавляет каталог MSBuild из
+      # установки Visual Studio в PATH, а Build.ps1 при отсутствии msbuild в PATH находит тот же
+      # файл через vswhere - тем же способом, каким он в любом случае ищет vstest.console.exe.
       - name: Собрать Debug и прогнать тесты
         id: tests
         shell: pwsh

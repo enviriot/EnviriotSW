@@ -88,7 +88,10 @@ from a plugin that no longer exists, or from a test framework no longer referenc
 being loaded at run time - and would be shipped in the release archive.
 
 Visual Studio or Build Tools is required. The script locates MSBuild and `vstest.console.exe`
-itself: `PATH` first, then `vswhere`. Tests need the "Testing tools" component.
+itself: `PATH` first, then `vswhere`. Tests need the "Testing tools" component. That is also why
+neither workflow uses `microsoft/setup-msbuild` - on a hosted runner it only puts the same MSBuild
+on `PATH`, and dropping it removes a dependency that has to be re-pinned every time GitHub retires
+a Node version.
 
 ### Version numbering
 

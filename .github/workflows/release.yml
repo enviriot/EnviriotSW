@@ -33,8 +33,7 @@ jobs:
         with:
           fetch-depth: 0   # нужны теги: из них Build.ps1 считает номер выпуска
 
-      - uses: microsoft/setup-msbuild@v2
-
+      # microsoft/setup-msbuild не нужен - Build.ps1 находит MSBuild через vswhere сам, см. ci.yml.
       - name: Собрать Release и упаковать
         id: pack
         shell: pwsh
