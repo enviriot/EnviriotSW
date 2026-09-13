@@ -1401,6 +1401,18 @@ namespace X13.Periphery {
       new Tuple<string, DType>("Sm", DType.Boolean | DType.Output), // Serial port DE
       new Tuple<string, DType>("Ma", DType.ByteArray),  // Merkers
 
+      // Реализованы в firmware, а не размещены компилятором, как меркеры M; вторая буква та же.
+      new Tuple<string, DType>("Xz", DType.Boolean),
+      new Tuple<string, DType>("Xb", DType.Integer),   //int8
+      new Tuple<string, DType>("XB", DType.Integer),   //uint8
+      new Tuple<string, DType>("Xw", DType.Integer),   //int16
+      new Tuple<string, DType>("XW", DType.Integer),   //uint16
+      new Tuple<string, DType>("Xd", DType.Integer),   //int32
+      new Tuple<string, DType>("XD", DType.Integer),   //uint32
+      new Tuple<string, DType>("Xq", DType.Integer),   //int64
+      new Tuple<string, DType>("Xs", DType.String),
+      new Tuple<string, DType>("Xa", DType.ByteArray),
+
       new Tuple<string, DType>("pa", DType.ByteArray | DType.PLC),    // Program
       new Tuple<string, DType>("Ta", DType.ByteArray | DType.TWI),
 
