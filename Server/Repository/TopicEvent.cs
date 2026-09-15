@@ -2,42 +2,34 @@
 using NiL.JS.Core;
 
 namespace X13.Repository {
-  /// <summary>What happened to a topic. Every kind here is something that already has.</summary>
-  /// <remarks>The enum a subscriber used to receive also carried setState, setField and
-  /// unsubscribe - requests, not outcomes, which publication filtered out and which plugins
-  /// nevertheless tested for. They are gone, and those tests with them.</remarks>
+  /// <summary>Событие, произошедшее с топиком. Каждый вид описывает уже произошедшее изменение.</summary>
   public enum EventKind {
     Created,
     Moved,
     StateChanged,
     FieldChanged,
     Removed,
-    /// <summary>The state a topic already held, handed to a subscription that just began.</summary>
+    /// <summary>Состояние, уже хранящееся в топике, передаваемое только что созданной подписке.</summary>
     Snapshot,
-    /// <summary>The snapshot is complete; from here on only changes arrive.</summary>
+    /// <summary>Передача снимка завершена; далее поступают только изменения.</summary>
     Ready,
   }
 
-  /// <summary>One published change: read-only, and typed by kind rather than by convention.</summary>
-  /// <remarks>What this replaces was a single untyped payload whose meaning depended on the kind -
-  /// <c>object o</c> holding a path, a value, a field name or a SubRec by turns, and
-  /// <c>old_o</c> holding either the previous state or the previous manifest. Reading the wrong
-  /// one answered null rather than failing, so the mistake surfaced as a missing update somewhere
-  /// else entirely.</remarks>
+  /// <summary>Одно опубликованное изменение: доступно только для чтения и типизировано видом события.</summary>
   public sealed class TopicEvent {
-    /// <summary>The topic this happened to.</summary>
+    /// <summary>Топик, с которым произошло событие.</summary>
     public readonly Topic Source;
     public readonly EventKind Kind;
-    /// <summary>Who caused it, where they said so - what keeps a change from echoing back.</summary>
+    /// <summary>Источник изменения, если он указан; используется для предотвращения обратного распространения изменения.</summary>
     public readonly Topic Author;
-    /// <summary>Moved: the path the topic had before. Null for every other kind.</summary>
+    /// <summary>Moved: прежний путь топика. Для всех остальных видов равен null.</summary>
     public readonly string OldPath;
-    /// <summary>FieldChanged: the field written first in this batch. Null for every other kind.</summary>
+    /// <summary>FieldChanged: путь изменённого поля. Для всех остальных видов равен null.</summary>
     public readonly string FieldPath;
 
-    internal readonly JSValue OldState;      // StateChanged, Removed
-    internal readonly JSValue OldManifest;   // FieldChanged
-    internal readonly SubRec Sub;            // Snapshot, Ready
+    internal readonly JSValue OldState;      // StateChanged, Removed: предыдущее состояние
+    internal readonly JSValue OldManifest;   // FieldChanged: предыдущий манифест
+    internal readonly SubRec Sub;            // Snapshot, Ready: целевая подписка
 
     private TopicEvent(Topic source, EventKind kind, Topic author, string oldPath, string fieldPath, JSValue oldState, JSValue oldManifest, SubRec sub) {
       this.Source = source;

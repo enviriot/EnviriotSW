@@ -18,7 +18,7 @@ namespace X13.WebUI.Helpers {
         if(!string.IsNullOrWhiteSpace(editor)) return editor;
       }
 
-      return StateType2Editor(topic.GetStateType());
+      return StateType2Editor(Topic.JsValueTypeName(topic.GetState()));
     }
 
     public static void InvalidateTypeCache(string typePath = null) {

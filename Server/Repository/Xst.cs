@@ -1,4 +1,4 @@
-///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>
+///<remarks>This file is part of the <see cref="https://github.com/enviriot">Enviriot</see> project.<remarks>using NiL.JS.Core;
 using NiL.JS.Core;
 using NiL.JS.Extensions;
 using System;
@@ -8,14 +8,12 @@ using System.Text;
 using System.Xml.Linq;
 
 namespace X13.Repository {
-  /// <summary>XML import and export of a repository subtree - the .xst format.</summary>
-  /// <remarks>Lifted out of Repo, where it was a third of the file. It is serialisation, not
-  /// repository mechanics: it holds no state, runs no tick and is called from four places that
-  /// have nothing to do with each other - startup configuration, the storage plugin's defaults,
-  /// the catalog's package installer and the WebUI's upload/download.
-  /// <para>Metadata travels JSON-encoded in the "m" attribute, state in "s", and "ver" carries an
-  /// import guard: an element whose version is not newer than what the tree already holds is
-  /// skipped entirely.</para></remarks>
+  /// <summary>Импорт и экспорт поддерева репозитория в формате .xst.</summary>
+  /// <remarks>Вызывается из четырёх независимых мест: при загрузке начальной конфигурации, 
+  /// применении значений по умолчанию плагина хранилища, установке пакетов из каталога и загрузке или скачивании через WebUI.
+  /// <para>Метаданные передаются в JSON-кодировке в атрибуте "m", состояние — в атрибуте "s",
+  /// а "ver" служит ограничителем импорта: элемент, версия которого не новее уже имеющейся
+  /// в дереве, полностью пропускается.</para></remarks>
   public static class Xst {
     public static bool Import(string fileName, string path = null) {
       if(string.IsNullOrEmpty(fileName) || !File.Exists(fileName)) {
@@ -28,18 +26,12 @@ namespace X13.Repository {
       return true;
     }
 
-    /// <summary>Reads a document and applies it - all of it, or none of it.</summary>
-    /// <remarks>Two passes. The first reads the XML into a plan and checks every name the document
-    /// asks for; the second creates the topics. Nothing is created until the whole document has
-    /// been read, so a document that cannot be applied leaves the tree exactly as it was.
-    /// <para>It used to create as it walked. A name the tree cannot carry - a subscription
-    /// wildcard, say - threw when the walk reached it, and everything before that point stayed:
-    /// half a package installed from the catalog, half a file uploaded from the IDE, and no way
-    /// for the caller to learn how far it got.</para>
-    /// <para>What the first pass does NOT reject is a malformed "m" or "s" attribute: that is
-    /// still a warning and the node is created without it, as before. Whether a document with one
-    /// unreadable attribute should be refused whole is a separate decision, not this one.</para>
-    /// </remarks>
+    /// <summary>Читает и применяет документ целиком либо не применяет его вовсе.</summary>
+    /// <remarks>Обработка выполняется в два прохода. Первый считывает XML в план и проверяет каждое имя,
+    /// запрошенное документом; второй создаёт топики. До полного чтения документа ничего не создаётся,
+    /// поэтому документ, который невозможно применить, оставляет дерево без изменений.
+    /// <para>При первом проходе НЕ отклоняются некорректные атрибуты "m" или "s": как и раньше,
+    /// записывается предупреждение, а узел создаётся без такого значения.</para></remarks>
     public static void Import(TextReader reader, string path) {
       XDocument doc;
       using(var r = new System.Xml.XmlTextReader(reader)) {
@@ -49,28 +41,28 @@ namespace X13.Repository {
         path = doc.Root.Attribute("path").Value;
       }
       if(string.IsNullOrEmpty(path)) {
-        return;   // nothing to address the document at
+        return;   // не указан путь, по которому следует применить документ
       }
       Topic.CheckPath(path, "Import");
       Topic existing;
       Topic.root.Exist(path, out existing);
       Node plan = Prepare(doc.Root, existing, null);
-      if(plan != null) {   // null means the document is not newer than what is already there
+      if(plan != null) {   // null означает, что документ не новее уже имеющихся данных
         Apply(plan, null, path);
       }
     }
 
-    /// <summary>One node the document asks for: read and checked, not yet created.</summary>
+    /// <summary>Один запрошенный документом узел: прочитан и проверен, но ещё не создан.</summary>
     private sealed class Node {
-      public string Name;          // null for the root, which is addressed by path
+      public string Name;          // для корня null, поскольку он задаётся путём
       public JSValue State;
       public JSValue Manifest;
       public readonly List<Node> Children = new List<Node>();
     }
 
-    /// <summary>Reads one element and its subtree into a plan. Null when the document skips it.</summary>
-    /// <param name="existing">The topic this element would land on, when there is one already -
-    /// needed only for the version guard, and null all the way down for a subtree being created.</param>
+    /// <summary>Считывает элемент и его поддерево в план. Возвращает null, если документ пропускает элемент.</summary>
+    /// <param name="existing">Существующий топик, которому соответствует этот элемент. Требуется только для проверки версии;
+    /// для всего создаваемого поддерева равен null.</param>
     private static Node Prepare(XElement x, Topic existing, string name) {
       Version ver;
       bool setVersion;
@@ -81,7 +73,7 @@ namespace X13.Repository {
           string ov_s;
           if(ov_js.Is<string>() && (ov_s = ov_js.Value as string) != null && ov_s.StartsWith("¤VR")
               && Version.TryParse(ov_s.Substring(3), out oldVer) && oldVer >= ver) {
-            return null;   // don't import older version
+            return null;   // не импортируем более старую версию
           }
         }
         setVersion = true;
@@ -112,7 +104,7 @@ namespace X13.Repository {
       foreach(var xNext in x.Elements("i")) {
         XAttribute n = xNext.Attribute("n");
         if(n == null) {
-          continue;   // not addressable, and never was
+          continue;   // элемент не имеет адреса и никогда его не имел
         }
         Topic.CheckName(n.Value, "Import");
         Topic child = null;
@@ -134,12 +126,7 @@ namespace X13.Repository {
         Apply(node.Children[i], cur, null);
       }
     }
-    /// <summary>Writes the tree to a file, replacing it only once the new one is complete.</summary>
-    /// <remarks>This was File.Create straight over the target, which truncates it before a single
-    /// byte of the new document is written - so an export that failed part way, or a power cut
-    /// during one, left behind exactly the truncated server.xst that Stop()'s guard below exists
-    /// to avoid producing. Reproduced, not imagined: a failed export turned a configuration into a
-    /// 0-byte file. How the swap itself is done, and why there is no fallback, is in Swap.</remarks>
+    /// <summary>Записывает дерево в файл, заменяя прежний файл только после завершения записи нового.</summary>
     public static void Export(string filename, Topic t, bool configOnly) {
       if(filename == null) {
         throw new ArgumentNullException("filename");
@@ -153,7 +140,7 @@ namespace X13.Repository {
       }
       catch {
         try {
-          File.Delete(tmp);   // does not throw when it was never created
+          File.Delete(tmp);   // не выбрасывает исключение, если файл не был создан
         }
         catch(Exception ex) {
           Log.Warning("Export({0}) - {1} could not be removed: {2}", filename, tmp, ex.Message);
@@ -162,20 +149,7 @@ namespace X13.Repository {
       }
     }
 
-    /// <summary>Puts the freshly written file in place of the one it replaces.</summary>
-    /// <remarks>File.Replace and nothing else, deliberately. It is atomic - a crash during it
-    /// leaves the old file or the new one, never half of either - and it fails when another
-    /// process holds the file it has to remove, which a live server reported once as
-    /// ERROR_UNABLE_TO_REMOVE_REPLACED and which cleared by itself minutes later.
-    /// <para>A fallback that renames the old file aside instead was written for that case and then
-    /// removed, because a negative control said it covers nothing: File.Replace still succeeds
-    /// against a holder that permits deletion, and where it does not, a rename needs the very same
-    /// access and fails too. The band between the two is empty. What answers a held file is not a
-    /// second way to swap it but asking again later - see Repo.Tick, which reschedules the save
-    /// rather than dropping it.</para>
-    /// <para>Writing in place would always succeed against a reader. That is what this replaced,
-    /// and it is what leaves a truncated server.xst after a power cut - a save delayed by thirty
-    /// seconds is the better trade.</para></remarks>
+    /// <summary>Устанавливает только что записанный файл вместо заменяемого.</summary>
     private static void Swap(string tmp, string filename) {
       if(File.Exists(filename)) {
         File.Replace(tmp, filename, null);

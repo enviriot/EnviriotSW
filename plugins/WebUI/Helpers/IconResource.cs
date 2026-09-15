@@ -43,7 +43,7 @@ namespace X13.WebUI {
       url = ResolveTypeIcon(typePath);
       if (url != null) return url;
 
-      if (string.IsNullOrWhiteSpace(editor)) editor = topic.GetStateType();
+      if (string.IsNullOrWhiteSpace(editor)) editor = Topic.JsValueTypeName(topic.GetState());
       return SemanticIconUrl(editor);
     }
 

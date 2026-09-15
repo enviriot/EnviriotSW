@@ -8,80 +8,45 @@ using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.Repository {
   /// <summary>Узел дерева: путь, состояние, манифест и атрибуты.</summary>
-  /// <remarks>Единственное, чем компоненты обмениваются между собой:
-  /// собственных каналов друг к другу у них нет, есть общий адрес - путь топика.
-  /// Структура меняется сразу и на потоке вызвавшего, а состояние, манифест и все события откладываются до тика репозитория.</remarks>
+  /// <remarks>Структура меняется сразу и на потоке вызвавшего, а состояние, манифест и все события откладываются до тика репозитория.</remarks>
   public sealed class Topic : IComparable<Topic> {
-    private object _sync;
 
-    /// <summary>Serialises structural change: creating a node, unlinking one, moving one.</summary>
-    /// <remarks>One lock for the whole tree rather than one per parent. A move touches two parents
-    /// and would need both, and two locks need a total order over topics that does not shift under
-    /// the operation - the path does shift, and RuntimeHelpers.GetHashCode is stable but not
-    /// unique, so two threads moving in opposite directions between two topics whose hashes
-    /// collided would take them in opposite orders and deadlock. An id on every topic would settle
-    /// it; one lock costs less and cannot be got wrong. Structural change is rare beside reading
-    /// and writing state, and the read paths do not take this at all.
-    /// <para>Readers are not covered. A traversal running beside a move can still meet a mix of
-    /// old and new paths - a separate problem, with a price of its own.</para></remarks>
+    /// <summary>Синхронизирует структурные изменения: создание, отсоединение и перемещение узлов.</summary>
     private static readonly object _structural = new object();
+    private static readonly KeyValuePair<string, Topic>[] NoChildren = new KeyValuePair<string, Topic>[0];
+    private static readonly SubRec[] NoSubs = new SubRec[0];
     private static Repo _repo;
     public static Topic root { get; private set; }
 
-    /// <summary>Every event the repository publishes. Dispose the result to stop receiving.</summary>
-    /// <remarks>The return value used to be void, so a plugin that subscribed here stayed
-    /// subscribed for the life of the process - including after its own Stop() had disposed the
-    /// objects the callback touches. Callers own what they get back.</remarks>
-    public static IDisposable Subscribe(Action<TopicEvent> func) {
-      if (_repo != null) {
-        return _repo.SubscribeAll(func);
-      } else {
-        Log.Error("Topic.Subscribe({0}.{1}) - _repo == null", func.Target != null ? func.Target.ToString() : func.Method.DeclaringType.Name, func.Method.Name);
-        throw new NullReferenceException("Topic.Subscribe() - _repo == null");
-      }
+    internal static void Init(Repo repo) {
+      Topic._repo = repo;
+      Topic.root = new Topic(null, "/", false) {
+        _manifest = JSObject.CreateObject()
+      };
+      Topic.root._manifest["attr"] = new JSL.Number((int)(Attribute.Required | Attribute.Internal));
     }
 
     #region Member variables
+    private readonly object _sync;
     private Topic _parent;
     private string _name;
     private string _path;
-    /// <summary>This node's children, in ordinal name order. Immutable - replaced, never mutated.</summary>
-    /// <remarks>A ConcurrentDictionary per node was the wrong shape twice over. It cost a fixed
-    /// amount per INSTANCE - a lock array sized by the processor count, plus a bucket table - which
-    /// measured at about 340 bytes for every node that has children, and in a bushy tree that is
-    /// most of them. And it holds no order, so every traversal of every node had to snapshot and
-    /// sort it, which is where the OrderBy buffering defect came from.
-    /// <para>An array kept in order answers both: no per-instance overhead, ordered traversal for
-    /// free, and the snapshot a reader needs is the field it already read. Writers replace it whole
-    /// under the structural lock; readers take the reference and never see a half-built one.</para>
-    /// <para>The key is kept beside the topic rather than read from Topic._name, which is mutable:
-    /// a rename changes it in place, and a reader halving an older snapshot would then take the
-    /// wrong branch and fail to find a SIBLING that never moved. With the key snapshotted the
-    /// worst case is the same as the dictionary's - the renamed one may be missed while the rename
-    /// is in flight, everything else is always found.</para></remarks>
+    /// <summary>Узлы отсортированы в порядке имён Ordinal. Массив неизменяемый: заменяется целиком, но не изменяется на месте.</summary>
     private volatile KeyValuePair<string, Topic>[] _children = NoChildren;
-    private static readonly KeyValuePair<string, Topic>[] NoChildren = new KeyValuePair<string, Topic>[0];
-    /// <summary>Registrations made ON this topic - not the ones that reach it from above.</summary>
-    /// <remarks>An array replaced whole rather than a List mutated in place: delivery reads the
-    /// field once and walks that snapshot, so a callback may dispose any number of registrations,
-    /// its own included, without the walk losing its place. The List it replaces was indexed
-    /// backwards with Count read once, which under two disposals handed the same event to the same
-    /// subscriber twice and under three threw straight out of the tick.</remarks>
+    /// <summary>Подписки, созданные на этом топике. Массив неизменяемый.</summary>
     private volatile SubRec[] _subRecords = NoSubs;
-    private static readonly SubRec[] NoSubs = new SubRec[0];
-
     private JSC.JSValue _state;
     private JSC.JSValue _manifest;
     private FieldBatch _mfst_pu;
 
-    /// <summary>The manifest a tick is building for one topic, shared by every write into it.</summary>
-    /// <remarks>Shared so the topic gets one new manifest rather than a partial one per write, and
-    /// so every event of the batch reports the same manifest from before it. Which of the writes
-    /// performs the swap does not matter - the first one applied does it, the rest read the result
-    /// out of here.</remarks>
+    /// <summary>Манифест, формируемый тиком для одного топика и общий для всех операций записи в него.</summary>
+    /// <remarks>Объект используется совместно, чтобы топик получал один новый манифест, а не частичный манифест
+    /// для каждой записи, и чтобы каждое событие пакета сообщало один и тот же манифест, существовавший до пакета.
+    /// Неважно, какая запись выполнит замену: это делает первая применённая запись, остальные считывают результат
+    /// отсюда.</remarks>
     internal sealed class FieldBatch {
-      public JSC.JSValue value;         // the manifest being built
-      public JSC.JSValue oldManifest;   // what it was before the batch, filled in by the swap
+      public JSC.JSValue value;         // формируемый манифест
+      public JSC.JSValue oldManifest;   // манифест до пакета; заполняется при замене
       public bool swapped;
     }
 
@@ -117,107 +82,33 @@ namespace X13.Repository {
     public bool disposed { get; private set; }
     public Bill all { get { return new Bill(this, true); } }
     public Bill children { get { return new Bill(this, false); } }
-    /// <summary>Whether a string can be a topic's own name.</summary>
-    /// <remarks>Public because a caller holding a name from outside - a client adding or renaming
-    /// a topic - needs to ASK rather than to catch: what it has is a refusal to report back, not
-    /// an exception to handle.
-    /// <para>Four copies of this rule used to disagree with each other. Resolve refused wildcards,
-    /// Move checked nothing at all, the .xst import grew its own, and WebUI's had a fourth set: it
-    /// refused '/' and '#' and let '+' through - and Resolve throws on '+', so a client could turn
-    /// "add a topic called +" into an unhandled exception. A separator inside a name is the other
-    /// half: Move would have taken it verbatim as a dictionary key, leaving a topic that no path
-    /// lookup could ever reach.</para>
-    /// <para>This is now the only statement of the rule: Resolve and CheckPath call CheckName per
-    /// segment instead of keeping their own shorter version. The last thing the short versions
-    /// still let through was a blank segment, which is how a topic named " " could be created and
-    /// then never renamed to - the two ends of one operation disagreeing.</para></remarks>
-    public static bool IsValidName(string name) {
-      return !string.IsNullOrWhiteSpace(name)
-        && name.IndexOf(Bill.delmiter) < 0
-        && name != Bill.maskAll
-        && name != Bill.maskChildren;
-    }
-
-    /// <summary>Throws unless the string can be a topic's own name.</summary>
-    internal static void CheckName(string name, string context) {
-      if (!IsValidName(name)) {
-        throw new ArgumentException(context + " - not a topic name: \"" + (name ?? "<null>") + "\"");
-      }
-    }
-
-    /// <summary>Throws unless every segment of a path could be a topic name.</summary>
-    /// <remarks>A path is not a name: it may be "/" and it may have several segments, so it is
-    /// checked segment by segment and an empty one is simply skipped, the way Resolve skips it.
-    /// <para>Each surviving segment is held to the whole rule and not to part of it. This checked
-    /// the two wildcards alone, so the .xst import accepted a blank segment in the path it was
-    /// addressed at while rejecting the same blank as a child name two lines later - one half of
-    /// one operation disagreeing with the other.</para></remarks>
-    internal static void CheckPath(string path, string context) {
-      string[] segments = (path ?? string.Empty).Split(Bill.delmiterArr, StringSplitOptions.RemoveEmptyEntries);
-      for (int i = 0; i < segments.Length; i++) {
-        CheckName(segments[i], context);
-      }
-    }
-
     public bool HasChildren() {
       KeyValuePair<string, Topic>[] kids = _children;
       for (int i = 0; i < kids.Length; i++) {
-        if (!kids[i].Value.disposed) {
-          return true;
-        }
+        if (!kids[i].Value.disposed) return true;
       }
       return false;
     }
-    public string GetStateType() {
-      return JsValueTypeName(_state);
-    }
-
-    // Extracted from GetStateType so callers with a bare JSValue (not backed by a Topic - e.g.
-    // a nested field inside another topic's state) can infer the same semantic type name.
-    public static string JsValueTypeName(JSValue value) {
-      if (value == null) return null;
-      switch (value.ValueType) {
-      case JSValueType.Object:
-        if (value.Value == null) return "Null";
-        // IsByteArray covers both representations: the JSValue itself and its .Value
-        if (X13.ByteArray.IsByteArray(value, out _)) return "ByteArray";
-        return "Object";
-      case JSValueType.String: {
-          string text = value.AsString(null);
-          if (text != null && text.StartsWith("¤VR")) return "Version";
-          return "String";
-        }
-      case JSValueType.Boolean: return "Boolean";
-      case JSValueType.Double:
-      case JSValueType.Integer: return "Double";
-      case JSValueType.Date: return "Time";
-      default: return null;
-
-      }
-    }
-
-    /// <summary> Get item from tree</summary>
-    /// <param name="path">relative or absolute path</param>
-    /// <param name="create">true - create, false - check</param>
-    /// <returns>item or null</returns>
-    /// <summary>Finds a topic by path, creating what is missing unless told not to.</summary>
-    /// <remarks>The rule the whole structural API follows, written down here because Get is the
-    /// door most callers come through:
+    /// <summary> Получает элемент из дерева</summary>
+    /// <param name="path">относительный или абсолютный путь</param>
+    /// <param name="create">true - создать, false - только проверить</param>
+    /// <returns>элемент или null</returns>
+    /// <summary>Находит топик по пути и, если не указано обратное, создаёт отсутствующие узлы.</summary>
+    /// <remarks>Ниже описано правило, которому следует весь структурный API. Оно приведено здесь,
+    /// поскольку большинство вызывающих обращается к структуре через Get:
     /// <list type="bullet">
-    /// <item>A QUESTION answers, it does not throw: Get(create: false) and Exist return null or
-    /// false for "no such topic", GetField returns Undefined, and Try- methods return a bool.
-    /// Absence is an answer, not a fault.</item>
-    /// <item>A COMMAND refuses a bad argument with ArgumentException, naming the offending value:
-    /// Get(create: true), Declare, Move, SetField, Import. ArgumentNullException stays for what it
-    /// means in the rest of .NET - a reference argument that is null.</item>
-    /// <item>A COMMAND that cannot be carried out in the state the tree is in throws
-    /// InvalidOperationException: moving the root, moving a removed topic.</item>
-    /// <item>A command NEVER quietly does nothing. Silence is indistinguishable from success, so
-    /// a caller that was ignored carries on believing the tree changed. Move had two such returns
-    /// and both are throws now.</item>
+    /// <item>ЗАПРОС возвращает ответ, а не выбрасывает исключение: Get(create: false) и Exist возвращают null
+    /// или false для отсутствующего топика, GetField возвращает Undefined, а методы Try- возвращают bool.
+    /// null является результатом, а не ошибкой.</item>
+    /// <item>КОМАНДА отклоняет недопустимый аргумент с помощью ArgumentException, указывая проблемное значение:
+    /// Get(create: true), Declare, Move, SetField, Import. ArgumentNullException используется в обычном для .NET
+    /// значении: ссылочный аргумент равен null.</item>
+    /// <item>КОМАНДА, которую невозможно выполнить в текущем состоянии дерева, выбрасывает
+    /// InvalidOperationException, например при перемещении корня или удалённого топика.</item>
+    /// <item>Команда НИКОГДА не должна молча ничего не делать. Молчание неотличимо от успеха, поэтому
+    /// проигнорированный вызывающий код продолжает считать, что дерево изменилось.</item>
     /// </list>
-    /// A caller holding a name from outside asks first - IsValidName - rather than catching; the
-    /// WebUI dispatcher does exactly that, and turns the answer into an error for its client.</remarks>
+    /// Получивший имя извне код сначала вызывает IsValidName, а не перехватывает исключение.</remarks>
     public Topic Get(string path, bool create = true, Topic prim = null) {
       return Resolve(this, path, create, prim, true);
     }
@@ -227,25 +118,14 @@ namespace X13.Repository {
     public bool Exist(string path, out Topic topic) {
       return (topic = Resolve(this, path, false, null, false)) != null;
     }
-    /// <summary>Moves the topic under another parent, or renames it, or both.</summary>
-    /// <remarks>The whole structural change happens under one lock, and in an order that leaves the
-    /// topic in one place or in none - never in two. It used to add the topic to its new parent
-    /// first and remove it from the old one after, so for a moment it was reachable from both
-    /// branches while parent, name and path still described the old position. The collection it
-    /// used kept each of those operations safe on its own; none of that made the transaction one.
-    /// <para>Two array replacements now, both inside the lock: the topic leaves its old parent and
-    /// then joins the new one.</para></remarks>
+    /// <summary>Перемещает топик к другому родителю, переименовывает его либо выполняет оба действия.</summary>
+    /// <remarks>Всё структурное изменение выполняется под одной блокировкой и в порядке, при котором топик
+    /// находится либо в одном месте, либо ни в одном, но никогда в двух.</remarks>
     public void Move(Topic nParent, string nName, Topic prim = null) {
-      // Refused rather than ignored, and the same for the removed topic below. A command that
-      // quietly does nothing is the worst of the three answers a caller can get: it reads exactly
-      // like success, so the caller carries on believing the tree changed.
       if (this._parent == null) {
+        // Операция отклоняется, а не игнорируется. 
         throw new InvalidOperationException(this._path + ".Move - the root cannot be moved");
       }
-      // Reachable, not defensive. Remove marks the topic and leaves the unlink to the tick, so
-      // before that tick the topic is still registered under its parent and Move used to carry the
-      // move out on something already on its way out; after it, Move fell through to the branch
-      // below and returned with a warning nobody reads.
       if (this.disposed) {
         throw new InvalidOperationException(this._path + ".Move - the topic has been removed");
       }
@@ -258,10 +138,7 @@ namespace X13.Repository {
       CheckName(nName, this._path + ".Move");
       string oldPath;
       lock (_structural) {
-        // A topic may not become its own descendant. The tree would hold a cycle, and UpdatePath
-        // below walks children keeping no record of where it has been, so the next call would
-        // recurse until the stack ran out - StackOverflowException, which no catch can intercept
-        // and which takes the process down with it. Checked before anything is touched.
+        // Топик не может стать собственным потомком.
         for (Topic p = nParent; p != null; p = p._parent) {
           if (p == this) {
             throw new ArgumentException(this._path + ".Move(" + nParent._path + ", " + nName + ") - a topic cannot be moved inside itself");
@@ -278,22 +155,19 @@ namespace X13.Repository {
         KeyValuePair<string, Topic>[] source = oldParent._children;
         int from = IndexOf(source, oldName);
         if (from < 0 || source[from].Value != this) {
-          // Unreachable now that a removed topic is turned away above - that was the one way in.
-          // Kept as a throw and not a warning for the same reason as the restore below: a
-          // structural call that cannot do what it was asked has to say so.
           throw new InvalidOperationException(this._path + ".Move(" + nParent._path + ", " + nName + ") - not registered under its own parent");
         }
         oldParent._children = RemovedAt(source, from);
         _parent = nParent;
         _name = nName;
         UpdatePath(this);
-        // Read the target again: the snapshot above was taken before the removal, and for a rename
-        // inside one parent it is the very array that removal replaced.
+        // Повторно читаем целевой массив: снимок выше получен до удаления, а при переименовании внутри
+        // одного родителя это именно тот массив, который был заменён удалением.
         target = nParent._children;
         to = IndexOf(target, nName);
         if (to >= 0) {
-          // Unreachable while every structural change holds this lock, and undone rather than
-          // asserted because the alternative is a topic in no branch at all.
+          // Ветка недостижима, пока все структурные изменения выполняются под этой блокировкой.
+          // Изменения откатываются, а не только проверяются, поскольку иначе топик не останется ни в одной ветви.
           _parent = oldParent;
           _name = oldName;
           UpdatePath(this);
@@ -305,15 +179,11 @@ namespace X13.Repository {
       }
       _repo.DoCmd(new CmdMove(this, oldPath, prim));
     }
-    /// <summary>Marks the topic removed now; the unlink and the event come with the tick.</summary>
-    /// <remarks>disposed is set here rather than in CmdRemove.Apply on purpose, and it follows the
-    /// rule the rest of the structure follows: creating and moving take effect on the caller's
-    /// thread too, and only the events wait. Bill and HasChildren read the flag, so a removed
-    /// subtree stops being enumerated the moment it is removed rather than a tick later.
-    /// <para>Deferring the flag, to make "a command applies next tick and not earlier" true of
-    /// structure as well, was considered and refused: Get would then answer with a topic that
-    /// children does not list, and that sentence was never true of structure to begin with.</para>
-    /// </remarks>
+    /// <summary>Немедленно помечает топик удалённым; отсоединение и событие выполняются в следующем тике.</summary>
+    /// <remarks>Флаг disposed намеренно устанавливается здесь, а не в CmdRemove.Apply. Это соответствует
+    /// общему правилу структуры: создание и перемещение также вступают в силу в потоке вызывающего кода,
+    /// а откладываются только события. Bill и HasChildren читают этот флаг, поэтому удалённое поддерево
+    /// перестаёт перечисляться сразу, а не через тик.</remarks>
     public void Remove(Topic prim = null) {
       this.disposed = true;
       var c = new CmdRemove(this, prim);
@@ -340,24 +210,11 @@ namespace X13.Repository {
           _subRecords = next;
         }
       }
-      // subAck and not subscribe when the registration was already there: the caller is answered,
-      // but the snapshot is not replayed for a subscription that never lapsed.
+      // Если подписка уже существовала, используется subAck, а не subscribe: вызывающий код получает ответ,
+      // но снимок не отправляется повторно для непрерывавшейся подписки.
       Cmd c = exist ? (Cmd)new CmdAck(this, sb) : new CmdSubscribe(this, sb);
       _repo.DoCmd(c);
       return sb;
-    }
-
-    /// <summary>The registration equal to this one, or null - what Subscribe dedupes on.</summary>
-    /// <remarks>No setTopic comparison: every record in a topic's own array was made on it.</remarks>
-    private static SubRec Find(SubRec[] subs, Action<TopicEvent, SubRec> func, SubRec.SubMask mask, string prefix) {
-      for (int i = 0; i < subs.Length; i++) {
-        SubRec s = subs[i];
-        if (s.func == func && s.mask == mask
-            && ((mask & SubRec.SubMask.Field) == SubRec.SubMask.None || s.prefix == prefix)) {
-          return s;
-        }
-      }
-      return null;
     }
 
     public JSValue GetState() {
@@ -388,17 +245,9 @@ namespace X13.Repository {
       return true;
     }
     public void SetField(string fPath, JSValue value, Topic prim = null) {
-      // Split, because one exception answered for two different faults: an empty string is not a
-      // null reference, and ArgumentNullException said it was.
-      if (fPath == null) {
-        throw new ArgumentNullException("fPath");
-      }
-      if (!TrySetField(fPath, value, prim)) {
-        throw new ArgumentException(this._path + ".SetField - the field path is empty");
-      }
+      if (!TrySetField(fPath, value, prim)) throw new ArgumentException(this._path + ".SetField - empty field path");
     }
-
-    /// <summary>Reads the manifest's "attr" field; false when the manifest holds no usable value.</summary>
+    /// <summary>Читает поле "attr" манифеста; возвращает false, если пригодного значения нет.</summary>
     private bool TryGetAttr(out int attr) {
       JSValue a;
       if (!_manifest.IsObject() || !(a = _manifest["attr"]).IsNumber) {
@@ -412,18 +261,15 @@ namespace X13.Repository {
       if (value == Attribute.None) {
         value = mask;
       }
-      int attr;
-      if (!TryGetAttr(out attr)) return false;
+      if (!TryGetAttr(out int attr)) return false;
       return (attr & (int)mask) == (int)value;
     }
     public void SetAttribute(Attribute value) {
-      int old;
       JSL.Number attr;
-      if (!TryGetAttr(out old)) {
+      if (!TryGetAttr(out int old)) {
         attr = new JSL.Number((int)value);
       } else {
-        // DB and Config are mutually exclusive; test the bit, not the whole value - real
-        // callers pass combined flags like Required|Readonly|Config
+        // DB и Config взаимоисключающие
         if ((value & Attribute.Saved) != Attribute.None) {
           old &= ~((int)Attribute.Saved);
         }
@@ -433,9 +279,8 @@ namespace X13.Repository {
       _repo.DoCmd(c);
     }
     public void ClearAttribute(Attribute value) {
-      int old;
       JSL.Number attr;
-      if (!TryGetAttr(out old)) {
+      if (!TryGetAttr(out int old)) {
         attr = new JSL.Number((int)value);
       } else {
         attr = new JSL.Number(old & ~(int)value);
@@ -454,13 +299,12 @@ namespace X13.Repository {
       return _path;
     }
 
-    #region nested types
+    #region helpers
     public class Bill : IEnumerable<Topic> {
       public const char delmiter = '/';
       public const string delmiterStr = "/";
       public const string maskAll = "#";
       public const string maskChildren = "+";
-      //public const string maskParent = "..";
       public static readonly char[] delmiterObj = new char[] { '.' };
       public static readonly char[] delmiterArr = new char[] { delmiter };
       public static readonly string[] curArr = new string[0];
@@ -475,19 +319,16 @@ namespace X13.Repository {
         _deep = deep;
       }
 
-      /// <summary>Walks a node's children, or its whole subtree, in ordinal name order.</summary>
-      /// <remarks>Nothing is sorted and nothing is copied: a node's children are already an
-      /// immutable array in that order, so the walk reads the field once and iterates the snapshot
-      /// it got. That is what removed the "sorted" parameter this class used to carry - it existed
-      /// to let the remove cascade and the subscribe fan-out skip a per-node sort that no longer
-      /// happens.
-      /// <para>The deep walk pushes children onto the stack from the last, so popping hands them
-      /// back ascending. A parent always comes before its children.</para></remarks>
+      /// <summary>Обходит дочерние узлы либо всё поддерево в порядке имён Ordinal.</summary>
+      /// <remarks>Ничего не сортируется и не копируется: дочерние узлы уже хранятся в неизменяемом массиве
+      /// в нужном порядке. Обход один раз читает поле и перебирает полученный снимок. 
+      /// <para>При глубоком обходе дочерние узлы помещаются в стек с конца, поэтому извлекаются в возрастающем
+      /// порядке. Родитель всегда возвращается раньше своих потомков.</para></remarks>
       public IEnumerator<Topic> GetEnumerator() {
         if (!_deep) {
           KeyValuePair<string, Topic>[] kids = _home._children;
           for (int i = 0; i < kids.Length; i++) {
-            if (!kids[i].Value.disposed) {  // Remove() marks disposed at once, the unlink happens a tick later
+            if (!kids[i].Value.disposed) {  // Remove() немедленно помечает узел удалённым, а отсоединение происходит тиком позже
               yield return kids[i].Value;
             }
           }
@@ -498,12 +339,12 @@ namespace X13.Repository {
           hist.Push(_home);
           do {
             cur = hist.Pop();
-            // _home is yielded even when disposed: Repo's remove cascade walks src.all and
-            // needs the just-removed topic itself to get its unlink command
+            // _home возвращается даже при disposed: каскад удаления Repo обходит src.all, и только что
+            // удалённый топик должен попасть в обход, чтобы получить команду отсоединения
             yield return cur;
             KeyValuePair<string, Topic>[] kids = cur._children;
             for (int i = kids.Length - 1; i >= 0; i--) {
-              if (!kids[i].Value.disposed) {  // a separately removed child cascades from its own command
+              if (!kids[i].Value.disposed) {  // отдельно удалённый потомок обрабатывается каскадом собственной команды
                 hist.Push(kids[i].Value);
               }
             }
@@ -514,26 +355,83 @@ namespace X13.Repository {
         return GetEnumerator();
       }
     }
-    internal static void Init(Repo repo) {
-      Topic._repo = repo;
-      Topic.root = new Topic(null, "/", false);
-      Topic.root._manifest = JSObject.CreateObject();
-      Topic.root._manifest["attr"] = new JSL.Number((int)(Attribute.Required | Attribute.Internal));
+
+    /// <summary>Все события, публикуемые репозиторием. Dispose the result to stop receiving.</summary>
+    public static IDisposable Subscribe(Action<TopicEvent> func) {
+      if (_repo != null) {
+        return _repo.SubscribeAll(func);
+      } else {
+        Log.Error("Topic.Subscribe({0}.{1}) - _repo == null", func.Target != null ? func.Target.ToString() : func.Method.DeclaringType.Name, func.Method.Name);
+        throw new NullReferenceException("Topic.Subscribe() - _repo == null");
+      }
+    }
+    /// <summary>Определяет, может ли строка быть собственным именем топика.</summary>
+    public static bool IsValidName(string name) {
+      return !string.IsNullOrWhiteSpace(name)
+        && name.IndexOf(Bill.delmiter) < 0
+        && name != Bill.maskAll
+        && name != Bill.maskChildren;
+    }
+    /// <summary>Выбрасывает исключение, если строка не может быть собственным именем топика.</summary>
+    internal static void CheckName(string name, string context) {
+      if (!IsValidName(name)) {
+        throw new ArgumentException(context + " - not a topic name: \"" + (name ?? "<null>") + "\"");
+      }
+    }
+    /// <summary>Выбрасывает исключение, если хотя бы один сегмент пути не может быть именем топика.</summary>
+    /// <remarks>Путь не является именем: он может быть равен "/" и содержать несколько сегментов, поэтому
+    /// проверяется посегментно, а пустые сегменты пропускаются так же, как в Resolve.</remarks>
+    internal static void CheckPath(string path, string context) {
+      string[] segments = (path ?? string.Empty).Split(Bill.delmiterArr, StringSplitOptions.RemoveEmptyEntries);
+      for (int i = 0; i < segments.Length; i++) {
+        CheckName(segments[i], context);
+      }
+    }
+    public static string JsValueTypeName(JSValue value) {
+      if (value == null) return null;
+      switch (value.ValueType) {
+      case JSValueType.Object:
+        if (value.Value == null) return "Null";
+        // IsByteArray учитывает оба представления: сам JSValue и его свойство .Value
+        if (X13.ByteArray.IsByteArray(value, out _)) return "ByteArray";
+        return "Object";
+      case JSValueType.String: {
+          string text = value.AsString(null);
+          if (text != null && text.StartsWith("¤VR")) return "Version";
+          return "String";
+        }
+      case JSValueType.Boolean: return "Boolean";
+      case JSValueType.Double:
+      case JSValueType.Integer: return "Double";
+      case JSValueType.Date: return "Time";
+      default: return null;
+
+      }
+    }
+    /// <summary>Возвращает эквивалентную подписку либо null. По этому признаку Subscribe устраняет дубликаты.</summary>
+    /// <remarks>Сравнение setTopic не требуется: каждая запись в собственном массиве топика создана на нём.</remarks>
+    private static SubRec Find(SubRec[] subs, Action<TopicEvent, SubRec> func, SubRec.SubMask mask, string prefix) {
+      for (int i = 0; i < subs.Length; i++) {
+        SubRec s = subs[i];
+        if (s.func == func && s.mask == mask
+            && ((mask & SubRec.SubMask.Field) == SubRec.SubMask.None || s.prefix == prefix)) {
+          return s;
+        }
+      }
+      return null;
     }
 
-    /// <summary>Finds or creates a topic whose manifest is still to come.</summary>
-    /// <remarks>Declare and <see cref="Fill"/> are a pair, for topics whose metadata arrives with
-    /// them rather than after them - restored from storage, or read out of a .xst. Announcing the
-    /// creation before the manifest is in place would show subscribers a topic without its
-    /// attributes, so Declare announces nothing and Fill does it.
-    /// <para>Which means a topic declared and never filled is invisible: it is in the tree,
-    /// findable by path, and no event ever said it appeared. Whoever declares it owns filling
-    /// it.</para></remarks>
+    /// <summary>Находит или создаёт топик, манифест которого будет задан позднее.</summary>
+    /// <remarks>Declare и <see cref="Fill"/> образуют пару для топиков, метаданные которых поступают вместе
+    /// с ними, например при восстановлении из хранилища или чтении из .xst. Если сообщить о создании до установки
+    /// манифеста, подписчики увидят топик без атрибутов. Поэтому Declare не публикует событие, а Fill публикует.
+    /// <para>Следовательно, объявленный, но не заполненный топик невидим: он находится в дереве и доступен по пути,
+    /// но ни одно событие не сообщало о его появлении. Код, вызвавший Declare, отвечает и за вызов Fill.</para></remarks>
     public static Topic Declare(Topic home, string path, Topic prim = null) {
       return Resolve(home, path, true, prim, false);
     }
 
-    /// <summary>Gives a declared topic its manifest and state, and announces it.</summary>
+    /// <summary>Назначает объявленному топику манифест и состояние, затем публикует его создание.</summary>
     public static void Fill(Topic t, JSValue state, JSValue manifest, Topic prim) {
       t._manifest = (manifest == null || manifest.IsNull) ? JSObject.CreateObject() : manifest;
       if (!t._manifest["attr"].IsNumber) {
@@ -557,10 +455,8 @@ namespace X13.Repository {
       }
       Topic next;
       if (path[0] == Bill.delmiter) {
-        // the prefix must end on a real segment boundary, otherwise "/dev/light10/state"
-        // would resolve against home "/dev/light1" and address "0/state" under it
-        if (path.StartsWith(home._path)
-            && (home._path.Length == 1 || path.Length == home._path.Length || path[home._path.Length] == Bill.delmiter)) {
+        // Префикс должен заканчиваться на границе реального сегмента, иначе путь "/dev/light10/state" будет разрешён относительно home "/dev/light1" как дочерний путь "0/state"
+        if (path.StartsWith(home._path) && (home._path.Length == 1 || path.Length == home._path.Length || path[home._path.Length] == Bill.delmiter)) {
           path = path.Substring(home._path.Length);
         } else {
           home = Topic.root;
@@ -568,17 +464,7 @@ namespace X13.Repository {
       }
       var pt = path.Split(Bill.delmiterArr, StringSplitOptions.RemoveEmptyEntries);
       for (int i = 0; i < pt.Length; i++) {
-        // The shared rule, not a copy of it. What stood here checked the two wildcards and nothing
-        // else, so a blank segment - RemoveEmptyEntries drops empty ones, not blank ones - became a
-        // topic that Move would then refuse to rename anything to.
         CheckName(pt[i], home._path + "[" + path + "]");
-        //if(pt[i] == Bill.maskParent) {
-        //  home = home.parent;
-        //  if(home == null) {
-        //    throw new ArgumentException(string.Format("{0}[{1}] BAD path: excessive nesting", home._path, path));
-        //  }
-        //  continue;
-        //}
         next = null;
         KeyValuePair<string, Topic>[] kids = home._children;
         int at = IndexOf(kids, pt[i]);
@@ -589,23 +475,20 @@ namespace X13.Repository {
           if (!create) {
             return null;
           }
-          // Under the structural lock, so that Move can trust the name it found free: an add
-          // slipped in between its check and its own add would leave the moved topic nowhere.
-          // Read the field again inside it - the search above ran outside, and its answer is only
-          // a hint by the time the lock is held.
+          // Выполняется под структурной блокировкой, чтобы Move мог рассчитывать на свободное имя.
+          // Добавление между проверкой и вставкой в Move оставило бы перемещаемый топик вне дерева.
           lock (_structural) {
             kids = home._children;
             at = IndexOf(kids, pt[i]);
             if (at >= 0 && !kids[at].Value.disposed) {
-              next = kids[at].Value;   // another thread got here first; take what it published
+              next = kids[at].Value;   // другой поток пришёл первым; используем опубликованный им узел
             } else {
-              // A disposed entry is replaced, not returned. Remove() marks the topic and leaves
-              // the unlink to the tick, and whoever asks for the path in between wants a topic
-              // they can use - not the one on its way out. Unlink removes by pair, so the removal
-              // still pending for the old one cannot take this replacement with it.
+              // Запись с disposed заменяется, а не возвращается. Remove() помечает топик и откладывает
+              // отсоединение до тика, а запросившему путь в этот промежуток нужен пригодный к использованию топик,
+              // а не удаляемый. Unlink удаляет пару, поэтому ожидающее удаление старого топика не затронет замену.
               next = new Topic(home, pt[i], fill);
               home._children = at >= 0 ? Replaced(kids, at, pt[i], next) : Inserted(kids, ~at, pt[i], next);
-              if (fill) {  // else the create command is added in Fill()
+              if (fill) {  // иначе команда создания добавляется в Fill()
                 _repo.DoCmd(new CmdCreate(next, prim));
               }
             }
@@ -618,15 +501,12 @@ namespace X13.Repository {
     internal static void SetValue(Topic t, JSValue val) {
       t._state = val;
     }
-    /// <summary>Merges one manifest write into what this tick is building for the topic.</summary>
-    /// <returns>The batch shared by every write to this topic in this tick. The caller keeps it:
-    /// whichever write is applied first swaps the built manifest in, and all of them read the
-    /// manifest from before the batch out of it.</returns>
-    /// <remarks>Merging is what keeps the manifest consistent - subscribers see one new manifest
-    /// rather than a partial one per write. It used to fold the WRITES into one event too, which
-    /// carried the path of whichever came first; a consumer matching FieldPath against a name it
-    /// knows then lost its own field whenever somebody else wrote first, and both consumers in the
-    /// tree match that way. One event per path now, and the merge stays.</remarks>
+    /// <summary>Добавляет одну запись манифеста в результат, формируемый текущим тиком для топика.</summary>
+    /// <returns>Пакет, общий для всех записей в этот топик в текущем тике. Вызывающий код сохраняет его:
+    /// первая применённая запись устанавливает сформированный манифест, а все записи получают
+    /// из пакета манифест, существовавший до начала обработки.</returns>
+    /// <remarks>Объединение сохраняет согласованность манифеста: подписчики видят один новый манифест,
+    /// а не частичный результат каждой записи.</remarks>
     internal static FieldBatch SetField(CmdField cmd) {
       Topic t = cmd.Target;
       if (t._mfst_pu == null) {
@@ -636,10 +516,10 @@ namespace X13.Repository {
       return t._mfst_pu;
     }
 
-    /// <summary>Swaps in the manifest this tick built. Once per topic, on the first write applied.</summary>
-    /// <remarks>Clearing _mfst_pu here rather than at the end of the tick is safe: it is read only
-    /// while commands are being taken off the queue, which is over before anything is applied, and
-    /// every command of the batch already holds the batch itself.</remarks>
+    /// <summary>Устанавливает манифест, сформированный текущим тиком. Выполняется один раз для топика при применении первой записи.</summary>
+    /// <remarks>Безопасно очищать _mfst_pu здесь, а не в конце тика: поле читается только при извлечении
+    /// команд из очереди, которое завершается до применения команд, а каждая команда пакета уже хранит ссылку
+    /// на сам пакет.</remarks>
     internal static void SetField2(Topic t, FieldBatch batch) {
       if (batch.swapped) {
         return;
@@ -649,11 +529,11 @@ namespace X13.Repository {
       t._mfst_pu = null;
     }
 
-    /// <summary>Where a name sits among a node's children: the index, or ~(insertion point).</summary>
-    /// <remarks>Array.BinarySearch's convention without its allocation - searching that would mean
-    /// building a KeyValuePair to search for. Ordinal, the order the array is kept in.
-    /// <para>Pure, so a reader may call it on its own snapshot with no lock at all, and a writer
-    /// calls it on the array it read inside the lock.</para></remarks>
+    /// <summary>Позиция имени среди дочерних узлов: индекс либо ~(точка вставки).</summary>
+    /// <remarks>Используется соглашение Array.BinarySearch, но без выделения памяти, которое потребовалось бы
+    /// для создания искомого KeyValuePair. Сравнение Ordinal соответствует порядку хранения массива.
+    /// <para>Метод не имеет побочных эффектов, поэтому читатель может вызывать его для своего снимка без блокировки,
+    /// а писатель вызывает его для массива, прочитанного внутри блокировки.</para></remarks>
     private static int IndexOf(KeyValuePair<string, Topic>[] kids, string name) {
       int lo = 0, hi = kids.Length - 1;
       while (lo <= hi) {
@@ -671,12 +551,9 @@ namespace X13.Repository {
       return ~lo;
     }
 
-    /// <summary>The three ways a node's children change. Each builds a new array and returns it.</summary>
-    /// <remarks>All three are pure and touch no field, so the structural lock their callers hold is
-    /// not for them - it is for the read-decide-publish sequence around them. Building the copy
-    /// outside the lock and only assigning inside would lose one of two concurrent insertions.
-    /// <para>Publication is a single reference assignment, which is what lets readers work without
-    /// a lock: a reader sees the whole of the old array or the whole of the new one.</para></remarks>
+    /// <summary>Три способа изменения дочерних узлов. Каждый создаёт и возвращает новый массив.</summary>
+    /// <remarks>Все три метода не имеют побочных эффектов и не изменяют поля. Структурная блокировка нужна
+    /// вызывающему коду не для них, а для окружающей последовательности «прочитать, принять решение, опубликовать».</remarks>
     private static KeyValuePair<string, Topic>[] Inserted(KeyValuePair<string, Topic>[] kids, int at, string name, Topic child) {
       var next = new KeyValuePair<string, Topic>[kids.Length + 1];
       Array.Copy(kids, 0, next, 0, at);
@@ -707,10 +584,10 @@ namespace X13.Repository {
       }
     }
 
-    /// <summary>Takes the topic out of the tree. Under the same lock as creating and moving one.</summary>
-    /// <remarks>Removes the pair, not the name: between Remove() marking the topic and this
-    /// running a tick later, someone may have asked for the same path and been given a fresh
-    /// topic. Unlinking by name alone would take that one out instead.</remarks>
+    /// <summary>Удаляет топик из дерева под той же блокировкой, что используется для создания и перемещения.</summary>
+    /// <remarks>Удаляется пара, а не имя: между установкой отметки в Remove() и выполнением этого метода
+    /// тиком позже кто-либо мог запросить тот же путь и получить новый топик. Отсоединение только по имени
+    /// ошибочно удалило бы новый топик.</remarks>
     internal static void Unlink(Topic t) {
       t.disposed = true;
       Topic parent = t._parent;
@@ -724,18 +601,14 @@ namespace X13.Repository {
         }
       }
     }
-    /// <summary>Hands one change to every registration that reaches this topic.</summary>
-    /// <remarks>Registrations live on the topic they were made on, so reaching them means
-    /// walking upwards: the topic's own records answer for Once and All, its parent's for
-    /// Children and All, and every ancestor above that for All alone. Splitting the levels is
-    /// what keeps a record whose mask carries both Children and All from being called twice.
-    /// <para>This replaces copying the record into every node of the subtree, which is where
-    /// SubscribeByCreation and SubscribeByMove came from - and with them the defect where a
-    /// renamed topic went deaf, because the copies were dropped on the move and only some of
-    /// them were derived again.</para></remarks>
+    /// <summary>Передаёт изменение каждой подписке, распространяющейся на этот топик.</summary>
+    /// <remarks>Регистрации хранятся в топике, на котором были созданы, поэтому для их поиска выполняется
+    /// обход вверх: собственные записи топика обрабатывают Once и All, записи родителя — Children и All,
+    /// а записи каждого вышестоящего предка — только All. Разделение уровней не позволяет дважды вызвать запись,
+    /// маска которой одновременно содержит Children и All.</remarks>
     internal static void Publish(TopicEvent e) {
       if ((e.Kind == EventKind.Snapshot || e.Kind == EventKind.Ready) && e.Sub != null) {
-        Invoke(e.Sub, e);   // addressed at one registration, not at whoever watches the topic
+        Invoke(e.Sub, e);   // адресовано одной подписке, а не всем наблюдателям топика
         return;
       }
       Topic t = e.Source;
@@ -749,10 +622,10 @@ namespace X13.Repository {
       }
     }
 
-    /// <param name="scope">The masks that reach e.Source from this particular level.</param>
+    /// <param name="scope">Маски, распространяющиеся с этого уровня на e.Source.</param>
     private static void Deliver(Topic node, TopicEvent e, SubRec.SubMask scope) {
-      // One read of the field, then walk that: a callback may dispose registrations - its own or
-      // someone else's - and the walk must not be indexing the array it changed.
+      // Поле читается один раз, затем обходится полученный снимок. Обработчик может освободить собственную
+      // или чужую регистрацию, поэтому обход не должен индексировать изменённый массив.
       SubRec[] subs = node._subRecords;
       for (int i = 0; i < subs.Length; i++) {
         SubRec sb = subs[i];
@@ -772,20 +645,19 @@ namespace X13.Repository {
       }
     }
 
-    /// <summary>True when a written field path and a subscription prefix lie on the same branch.</summary>
-    /// <remarks>Needed once a manifest write reports its own path: without it a subscriber on one
-    /// field would be called once per field written into that topic in the tick, because the
-    /// manifest comparison below answers the same for every event of the batch.
-    /// <para>Both directions count, and for different reasons. The path inside the prefix is the
-    /// ordinary case - prefix "MQTT-SN", write "MQTT-SN.gr". The prefix inside the path is the one
-    /// that is easy to miss: prefix "MQTT.uri" with a write that replaces the whole of "MQTT"
-    /// changes the subscriber's field just as surely.</para>
-    /// <para>Segment by segment, and not by string prefix, or "MQTT-SNx" would pass for a write
-    /// inside "MQTT-SN". Split the same way GetField splits, so the two agree about what a segment
-    /// is - including a trailing dot, which RemoveEmptyEntries drops.</para></remarks>
+    /// <summary>Возвращает true, если путь записанного поля и префикс подписки находятся в одной ветке.</summary>
+    /// <remarks>Проверка необходима после того, как запись манифеста стала сообщать собственный путь.
+    /// Без неё подписчик одного поля вызывался бы для каждого поля, записанного в топик за тик, поскольку
+    /// сравнение манифестов ниже даёт одинаковый результат для каждого события пакета.
+    /// <para>Учитываются оба направления, каждое по своей причине. Путь внутри префикса является обычным случаем:
+    /// префикс "MQTT-SN", запись "MQTT-SN.gr". Префикс внутри пути легко упустить: если префикс равен "MQTT.uri",
+    /// то запись, заменяющая весь объект "MQTT", также изменяет поле подписчика.</para>
+    /// <para>Сравнение выполняется посегментно, а не как строковый префикс, иначе "MQTT-SNx" считался бы записью
+    /// внутри "MQTT-SN". Разбиение выполняется так же, как в GetField, чтобы оба метода одинаково определяли
+    /// сегменты, включая завершающую точку, которую RemoveEmptyEntries отбрасывает.</para></remarks>
     private static bool SameBranch(string path, string prefix) {
       if (string.IsNullOrEmpty(prefix) || string.IsNullOrEmpty(path)) {
-        return true;   // no prefix means any field
+        return true;   // отсутствие префикса означает любое поле
       }
       string[] a = path.Split(Bill.delmiterObj, StringSplitOptions.RemoveEmptyEntries);
       string[] b = prefix.Split(Bill.delmiterObj, StringSplitOptions.RemoveEmptyEntries);
@@ -807,11 +679,11 @@ namespace X13.Repository {
       }
     }
 
-    /// <summary>Reports a fault in somebody else's callback through the tick's own throttle.</summary>
-    /// <remarks>Here rather than a bare Log.Warning because a subscriber that throws throws on
-    /// every event, and the tick runs about sixty times a second: unthrottled, one broken plugin buries the
-    /// log that would name it. Repo owns the throttle; this is the way in for the delivery paths,
-    /// which are static and have no repository of their own to ask.</remarks>
+    /// <summary>Сообщает об ошибке стороннего обработчика через встроенное ограничение частоты сообщений тика.</summary>
+    /// <remarks>Здесь используется не простой Log.Warning, поскольку неисправный подписчик выбрасывает исключение
+    /// для каждого события, а тик выполняется примерно шестьдесят раз в секунду. Без ограничения один сломанный
+    /// плагин заполнит журнал и скроет сообщение, указывающее на него. Ограничением управляет Repo; этот метод
+    /// служит точкой входа для статических путей доставки, у которых нет собственного экземпляра репозитория.</remarks>
     internal static void PluginFailed(string who, object subject, Exception ex) {
       Repo repo = _repo;
       if (repo != null) {
@@ -825,9 +697,9 @@ namespace X13.Repository {
       return RemoveSubscripton(t, sr);
     }
 
-    /// <summary>Drops one registration from the topic it was made on.</summary>
-    /// <remarks>Copy-on-write, like Subscribe: a delivery already walking the old array runs to
-    /// its end against the registrations that were live when it started.</remarks>
+    /// <summary>Удаляет одну подписку из топика, на котором она была создана.</summary>
+    /// <remarks>Используется копирование при записи, как в Subscribe: уже начавшая обход старого массива доставка
+    /// завершает его по регистрациям, которые были активны в момент начала.</remarks>
     private static bool RemoveSubscripton(Topic t, SubRec sr) {
       lock (t._sync) {
         SubRec[] old = t._subRecords;
@@ -853,6 +725,6 @@ namespace X13.Repository {
       Internal = 64,
 
     }
-    #endregion nested types
+    #endregion helpers
   }
 }

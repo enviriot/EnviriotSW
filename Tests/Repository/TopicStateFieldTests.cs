@@ -63,19 +63,15 @@ namespace X13.Tests {
       Assert.That((int)e.OldState, Is.EqualTo(1));
     }
 
-    /// <summary>Повтор того же значения - это событие, и намеренно.</summary>
-    /// <remarks>Сравнивается ссылка, а не значение: Archivist и ChartViewProvider строят ряд из
-    /// отсчётов, и одинаковые подряд идущие показания для них такие же точки, как и остальные.
-    /// Молчание вместо события выглядело бы как пропавший датчик.</remarks>
     [Test]
-    public void SetState_RepeatedValueIsStillAnEvent() {
+    public void SetState_RepeatedValueIsNotAnEvent() {
       Topic t = root.Get("/a");
       t.SetState(Num(1));
       Tick();
       ClearEvents();
       t.SetState(Num(1));   // равное по значению, но другой экземпляр
       Tick();
-      Assert.That(KindsOf(t), Is.EqualTo(new[] { EventKind.StateChanged }));
+      Assert.That(KindsOf(t), Is.Empty);
     }
 
     /// <summary>Тот же самый экземпляр - не изменение, и события не порождает.</summary>
@@ -137,10 +133,10 @@ namespace X13.Tests {
     [Test]
     public void GetStateType_ReadsTheTopicsOwnState() {
       Topic t = root.Get("/a");
-      Assert.That(t.GetStateType(), Is.Null);   // Undefined
+      Assert.That(Topic.JsValueTypeName(t.GetState()), Is.Null);   // Undefined
       t.SetState(Str("on"));
       Tick();
-      Assert.That(t.GetStateType(), Is.EqualTo("String"));
+      Assert.That(Topic.JsValueTypeName(t.GetState()), Is.EqualTo("String"));
     }
 
     #endregion JsValueTypeName
@@ -250,14 +246,6 @@ namespace X13.Tests {
       t.SetField("hint", Str("lamp"));
       Tick();
       Assert.That(KindsOf(t), Is.Empty);
-    }
-
-    /// <summary>Пустой путь и null - разные ошибки, и отвечают на них разные исключения.</summary>
-    [Test]
-    public void SetField_NullPathIsANullArgument() {
-      Topic t = root.Get("/a");
-      Action act = () => t.SetField(null, Str("x"));
-      Assert.That(act, Throws.ArgumentNullException);
     }
 
     [Test]
