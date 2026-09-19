@@ -311,6 +311,13 @@ export class X13LogramDocument extends LitElement {
   // server and BuildLayout's block pins (py = (y+index)*CELL, also unoffset); the
   // body rect is instead the one shifted, so it still looks vertically centered on
   // the dots. Getting this wrong is what made "enable" render below A01's row.
+  //
+  // The Trace label uses #renderBlock's output-pin formula verbatim (+6 outboard,
+  // -8 above the anchor row, anchored start) and hangs off the OUT anchor: a
+  // variable has two anchors but one topic, one value and one `trace` flag, so the
+  // label has to pick a side, and the side a value leaves by is the one that reads
+  // as "this is what this variable now holds". Server side it is the same field on
+  // the same kind of row - see LogramGraphController.SerializeElementRow.
   #renderVariable(el, rowsByVid) {
     const x = (el.x || 0) * CELL;
     const anchorY = (el.y || 0) * CELL;
@@ -329,6 +336,7 @@ export class X13LogramDocument extends LitElement {
         <circle class="pin-dot" cx=${x} cy=${anchorY} r="3" fill=${el.sourceVid && !el.sourceLocal ? '#9aa5b1' : (el.color || '#9aa5b1')}></circle>
         <rect class="pin-hit" data-vid=${el.vid} data-side="out" x=${x + width - CELL / 2} y=${anchorY - CELL / 2} width=${CELL} height=${CELL}></rect>
         <circle class="pin-dot" cx=${x + width} cy=${anchorY} r="3" fill=${el.color || '#9aa5b1'}></circle>
+        ${el.trace ? svg`<text class="pin-trace" x=${x + width + 6} y=${anchorY - 8} text-anchor="start">${el.displayValue || ''}</text>` : svg``}
       </g>`;
   }
 

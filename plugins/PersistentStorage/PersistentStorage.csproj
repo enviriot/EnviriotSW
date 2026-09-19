@@ -35,9 +35,6 @@
          Держать в согласии с Archivist. -->
     <PackageReference Include="LiteDB" Version="5.0.20" />
     <PackageReference Include="NiL.JS" Version="2.6.1722" />
-    <!-- Остаётся явной, хотя 5.0.20 её уже не требует: на неё указывает binding redirect в
-         app.config, и убирать надо оба разом, отдельной правкой. -->
-    <PackageReference Include="System.Buffers" Version="4.6.1" />
   </ItemGroup>
 
   <!-- Framework assemblies outside the set the SDK references implicitly for net48. -->

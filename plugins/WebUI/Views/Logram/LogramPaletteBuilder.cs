@@ -72,31 +72,44 @@ namespace X13.WebUI {
       return children[topic.name].AsInt("ddr", 0) != 0;
     }
 
-    // Right-click on an existing block/variable element (not the empty canvas): for
-    // a genuine block (its resolved type declares a real ddr'd pin schema - see
-    // LogramGraphController.ChildrenSchema/TryGetDdr, mirrored here rather than
-    // shared, to keep this self-contained), whichever declared pins aren't already
-    // created on this instance yet (required pins are auto-created at block-creation
-    // time - see LogramViewProvider.CreateRequiredChildren - so only optional ones
-    // normally show up here) - flattened directly into the menu when there are few
-    // enough to fit without a submenu, tucked under "Add pin" otherwise. "Delete"
-    // always comes last, after a separator from whatever pin items are above it.
+    // Right-click on an existing block/variable element (not the empty canvas). The two
+    // kinds get different middles, on the one question PinSchema answers:
+    // - a genuine block: whichever declared pins aren't already created on this instance
+    //   yet (required pins are auto-created at block-creation time - see
+    //   LogramViewProvider.CreateRequiredChildren - so only optional ones normally show up
+    //   here) - flattened directly into the menu when there are few enough to fit without a
+    //   submenu, tucked under "Add pin" otherwise;
+    // - a variable: the same checkable Trace as BuildPinMenu's. A variable's own row IS its
+    //   pin row (one topic, two anchors - see LogramGraphController.SerializeElementRow),
+    //   so the pin menu's flag applies to it verbatim; it just never routed here, because
+    //   IsPin asks about the PARENT's schema and a variable's parent is the diagram.
+    // A block deliberately gets no Trace: its own state is never sent to the client at all
+    // (LogramGraphController.OnChangedCore drops it), so the flag would have nothing to show.
+    // "Delete" always comes last, after a separator from whatever stands above it.
     internal static List<MenuItemDto> BuildElementMenu(Topic topic) {
       List<MenuItemDto> items = new List<MenuItemDto>();
+      Topic typeTopic;
+      JSC.JSValue pinSchema = PinSchema(topic, out typeTopic);
 
-      List<MenuItemDto> pinItems = BuildAddPinItems(topic);
-      if(pinItems.Count > 0) {
-        if(pinItems.Count < 11) {
-          items.AddRange(pinItems);
-        } else {
-          items.Add(new MenuItemDto() {
-            Kind = MenuItemKind.Item,
-            Text = "Add pin",
-            Enabled = true,
-            Willful = false,
-            Children = pinItems,
-          });
+      if(pinSchema != null) {
+        List<MenuItemDto> pinItems = BuildAddPinItems(topic, pinSchema, typeTopic);
+        if(pinItems.Count > 0) {
+          if(pinItems.Count < 11) {
+            items.AddRange(pinItems);
+          } else {
+            items.Add(new MenuItemDto() {
+              Kind = MenuItemKind.Item,
+              Text = "Add pin",
+              Enabled = true,
+              Willful = false,
+              Children = pinItems,
+            });
+          }
+          items.Add(new MenuItemDto() { Kind = MenuItemKind.Separator, Enabled = true });
         }
+      } else {
+        bool traced = topic.GetField("Logram.trace").AsBool(false);
+        items.Add(new MenuItemDto() { Kind = MenuItemKind.Item, Cmd = "trace", Text = "Trace", Hint = "Toggle Logram.trace", Checked = traced, Enabled = true, Willful = false });
         items.Add(new MenuItemDto() { Kind = MenuItemKind.Separator, Enabled = true });
       }
 
@@ -119,9 +132,9 @@ namespace X13.WebUI {
     // just plain cmd items here, dispatched client-side in logram-document.js
     // #onMenuCommand rather than server-built submenus), Trace (checkable, mirrors
     // t.SetField("Logram.trace", !ic) - toggled via LogramViewProvider.ExecuteRpc's
-    // "trace" command; ES also uses this flag to show a pin's live value as an
-    // on-canvas label (LogramItems.cs), which isn't ported here - out of scope for
-    // just the menu), then Delete (same Required-attribute guard as an element, but
+    // "trace" command, and drawn as ES draws it (LogramItems.cs): the flag makes the
+    // pin's live value an on-canvas label, see logram-document.js #renderBlock and
+    // LogramGraphController.SerializePinRow), then Delete (same Required-attribute guard as an element, but
     // pins are never parentless so the topic.parent!=null half of that check is
     // skipped).
     internal static List<MenuItemDto> BuildPinMenu(Topic topic) {
@@ -146,15 +159,25 @@ namespace X13.WebUI {
       return items;
     }
 
-    private static List<MenuItemDto> BuildAddPinItems(Topic topic) {
-      List<MenuItemDto> pins = new List<MenuItemDto>();
-      string typePath = topic.GetField("type").AsString(null);
-      Topic typeTopic = TypeHelper.ResolveTypeTopic(typePath);
+    // The element's own pin schema: its resolved type's Children when that declares at least
+    // one ddr'd entry, null otherwise - which is precisely "this element is a block", the same
+    // test LogramGraphController.ChildrenSchema makes (mirrored rather than shared, same
+    // reasoning as IsPin above). Inside this file it is asked once per menu and handed on, so
+    // the Trace gate and the Add-pin items can no longer disagree about what they are looking at.
+    private static JSC.JSValue PinSchema(Topic topic, out Topic typeTopic) {
+      typeTopic = TypeHelper.ResolveTypeTopic(topic.GetField("type").AsString(null));
       JSC.JSValue typeState = typeTopic?.GetState();
-      if(!typeState.IsObject()) return pins;
+      if(!typeState.IsObject()) return null;
       JSC.JSValue children = typeState["Children"];
-      if(!children.IsObject()) return pins;
+      if(!children.IsObject()) return null;
+      foreach(var entry in children) {
+        if(entry.Value.AsInt("ddr", 0) != 0) return children;
+      }
+      return null;
+    }
 
+    private static List<MenuItemDto> BuildAddPinItems(Topic topic, JSC.JSValue children, Topic typeTopic) {
+      List<MenuItemDto> pins = new List<MenuItemDto>();
       foreach(var entry in children) {
         if(entry.Value.AsInt("ddr", 0) == 0) continue;
         if(topic.Get(entry.Key, false) != null) continue;

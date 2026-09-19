@@ -118,12 +118,13 @@ namespace X13.WebUI {
           // snapshot running concurrently rewrites that set wholesale (see _stateGate).
           if(p.Source == _root || !_knownVids.Contains(Vid(p.Source))) return;
           bool isPin = p.Source.parent != null && p.Source.parent != _root;
-          if(isPin) SendValueUpdate(p.Source, true);
-          else if(ChildrenSchema(ResolveTypeState(p.Source)) == null) SendValueUpdate(p.Source, false);
+          if(isPin) SendValueUpdate(p.Source);
+          else if(ChildrenSchema(ResolveTypeState(p.Source)) == null) SendValueUpdate(p.Source);
           return;
         }
-        // Pin context menu's "Trace" toggle (LogramPaletteBuilder.BuildPinMenu,
-        // LogramViewProvider.ExecuteRpc "trace") - same cheap direct-update reasoning
+        // The context menu's "Trace" toggle - on a pin (LogramPaletteBuilder.BuildPinMenu)
+        // or on a variable (BuildElementMenu), both through LogramViewProvider.ExecuteRpc
+        // "trace", which never asked which of the two it was - same cheap direct-update reasoning
         // as changedState above: it's purely cosmetic (never affects position/pins/
         // wires), so a full ScheduleSnapshot rebuild would be wasted work, and
         // wouldn't even resend the pin's row anyway (SendSnapshot's pin loop below
@@ -368,18 +369,21 @@ namespace X13.WebUI {
       ResolveWires(layouts);
     }
 
-    // Sends color (always) and displayValue (only when traced, and only for
-    // something Trace actually applies to - a variable has no menu/flag for it, see
-    // BuildPinMenu) instead of the raw value: logram-document.js only ever turned
-    // value into a dot fill or a Trace label, never anything else (checked every
-    // consumer before doing this), so computing that once here and diffing against
-    // the record's Color/DisplayValue means most ticks - anything that doesn't cross a
-    // ColorForValue bucket, or change the formatted text - send nothing at all.
-    private void SendValueUpdate(Topic topic, bool supportsTrace) {
+    // Sends color (always) and displayValue (only when traced) instead of the raw value:
+    // logram-document.js only ever turned value into a dot fill or a Trace label, never
+    // anything else (checked every consumer before doing this), so computing that once here
+    // and diffing against the record's Color/DisplayValue means most ticks - anything that
+    // doesn't cross a ColorForValue bucket, or change the formatted text - send nothing at all.
+    // Both callers are value-bearing rows that draw a dot and may carry a Trace label - a pin
+    // or a variable - so there is no longer a supportsTrace switch: it existed only while a
+    // variable had no way to be traced (no menu entry, nothing drawn), and both halves of that
+    // are gone (LogramPaletteBuilder.BuildElementMenu, logram-document.js #renderVariable).
+    // A block never reaches here at all.
+    private void SendValueUpdate(Topic topic) {
       string vid = Vid(topic);
       JSC.JSValue state = RowProjector.ToWebStateValue(topic.GetState());
       string color = ColorForValue(state);
-      bool traced = supportsTrace && topic.GetField("Logram.trace").AsBool(false);
+      bool traced = topic.GetField("Logram.trace").AsBool(false);
       string displayValue = traced ? FormatTraceValue(state) : null;
 
       SentRow sent = SentOrNull(vid);
@@ -407,22 +411,24 @@ namespace X13.WebUI {
     // client showing a stale value label forever. Turning trace ON also needs a fresh
     // displayValue right away - SendValueUpdate's own diffing wouldn't otherwise emit
     // one until the value next actually ticks, leaving the label blank until then.
-    private void SendTraceUpdate(Topic pin) {
-      string vid = Vid(pin);
-      bool traced = pin.GetField("Logram.trace").AsBool(false);
+    private void SendTraceUpdate(Topic topic) {
+      string vid = Vid(topic);
+      bool traced = topic.GetField("Logram.trace").AsBool(false);
       JSC.JSObject dto = ViewProtocolSerializer.RowBase(ViewMessageTypes.EvntUpd, vid);
       dto["trace"] = traced;
       if(traced) {
-        string displayValue = FormatTraceValue(RowProjector.ToWebStateValue(pin.GetState()));
+        string displayValue = FormatTraceValue(RowProjector.ToWebStateValue(topic.GetState()));
         dto["displayValue"] = displayValue;
         Sent(vid).DisplayValue = displayValue;
       }
       _send(dto);
     }
 
-    // Everything the client is told about an element other than its live colour, which
-    // the record's Color/SendValueUpdate track separately - putting colour in here would resend the
-    // whole row on every value tick. Mirrors SerializeElementRow field for field.
+    // Everything the client is told about an element other than its live colour and trace,
+    // which the record's Color/DisplayValue and SendValueUpdate/SendTraceUpdate track
+    // separately - putting either in here would resend the whole row on every value tick and
+    // every Trace toggle (and MarkRowSent drops the wire on each such resend, see there).
+    // Mirrors SerializeElementRow field for field otherwise.
     private string ElementFingerprint(ElementLayout layout) {
       return layout.X + "|" + layout.Y + "|" + layout.WidthCells + "|" + (layout.IsBlock ? layout.HeightCells : 1)
         + "|" + (layout.IsBlock ? EditorBlock : EditorVariable)
@@ -877,12 +883,24 @@ namespace X13.WebUI {
       dto["editor"] = layout.IsBlock ? EditorBlock : EditorVariable;
       // Only a variable draws its own value-colored dots (#renderVariable) - a
       // block's own row has no such consumer (its pins carry color individually,
-      // see SerializePinRow), so it's simply not computed for one.
+      // see SerializePinRow), so it's simply not computed for one. Trace rides along
+      // for the same reason and on the same terms as SerializePinRow's (suppressed
+      // when off): a variable's own row IS its pin row. And it has to be stated here,
+      // not left to SendTraceUpdate - this row goes out as an evnt.add, which REPLACES
+      // the client's row, and ElementFingerprint includes x/y, so without it the label
+      // of a traced variable would vanish the moment the variable is dragged.
       if(!layout.IsBlock) {
         string vid = Vid(el);
-        string color = ColorForValue(RowProjector.ToWebStateValue(el.GetState()));
+        JSC.JSValue state = RowProjector.ToWebStateValue(el.GetState());
+        string color = ColorForValue(state);
         dto["color"] = color;
         Sent(vid).Color = color;
+        if(el.GetField("Logram.trace").AsBool(false)) {
+          string displayValue = FormatTraceValue(state);
+          dto["trace"] = true;
+          dto["displayValue"] = displayValue;
+          Sent(vid).DisplayValue = displayValue;
+        }
       }
       dto["x"] = new JSL.Number(layout.X);
       dto["y"] = new JSL.Number(layout.Y);

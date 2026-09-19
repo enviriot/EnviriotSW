@@ -34,13 +34,6 @@
          Стабильной версии новее нет. Держать в согласии с PersistentStorage. -->
     <PackageReference Include="LiteDB" Version="5.0.20" />
     <PackageReference Include="NiL.JS" Version="2.6.1722" />
-    <!-- Pinned, not taken from LiteDB transitively. Every plugin ships into ONE flat folder, so
-         the last project built decides which copy of a shared dependency survives - and the
-         binding redirects in Server\app.config name exact versions (System.Buffers -> 4.0.5.0).
-         LiteDB asks for 4.5.1, whose assembly version is 4.0.3.0; letting that win made the
-         redirect point at an assembly that is not on disk and the server refused to start.
-         Keep this in step with PersistentStorage and with the redirect. -->
-    <PackageReference Include="System.Buffers" Version="4.6.1" />
   </ItemGroup>
 
   <!-- Framework assemblies outside the set the SDK references implicitly for net48. -->
