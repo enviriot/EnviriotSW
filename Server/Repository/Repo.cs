@@ -121,11 +121,17 @@ namespace X13.Repository {
     /// <remarks>Формируется здесь напрямую, а не применением команды, поскольку одна команда
     /// порождает множество событий. Они относятся к фазе подписки и предшествуют всем остальным
     /// изменениям этого тика, поэтому подписчик не получит изменение топика до сообщения о его
-    /// существовании. Подтверждение отправляется последним, только тогда оно имеет смысл.</remarks>
+    /// существовании. Подтверждение отправляется последним, только тогда оно имеет смысл.
+    /// <para>Снимок самого топика отправляется безусловно, а поддерево отбирается по префиксу:
+    /// подписчик, назвавший поле, хочет знать о топике, к которому обратился, независимо от того,
+    /// заполнен ли уже его манифест. Фильтруются события, а не снимок.</para>
+    /// <para>Глубокий обход начинается с этого же топика, поэтому при Once вместе с All он в обходе
+    /// пропускается: иначе подписчик получил бы два события об одном топике.</para></remarks>
     private void Snapshot(CmdSubscribe c) {
       SubRec sr = c.Sub;
       List<TopicEvent> evs = _events[(int)Phase.Sub];
-      if((sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once) {
+      bool once = (sr.mask & SubRec.SubMask.Once) == SubRec.SubMask.Once;
+      if(once) {
         evs.Add(TopicEvent.Snapshot(c.Target, sr));
       }
       Topic.Bill b = null;
@@ -137,6 +143,9 @@ namespace X13.Repository {
       }
       if(b != null) {
         foreach(Topic tmp in b) {
+          if(once && object.ReferenceEquals(tmp, c.Target)) {
+            continue;   // снимок этого топика уже отправлен ветвью Once
+          }
           if((sr.mask & SubRec.SubMask.Value) == SubRec.SubMask.Value
             || (sr.mask & SubRec.SubMask.Field) == SubRec.SubMask.None || string.IsNullOrEmpty(sr.prefix) || tmp.GetField(sr.prefix).Defined) {
             evs.Add(TopicEvent.Snapshot(tmp, sr));

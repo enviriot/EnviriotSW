@@ -34,6 +34,10 @@ namespace X13.Tests {
 
     protected static Topic root { get { return Topic.root; } }
 
+    /// <summary>Репозиторий этого теста. Нужен тем тестам, предмет которых - сам Repo:
+    /// негодная команда в очереди, Start, тик до Init.</summary>
+    protected Repo repo { get { return _repo; } }
+
     [OneTimeSetUp]
     public void RepoTestBaseOneTimeSetUp() {
       // Контекст NiL.JS привязан к потоку, а JsLib.ParseJson и JsLib.Clone обращаются к нему.
@@ -74,6 +78,10 @@ namespace X13.Tests {
     /// <summary>Событие указанного вида для топика, или null.</summary>
     protected TopicEvent EventOf(Topic t, EventKind kind) {
       return events.FirstOrDefault(e => e.Source == t && e.Kind == kind);
+    }
+    /// <summary>Виды событий в перечислении, в порядке публикации.</summary>
+    protected static EventKind[] Kinds(IEnumerable<TopicEvent> src) {
+      return src.Select(e => e.Kind).ToArray();
     }
     /// <summary>Пути топиков в перечислении - то, что удобно сравнивать с ожидаемым списком.</summary>
     protected static string[] Paths(IEnumerable<Topic> src) {

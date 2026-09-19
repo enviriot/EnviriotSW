@@ -137,6 +137,9 @@ namespace X13.Repository {
       }
       CheckName(nName, this._path + ".Move");
       string oldPath;
+      // Запоминается под той же блокировкой, что и сам перенос: публикация идёт тиком позже,
+      // и к ней прежнее место известно только отсюда.
+      Topic oldParentOfMoved;
       lock (_structural) {
         // Топик не может стать собственным потомком.
         for (Topic p = nParent; p != null; p = p._parent) {
@@ -150,6 +153,7 @@ namespace X13.Repository {
           throw new ArgumentException(this._path + ".Move(" + nParent._path + ", " + nName + ") - the name is taken");
         }
         Topic oldParent = this._parent;
+        oldParentOfMoved = oldParent;
         string oldName = this._name;
         oldPath = this._path;
         KeyValuePair<string, Topic>[] source = oldParent._children;
@@ -177,7 +181,7 @@ namespace X13.Repository {
         }
         nParent._children = Inserted(target, ~to, nName, this);
       }
-      _repo.DoCmd(new CmdMove(this, oldPath, prim));
+      _repo.DoCmd(new CmdMove(this, oldPath, oldParentOfMoved, prim));
     }
     /// <summary>Немедленно помечает топик удалённым; отсоединение и событие выполняются в следующем тике.</summary>
     /// <remarks>Флаг disposed намеренно устанавливается здесь, а не в CmdRemove.Apply. Это соответствует
@@ -185,7 +189,13 @@ namespace X13.Repository {
     /// а откладываются только события. Bill и HasChildren читают этот флаг, поэтому удалённое поддерево
     /// перестаёт перечисляться сразу, а не через тик.</remarks>
     public void Remove(Topic prim = null) {
-      this.disposed = true;
+      // Повторный вызов - не ошибка и не работа: задача выполнена, пусть и раньше.
+      lock (_structural) {
+        if (this.disposed) {
+          return;
+        }
+        this.disposed = true;
+      }
       var c = new CmdRemove(this, prim);
       _repo.DoCmd(c);
     }
@@ -195,6 +205,11 @@ namespace X13.Repository {
     public SubRec Subscribe(SubRec.SubMask mask, string prefix, Action<TopicEvent, SubRec> func) {
       if (func == null) {
         throw new ArgumentNullException(this.path + ".Subscribe(func == NULL, " + mask.ToString() + (prefix == null ? string.Empty : ", " + prefix) + ")");
+      }
+      // Префикс приводится к единому виду здесь, до поиска: при бите Field null и пустая строка
+      // одинаково означают "любое поле".
+      if (prefix == null && (mask & SubRec.SubMask.Field) == SubRec.SubMask.Field) {
+        prefix = string.Empty;
       }
       SubRec sb;
       bool exist;
@@ -605,7 +620,10 @@ namespace X13.Repository {
     /// <remarks>Регистрации хранятся в топике, на котором были созданы, поэтому для их поиска выполняется
     /// обход вверх: собственные записи топика обрабатывают Once и All, записи родителя — Children и All,
     /// а записи каждого вышестоящего предка — только All. Разделение уровней не позволяет дважды вызвать запись,
-    /// маска которой одновременно содержит Children и All.</remarks>
+    /// маска которой одновременно содержит Children и All.
+    /// <para>У перемещения таких цепочек две. Структура меняется сразу, на потоке вызвавшего, а публикация
+    /// идёт тиком позже, поэтому обычный обход поднимается по новому месту и о переезде узнаёт только тот,
+    /// кто следит за местом назначения. Следящий за составом СВОИХ детей обязан узнать и об уходе.</para></remarks>
     internal static void Publish(TopicEvent e) {
       if ((e.Kind == EventKind.Snapshot || e.Kind == EventKind.Ready) && e.Sub != null) {
         Invoke(e.Sub, e);   // адресовано одной подписке, а не всем наблюдателям топика
@@ -620,6 +638,27 @@ namespace X13.Repository {
           Deliver(a, e, SubRec.SubMask.All);
         }
       }
+      if (e.Kind == EventKind.Moved && e.OldParent != null) {
+        // Обе цепочки сходятся на общем предке и выше идут одной. Обход прекращается на первом же
+        // таком узле: всё, что там есть, уже вызвано обходом по новому месту, и продолжение означало бы
+        // второй вызов одной подписки. Переименование - предельный случай: родитель не менялся, он и есть
+        // общий предок, и второй обход не делает ни шага.
+        SubRec.SubMask scope = SubRec.SubMask.Children | SubRec.SubMask.All;
+        for (Topic o = e.OldParent; o != null && !IsAncestorOf(o, t); o = o.parent) {
+          Deliver(o, e, scope);
+          scope = SubRec.SubMask.All;   // прежний родитель - один уровень, всё выше него - только All
+        }
+      }
+    }
+
+    /// <summary>Является ли узел предком топика. Сам себе топик предком не считается.</summary>
+    private static bool IsAncestorOf(Topic node, Topic t) {
+      for (Topic a = t._parent; a != null; a = a._parent) {
+        if (object.ReferenceEquals(a, node)) {
+          return true;
+        }
+      }
+      return false;
     }
 
     /// <param name="scope">Маски, распространяющиеся с этого уровня на e.Source.</param>
@@ -638,7 +677,7 @@ namespace X13.Repository {
         if (e.Kind == EventKind.FieldChanged
             && ((sb.mask & SubRec.SubMask.Field) != SubRec.SubMask.Field
                 || !SameBranch(e.FieldPath, sb.prefix)
-                || object.ReferenceEquals(e.OldManifest.Field(sb.prefix ?? string.Empty), e.Source._manifest.Field(sb.prefix ?? string.Empty)))) {
+                || JsLib.SameValue(e.OldManifest.Field(sb.prefix ?? string.Empty), e.Source._manifest.Field(sb.prefix ?? string.Empty)))) {
           continue;
         }
         Invoke(sb, e);

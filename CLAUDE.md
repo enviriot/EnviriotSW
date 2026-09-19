@@ -50,7 +50,7 @@ exact line and column. Imports are not resolved that way - resolvers are only ne
 Since the frontend has no build step, this is the only check of `Output\www\*.js` available without starting the server.
 
 ```powershell
-Add-Type -Path 'D:\Projects\H05\Output\bin_d\NiL.JS.dll'
+Add-Type -Path 'Output\bin_d\NiL.JS.dll'
 New-Object NiL.JS.Module($name, [IO.File]::ReadAllText($path))
 ```
 

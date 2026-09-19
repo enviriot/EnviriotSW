@@ -32,9 +32,18 @@ namespace X13.PersistentStorage {
     private readonly System.Collections.Concurrent.ConcurrentQueue<TopicEvent> _q;
     private Thread _tr;
     private volatile bool _terminate;
+    /// <summary>Чем загрузка базы закончилась отказом, для передачи в Start().</summary>
+    /// <remarks>Загрузка идёт в рабочем потоке, а отвечать за отказ плагина должен Start():
+    /// исключение оттуда - единственный способ сообщить хосту, что плагин не поднялся. Записывается
+    /// до _loaded.Set() и читается после _loaded.WaitOne(), так что порядок задан самим ожиданием;
+    /// volatile здесь ради читателя, а не ради корректности.</remarks>
+    private volatile Exception _startErr;
+    /// <summary>Есть работа в очереди, либо пора завершаться.</summary>
     private readonly AutoResetEvent _tick;
+    private readonly ManualResetEvent _loaded;
     public LiteDB_Pl() {
       _tick = new AutoResetEvent(false);
+      _loaded = new ManualResetEvent(false);
       _q = new System.Collections.Concurrent.ConcurrentQueue<TopicEvent>();
     }
 
@@ -74,7 +83,11 @@ namespace X13.PersistentStorage {
         Priority = ThreadPriority.BelowNormal
       };
       _tr.Start();
-      _tick.WaitOne();  // wait load
+      _loaded.WaitOne();  // wait load
+      var err = _startErr;
+      if(err != null) {
+        throw new InvalidOperationException("PersistentStorage.Load(" + DB_PATH + ") failed", err);
+      }
       _allSub = Topic.Subscribe(SubFunc);
       // Рычага два, и помнить надо оба: UserVersion решает, читать ли base.xst вообще, а ver
       // элемента внутри файла - применять ли именно его, потому что Xst.Prepare пропускает узел,
@@ -140,6 +153,7 @@ namespace X13.PersistentStorage {
         }
       }
       _tick.Dispose();
+      _loaded.Dispose();
     }
     public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
 
@@ -343,12 +357,20 @@ namespace X13.PersistentStorage {
     }
 
     private void ThreadM() {
-      Load();
-      _tick.Set();
+      try {
+        Load();
+      }
+      catch(Exception ex) {
+        _startErr = ex;
+        _terminate = true;
+      }
+      finally {
+        _loaded.Set();
+      }
 
       DateTime backupDT;
       backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.25);
-      do {
+      while (!_terminate) {
         // The guard covers the whole body, not just Save. It used to sit around Save alone, so a
         // throw anywhere else - _db.BeginTrans() on a null _db, after a failed backup - ended the
         // thread outright. The server survives that, which is the bad part: it keeps running with
@@ -384,7 +406,7 @@ namespace X13.PersistentStorage {
           Log.Error("PersistentStorage.ThreadM - " + ex.ToString());
           Thread.Sleep(1000);                     // do not spin on a fault that repeats every pass
         }
-      } while (!_terminate);
+      }
       var db = Interlocked.Exchange(ref _db, null);
       if (db != null) {
         try {

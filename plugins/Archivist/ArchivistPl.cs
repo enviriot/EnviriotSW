@@ -24,13 +24,22 @@ namespace X13.Archivist {
 
     private readonly string _dir;
     private readonly ConcurrentQueue<TopicEvent> _q;
+    /// <summary>Есть работа в очереди, либо пора завершаться.</summary>
     private readonly AutoResetEvent _tick;
+    /// <summary>Хранилище открыто - первый сэмпл принимать можно.</summary>
+    private readonly ManualResetEvent _loaded;
     private ArchStore _store;
     private Topic _owner;
     private IDisposable _allSub;
     private Func<string[], DateTime, int, DateTime, JSL.Array> _aQuery;
     private Thread _tr;
     private volatile bool _terminate;
+    /// <summary>Чем открытие хранилища закончилось отказом, для передачи в Start().</summary>
+    /// <remarks>Открытие выполняется в рабочем потоке, а отвечать за отказ плагина должен Start():
+    /// исключение оттуда - единственный способ сообщить хосту, что плагин не поднялся. Записывается
+    /// до _loaded.Set() и читается после _loaded.WaitOne(), так что порядок задан самим ожиданием;
+    /// volatile здесь ради читателя, а не ради корректности.</remarks>
+    private volatile Exception _startErr;
     private int _rrIdx;
     private DateTime _nextHotRebuild;
     private DateTime _nextRawRebuild;
@@ -50,6 +59,7 @@ namespace X13.Archivist {
       _dir = dir;
       _q = new ConcurrentQueue<TopicEvent>();
       _tick = new AutoResetEvent(false);
+      _loaded = new ManualResetEvent(false);
     }
 
     #region IPlugModul Members
@@ -67,8 +77,14 @@ namespace X13.Archivist {
       _nextHotRebuild = DateTime.UtcNow.AddHours(1);
       _nextRawRebuild = NextNightly(DateTime.UtcNow);
       _tr.Start();
-      _tick.WaitOne();   // the store is open before the first sample can arrive
-      _verboseSR = JsExtLib.EnsureCfg(Owner, "verbose", Topic.Attribute.Required | Topic.Attribute.Config, v => verbose = v, false);
+      _loaded.WaitOne();   // the store is open before the first sample can arrive
+      var err = _startErr;
+      if(err != null) {
+        // Обёртка, а не проброс оригинала: исключение поймано в другом потоке, повторный throw
+        // затёр бы его стек; путь к хранилищу в сообщении - первое, что нужно при разборе.
+        throw new InvalidOperationException("Archivist.Open(" + _dir + ") failed", err);
+      }
+      _verboseSR =JsExtLib.EnsureCfg(Owner, "verbose", Topic.Attribute.Required | Topic.Attribute.Config, v => verbose = v, false);
       _allSub = Topic.Subscribe(SubFunc);
       // Bound here rather than in the constructor: MEF does not order construction, but it does
       // order Start by priority, so this reliably takes over from the state store.
@@ -123,6 +139,7 @@ namespace X13.Archivist {
         s.Dispose();
       }
       _tick.Dispose();
+      _loaded.Dispose();
     }
 
     public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
@@ -164,10 +181,13 @@ namespace X13.Archivist {
         _store.Open();
       }
       catch(Exception ex) {
-        Log.Error("Archivist.Open({0}) - {1}", _dir, ex);
+        _startErr = ex;
+        _terminate = true;
       }
-      _tick.Set();
-      do {
+      finally {
+        _loaded.Set();
+      }
+      while(!_terminate) {
         if(_tick.WaitOne(15)) {
           while(_q.TryDequeue(out TopicEvent p)) {
             try {
@@ -180,7 +200,7 @@ namespace X13.Archivist {
         } else {
           IdleTask();
         }
-      } while(!_terminate);
+      }
       var s = _store;
       if(s != null) {
         s.Close();

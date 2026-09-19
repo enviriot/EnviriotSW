@@ -24,6 +24,8 @@ namespace X13.Repository {
     public readonly Topic Author;
     /// <summary>Moved: прежний путь топика. Для всех остальных видов равен null.</summary>
     public readonly string OldPath;
+    /// <summary>Moved: родитель, которого топик покинул</summary>
+    public readonly Topic OldParent;
     /// <summary>FieldChanged: путь изменённого поля. Для всех остальных видов равен null.</summary>
     public readonly string FieldPath;
 
@@ -31,11 +33,12 @@ namespace X13.Repository {
     internal readonly JSValue OldManifest;   // FieldChanged: предыдущий манифест
     internal readonly SubRec Sub;            // Snapshot, Ready: целевая подписка
 
-    private TopicEvent(Topic source, EventKind kind, Topic author, string oldPath, string fieldPath, JSValue oldState, JSValue oldManifest, SubRec sub) {
+    private TopicEvent(Topic source, EventKind kind, Topic author, string oldPath, Topic oldParent, string fieldPath, JSValue oldState, JSValue oldManifest, SubRec sub) {
       this.Source = source;
       this.Kind = kind;
       this.Author = author;
       this.OldPath = oldPath;
+      this.OldParent = oldParent;
       this.FieldPath = fieldPath;
       this.OldState = oldState;
       this.OldManifest = oldManifest;
@@ -43,25 +46,25 @@ namespace X13.Repository {
     }
 
     internal static TopicEvent Created(Topic t, Topic author) {
-      return new TopicEvent(t, EventKind.Created, author, null, null, null, null, null);
+      return new TopicEvent(t, EventKind.Created, author, null, null, null, null, null, null);
     }
-    internal static TopicEvent Moved(Topic t, string oldPath, Topic author) {
-      return new TopicEvent(t, EventKind.Moved, author, oldPath, null, null, null, null);
+    internal static TopicEvent Moved(Topic t, string oldPath, Topic oldParent, Topic author) {
+      return new TopicEvent(t, EventKind.Moved, author, oldPath, oldParent, null, null, null, null);
     }
     internal static TopicEvent StateChanged(Topic t, JSValue oldState, Topic author) {
-      return new TopicEvent(t, EventKind.StateChanged, author, null, null, oldState, null, null);
+      return new TopicEvent(t, EventKind.StateChanged, author, null, null, null, oldState, null, null);
     }
     internal static TopicEvent FieldChanged(Topic t, string fieldPath, JSValue oldManifest, Topic author) {
-      return new TopicEvent(t, EventKind.FieldChanged, author, null, fieldPath, null, oldManifest, null);
+      return new TopicEvent(t, EventKind.FieldChanged, author, null, null, fieldPath, null, oldManifest, null);
     }
     internal static TopicEvent Removed(Topic t, JSValue oldState, Topic author) {
-      return new TopicEvent(t, EventKind.Removed, author, null, null, oldState, null, null);
+      return new TopicEvent(t, EventKind.Removed, author, null, null, null, oldState, null, null);
     }
     internal static TopicEvent Snapshot(Topic t, SubRec sub) {
-      return new TopicEvent(t, EventKind.Snapshot, t, null, null, null, null, sub);
+      return new TopicEvent(t, EventKind.Snapshot, t, null, null, null, null, null, sub);
     }
     internal static TopicEvent Ready(Topic t, SubRec sub) {
-      return new TopicEvent(t, EventKind.Ready, t, null, null, null, null, sub);
+      return new TopicEvent(t, EventKind.Ready, t, null, null, null, null, null, sub);
     }
 
     public override string ToString() {

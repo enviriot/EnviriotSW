@@ -143,3 +143,8 @@ flowchart TB
 - [MQTT_SN](plugins/MQTT_SN/MQTT_SN.md)
 - [MQTT](plugins/MQTT/MQTT.md)
 - [WebUI](plugins/WebUI/WebUI.md)
+
+
+## Debian
+apt install mono-complete ca-certificates-mono
+mono-service -n:Enviriot -l:/opt/enviriot/enviriot.pid -d:/opt/enviriot/bin /opt/enviriot/bin/enviriot.exe -s

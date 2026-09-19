@@ -5,11 +5,6 @@ using X13.Repository;
 
 namespace X13.Tests {
   /// <summary>Правило имени топика: IsValidName, CheckName, CheckPath.</summary>
-  /// <remarks>Единственное место, где это правило записано, и раньше копий было четыре: Resolve
-  /// отвергал подстановочные знаки, Move не проверял ничего, импорт .xst завёл собственную
-  /// проверку, а WebUI - четвёртую. Тесты держат обе стороны: и что именно запрещено, и что
-  /// разрешённое не отвергается заодно.
-  /// <para>Дерева здесь не нужно: все три метода статические и ничего не читают.</para></remarks>
   [TestFixture]
   public class TopicNameTests {
 
@@ -45,8 +40,6 @@ namespace X13.Tests {
     [TestCase("\t")]
     [TestCase("   ")]
     public void IsValidName_BlankIsRefused(string name) {
-      // Пробельное имя пропускали короткие копии проверки: топик " " создавался, а переименовать
-      // что-либо в " " Move уже отказывался - две половины одной операции расходились.
       Assert.That(Topic.IsValidName(name), Is.False);
     }
 
@@ -55,8 +48,6 @@ namespace X13.Tests {
     [TestCase("a/")]
     [TestCase("/")]
     public void IsValidName_SeparatorInsideNameIsRefused(string name) {
-      // Move взял бы такое имя ключом словаря дословно, и получился бы топик, до которого не
-      // добирается ни один поиск по пути.
       Assert.That(Topic.IsValidName(name), Is.False);
     }
 
@@ -100,9 +91,7 @@ namespace X13.Tests {
     }
 
     /// <summary>Каждый уцелевший сегмент проверяется правилом целиком, а не его частью.</summary>
-    /// <remarks>Пустой сегмент RemoveEmptyEntries отбрасывает, пробельный - нет. Импорт .xst
-    /// принимал пробельный сегмент в пути, которому адресован, и двумя строками ниже отвергал
-    /// такое же пробельное имя ребёнка.</remarks>
+    /// <remarks>Пустой сегмент RemoveEmptyEntries отбрасывает, пробельный - нет.</remarks>
     [TestCase("/dev/#/x")]
     [TestCase("/dev/+")]
     [TestCase("/ /x")]

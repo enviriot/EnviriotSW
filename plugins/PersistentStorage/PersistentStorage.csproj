@@ -28,8 +28,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="LiteDB" Version="5.0.21" />
+    <!-- 5.0.20, а НЕ 5.0.21: в 5.0.21 переписан дисковый слой, и checkpoint падает с
+         "ReadFull must read PAGE_SIZE bytes" - счётчик длины лога расходится с тем, что на диске
+         (https://github.com/mbdavid/LiteDB/issues/2523). На Debian это видно сразу, под Windows
+         реже. Стабильной версии новее нет: после 5.0.21 идут только 6.0.0-prerelease.
+         Держать в согласии с Archivist. -->
+    <PackageReference Include="LiteDB" Version="5.0.20" />
     <PackageReference Include="NiL.JS" Version="2.6.1722" />
+    <!-- Остаётся явной, хотя 5.0.20 её уже не требует: на неё указывает binding redirect в
+         app.config, и убирать надо оба разом, отдельной правкой. -->
     <PackageReference Include="System.Buffers" Version="4.6.1" />
   </ItemGroup>
 

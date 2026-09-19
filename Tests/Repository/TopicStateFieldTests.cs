@@ -354,6 +354,26 @@ namespace X13.Tests {
       Assert.That(t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.None), Is.False);
     }
 
+    /// <summary>Пустая маска спрашивает не про атрибут, а про его наличие.</summary>
+    /// <remarks>Вырожденный случай, и ответ у него осмысленный ровно один: None во втором аргументе
+    /// подставляет маску, пустая маска сравнивается с пустым значением и совпадает всегда - значит
+    /// остаётся только проверка, которая стоит перед сравнением. Топик без пригодного числового
+    /// "attr" до сравнения не доходит и отвечает false, любой другой - true, независимо от того,
+    /// что в этом "attr" записано. Закреплено как поведение: спрашивать так никто не собирался,
+    /// но менять ответ молча тоже нельзя.</remarks>
+    [Test]
+    public void CheckAttribute_AnEmptyMaskAsksWhetherThereIsAnAttrAtAll() {
+      Topic plain = root.Get("/a");
+      Topic declared = Topic.Declare(root, "/b");
+      Topic marked = root.Get("/c");
+      marked.SetAttribute(Topic.Attribute.Config);
+      Tick();
+
+      Assert.That(plain.CheckAttribute(Topic.Attribute.None), Is.True);      // attr есть, равен 0
+      Assert.That(marked.CheckAttribute(Topic.Attribute.None), Is.True);
+      Assert.That(declared.CheckAttribute(Topic.Attribute.None), Is.False);  // манифеста нет вовсе
+    }
+
     /// <summary>Атрибут - это поле манифеста, и записывается тем же путём.</summary>
     [Test]
     public void SetAttribute_WritesTheAttrField() {

@@ -15,19 +15,17 @@ using System.Threading.Tasks;
 
 namespace X13 {
   /// <summary>Движок скриптов: глобальный контекст NiL.JS, таймеры, XMLHttpRequest, доступ к архиву и объявление config-топиков.</summary>
-  /// <remarks>Контекст привязан к потоку, поэтому ActivateEngineOnThisThread зовётся первой
-  /// строкой движкового потока: функция захватывает контекст в момент компиляции, и без этого
-  /// скрипт нашёл бы setTimeout и Arch неопределёнными, не упав. Пользовательский JS исполняется
-  /// только на этом потоке.</remarks>
+  /// <remarks>Контекст привязан к потоку, поэтому ActivateEngineOnThisThread зовётся первойстрокой движкового потока: 
+  /// функция захватывает контекст в момент компиляции, и без этого скрипт нашёл бы setTimeout и Arch неопределёнными, не упав. 
+  /// Пользовательский JS исполняется только на этом потоке.</remarks>
   public static class JsExtLib {
     public static readonly JSC.GlobalContext Context;
 
     static JsExtLib() {
       _timerCnt = 1;
       Context = new JSC.GlobalContext();
-      // Activated here as well as in ActivateEngineOnThisThread: DefineVariable and ProxyValue
-      // below run inside this constructor and want a live context. Which thread that turns out to
-      // be is not decided here - see ActivateEngineOnThisThread.
+      // Контекст активируется здесь, а также в ActivateEngineOnThisThread: DefineVariable и ProxyValue
+      // ниже выполняются внутри этого конструктора и требуют активного контекста.
       Context.ActivateInCurrentThread();
       Context.DefineVariable("setTimeout").Assign(Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetTimeout)));
       Context.DefineVariable("setInterval").Assign(Context.ProxyValue(new Func<JSC.JSValue, int, JSC.JSValue>(SetInterval)));
@@ -44,18 +42,16 @@ namespace X13 {
       Context.DefineVariable("Arch").Assign(arch);
     }
 
-    /// <summary>Makes the calling thread the one the script engine belongs to.</summary>
-    /// <remarks>NiL.JS holds the active-context stack in a [ThreadStatic] field, so "the context
-    /// is active" is true of one thread and no other. The activation used to happen as a side
-    /// effect of the static constructor above, which runs on whichever thread first touches this
-    /// class - an ordering nothing declared and nothing checked.
-    /// <para>Getting it wrong is silent, which is the reason this exists as a named call. A
-    /// Function captures Context.CurrentContext when it is compiled and falls back to NiL.JS's own
-    /// DefaultGlobalContext if there is none; that context has no setTimeout, console, File or
-    /// Arch, so the script does not fail - it finds them undefined.</para>
-    /// <para>Safe to call whether or not the static constructor already ran here: on this thread
-    /// ActivateInCurrentThread deactivates the context before re-activating it, and on any other
-    /// thread there is nothing on the stack to deactivate.</para></remarks>
+    /// <summary>Назначает вызывающий поток владельцем движка скриптов.</summary>
+    /// <remarks>NiL.JS хранит стек активных контекстов в поле [ThreadStatic], поэтому утверждение «контекст
+    /// активен» справедливо только для одного потока.
+    /// <para>Ошибка не проявляется явно, поэтому активация оформлена отдельным именованным вызовом.
+    /// При компиляции Function захватывает Context.CurrentContext, а при его отсутствии использует собственный
+    /// DefaultGlobalContext NiL.JS. В этом контексте нет setTimeout, console, File и Arch, поэтому скрипт
+    /// не завершается ошибкой, а просто видит их как undefined.</para>
+    /// <para>Метод безопасно вызывать независимо от того, выполнялся ли здесь статический конструктор:
+    /// в текущем потоке ActivateInCurrentThread сначала деактивирует контекст, а затем активирует его повторно;
+    /// в любом другом потоке в стеке нет контекста, который требовалось бы деактивировать.</para></remarks>
     public static void ActivateEngineOnThisThread() {
       Context.ActivateInCurrentThread();
     }
@@ -64,7 +60,6 @@ namespace X13 {
     [JSI.RequireNewKeyword]
     private class XMLHttpRequest : IDisposable {
       private HttpWebRequest _req;
-      //private IAsyncResult _resp_w;
       private HttpWebResponse _resp;
       private string _contentType;
       private int _readyState;
@@ -77,8 +72,8 @@ namespace X13 {
           throw new NotImplementedException("XMLHttpRequest.open( synchron )");
         }
         _req = (HttpWebRequest)WebRequest.Create(url);
-        //_req.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;  // TrustFailure on Linux
-        // normalized like a browser does, so open("post", ...) behaves as POST
+        //_req.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;  // ошибка TrustFailure в Linux
+        // нормализуется как в браузере, поэтому open("post", ...) выполняется как POST
         _req.Method = string.IsNullOrEmpty(method) ? "GET" : method.ToUpperInvariant();
         _contentType = null;
         readyState = 1;
@@ -96,14 +91,14 @@ namespace X13 {
       }
       public void send(JSC.JSValue value) {
         byte[] data = (value.Is<string>() && value.Value is string s)? Encoding.UTF8.GetBytes(s) : null;
-        if(data != null && _req.Method != "GET" && _req.Method != "HEAD") {  // PUT/PATCH/DELETE carry a body too
+        if(data != null && _req.Method != "GET" && _req.Method != "HEAD") {  // PUT, PATCH и DELETE также могут содержать тело
           _req.ContentType = _contentType??"application/x-www-form-urlencoded";
           _req.ContentLength = data.Length;
           using(var stream = _req.GetRequestStream()) {
             stream.Write(data, 0, data.Length);
           }
         }
-        /*_resp_w = */_req.BeginGetResponse(RespCallback, null);
+        _req.BeginGetResponse(RespCallback, null);
       }
       public JSL.Function onreadystatechange { get; set; }
       public int readyState {
@@ -138,8 +133,8 @@ namespace X13 {
         }
       }
       private void RespCallback(IAsyncResult asynchronousResult) {
-        // this runs on a ThreadPool thread: the blocking IO belongs here, but the readyState
-        // transitions below call into script, so they are handed to the main tick thread
+        // Выполняется в потоке ThreadPool: блокирующий ввод-вывод должен выполняться здесь, но изменения
+        // readyState ниже вызывают скрипт, поэтому передаются в основной поток тика
         ushort st = 0;
         string stText = null, body = null;
         try {
@@ -151,8 +146,8 @@ namespace X13 {
         }
         catch(WebException e) {
           Log.Debug("XMLHttpRequest({0}) - [{1}] {2}", _req.RequestUri, e.Status, e.ToString());
-          // If server returned an HTTP error status, the real response is available
-          // in the WebException.Response. Extract status code/text and body when present
+          // Если сервер вернул ошибочный HTTP-статус, фактический ответ доступен в WebException.Response.
+          // При наличии извлекаем код состояния, текст и тело ответа
           var errResp = e.Response as HttpWebResponse;
           if(errResp != null) {
             _resp = errResp;
@@ -165,7 +160,7 @@ namespace X13 {
               Log.Debug("XMLHttpRequest({0}) - error reading error response: {1}", _req.RequestUri, ex2.Message);
             }
           } else {
-            stText = e.Status.ToString();  // non-HTTP failure, status stays 0
+            stText = e.Status.ToString();  // ошибка не связана с HTTP, status остаётся равным 0
           }
         }
         catch(Exception ex) {
@@ -176,7 +171,7 @@ namespace X13 {
           status = st;
           statusText = stText;
           if(st != 0) {
-            readyState = 2;  // headers received; skipped when the request never reached a server
+            readyState = 2;  // заголовки получены; состояние пропускается, если запрос не достиг сервера
           }
           responseText = body;
           readyState = 4;
@@ -201,18 +196,18 @@ namespace X13 {
       public bool cancelled;
     }
     private static TimerContainer _timer;
-    // the timer whose callback is running right now: it is already unlinked from _timer,
-    // so ClearTimeout has to look at it separately to catch a timer clearing itself
+    // Таймер, callback которого выполняется сейчас: он уже исключён из _timer, поэтому ClearTimeout
+    // должен проверять его отдельно, чтобы обработать таймер, отменяющий сам себя
     private static TimerContainer _firing;
     private static long _timerCnt;
-    // guards _timer/_firing: setTimeout & friends are reachable from any thread
+    // Защищает _timer и _firing: setTimeout и связанные функции доступны из любого потока
     private static readonly object _timerLock = new object();
-    // actions handed over to the main tick thread, see Post
+    // Действия, переданные основному потоку тика. См. Post
     private static readonly System.Collections.Concurrent.ConcurrentQueue<Action> _completions = new System.Collections.Concurrent.ConcurrentQueue<Action>();
 
-    /// <summary>Queues an action to be executed on the main tick thread.</summary>
-    /// <remarks>Script callbacks that originate on a ThreadPool thread must not touch the
-    /// shared NiL.JS context directly - they go through here instead.</remarks>
+    /// <summary>Ставит действие в очередь для выполнения в основном потоке тика.</summary>
+    /// <remarks>Callback скриптов, поступающие из потока ThreadPool, не должны напрямую обращаться к общему
+    /// контексту NiL.JS. Вместо этого они передаются через этот метод.</remarks>
     internal static void Post(Action act) {
       if(act != null) {
         _completions.Enqueue(act);
@@ -238,7 +233,7 @@ namespace X13 {
     }
     private static JSC.JSValue SetInterval(JSC.JSValue func, int interval) {
       if(interval < 1) {
-        interval = 1;  // a zero period would degrade the interval into a one-shot timer
+        interval = 1;  // нулевой период превратил бы интервальный таймер в одноразовый
       }
       return SetTimer(func, interval, interval, null);
     }
@@ -255,7 +250,7 @@ namespace X13 {
       double idx = -1;
       if((f = func as JSL.Function) != null || (f = func.Value as JSL.Function)!=null) {
         if(to < 0) {
-          to = 0;   // setTimeout(f, 0) and negative delays fire on the next tick, they are not dropped
+          to = 0;   // setTimeout(f, 0) и отрицательные задержки срабатывают в следующем тике, а не отбрасываются
         }
         idx = Interlocked.Increment(ref _timerCnt);
         Interlocked.CompareExchange(ref _timerCnt, 1, ((long)1<<52)-1);
@@ -303,7 +298,7 @@ namespace X13 {
       if(oi == null || !oi.IsNumber) {
         return;
       }
-      long idx = (long)(double)oi;   // not (int): ids run to 2^52 by design, and truncating one loses it
+      long idx = (long)(double)oi;
       lock(_timerLock) {
         if(_firing != null && (long)_firing.idx == idx) {
           _firing.cancelled = true;
@@ -324,16 +319,14 @@ namespace X13 {
         }
       }
     }
-    /// <summary>Faults from script timers and completions, throttled like the engine loop's.</summary>
-    /// <remarks>Static because JsExtLib is. These two used to log a bare message, unthrottled: a
-    /// script timer that throws is a timer that throws on every firing, which is the most likely
-    /// flood of the three and was the only one with no ceiling at all.</remarks>
+    /// <summary>Ошибки таймеров скриптов и завершений с тем же ограничением частоты, что и в цикле движка.</summary>
+    /// <remarks>Поле статическое, поскольку JsExtLib также статический. Таймер скрипта, выбрасывающий исключение, 
+    /// делает это при каждом срабатывании. Это наиболее вероятный источник потока сообщений из трёх.</remarks>
     private static readonly FaultThrottle _faults = new FaultThrottle();
-    /// <summary>The longest script callback since this was last asked, in milliseconds.</summary>
-    /// <remarks>Published as /$YS/Performance/Script. A timer callback is the one thing inside a
-    /// pass of the engine loop that a user writes, so it is the one that can make the loop miss
-    /// its beat - and it was the only part of a pass nothing could see. Taking it resets it, so
-    /// the number always describes the interval since the last publication and not all of time.</remarks>
+    /// <summary>Максимальная длительность callback скрипта с момента предыдущего запроса, в миллисекундах.</summary>
+    /// <remarks>Публикуется в /$YS/Performance/Script. Callback таймера является единственной написанной пользователем
+    /// частью прохода цикла движка, поэтому именно он может привести к пропуску периода. Чтение значения сбрасывает его, 
+    /// поэтому показатель всегда описывает интервал с момента последней публикации, а не всё время работы.</remarks>
     internal static double TakeMaxCallbackMs() {
       return Interlocked.Exchange(ref _maxCallbackMs, 0);
     }
@@ -369,8 +362,8 @@ namespace X13 {
             break;
           }
           cur = _timer;
-          // unlink before running the callback: the callback may add or clear timers, and a
-          // container that is still linked could otherwise end up in the list twice
+          // Исключаем из списка до выполнения callback: callback может добавлять или удалять таймеры,
+          // иначе всё ещё связанный контейнер мог бы дважды оказаться в списке
           _timer = cur.next;
           cur.next = null;
           _firing = cur;
@@ -384,8 +377,8 @@ namespace X13 {
           _faults.Report(false, "JsTimer.Tick", null, ex);
         }
         finally {
-          // clearing _firing, reading cancelled and rescheduling have to be one atomic step,
-          // otherwise a ClearTimeout from another thread lands in the gap and is lost
+          // Очистка _firing, чтение cancelled и повторное планирование должны быть одной атомарной операцией,
+          // иначе ClearTimeout из другого потока может попасть в промежуток и потеряться
           lock(_timerLock) {
             _firing = null;
             if(!cur.cancelled) {
@@ -473,7 +466,7 @@ namespace X13 {
       }
       public override Encoding Encoding { get { return Encoding.UTF8; } }
       public override void WriteLine(string msg) {
-        Log.onWrite(_ll, "{0}", msg);  // msg is arbitrary script text, never a format string
+        Log.onWrite(_ll, "{0}", msg);  // msg является произвольным текстом скрипта, а не строкой формата
       }
     }
     #endregion Log
@@ -491,26 +484,13 @@ namespace X13 {
     }
 
     #region Configuration
-    /// <summary>Seeds a config topic if it is missing, then keeps <paramref name="apply"/> current.</summary>
-    /// <param name="owner">The plugin's own topic, e.g. /$YS/WebUI.</param>
-    /// <param name="relativePath">Path below it, slashes allowed: "Static/verbose" creates the
-    /// group on the way. Intermediate topics need no attributes of their own - Xst.Export keeps
-    /// a parent whose children were exported, so a Config leaf carries its groups with it.</param>
-    /// <param name="attr">Attributes for the leaf when this call is the one that seeds it.</param>
-    /// <param name="apply">Called once before this returns, and again on every later change.</param>
-    /// <param name="defaultValue">Seeded only when the topic holds nothing of type
-    /// <typeparamref name="T"/> yet - a type test rather than a reader with a fallback, because
-    /// a reader cannot tell "not set" from "set to the default" and the topic would never be
-    /// created. A null default seeds nothing.</param>
-    /// <returns>The subscription. The caller owns it and must dispose it on shutdown.</returns>
-    /// <remarks>The immediate call is not redundant with the subscription: Subscribe does not
-    /// call back synchronously, it queues a subscribe command that Repo dispatches on its next
-    /// tick. A plugin that starts listening the moment its Start() returns would otherwise
-    /// answer the first requests from whatever its fields were initialised to.
-    ///
-    /// apply rather than a `ref T` parameter, which is what this wants to be: a ref cannot be
-    /// captured by the subscription's callback (CS1628), so a ref could only ever serve the
-    /// first read and nothing would carry the later ones.</remarks>
+    /// <summary>Создаёт config-топик с начальным значением, если он отсутствует, и поддерживает <paramref name="apply"/> в актуальном состоянии.</summary>
+    /// <param name="owner">Собственный топик плагина, например /$YS/WebUI.</param>
+    /// <param name="relativePath">Относительный путь внутри топика. Например, "Static/verbose".</param>
+    /// <param name="attr">Атрибуты топика, если он создаётся этим вызовом.</param>
+    /// <param name="apply">Вызывается один раз до возврата из метода и затем при каждом последующем изменении.</param>
+    /// <param name="defaultValue">Начальное значение устанавливается, только если топик ещё не содержит значение типа <typeparamref name="T"/>.</param>
+    /// <returns>Подписка. Вызывающий код владеет ею и должен освободить её при завершении.</returns>
     public static Repository.SubRec EnsureCfg<T>(Repository.Topic owner, string relativePath,
                                                  Repository.Topic.Attribute attr, Action<T> apply, T defaultValue = default(T)) {
       if(owner == null) throw new ArgumentNullException("owner");
@@ -525,9 +505,6 @@ namespace X13 {
         value = topic.GetState().As<T>(); 
       }
       apply(value);
-      // Once is what makes the subscription see the subscribed topic's OWN state rather than
-      // only its children's. The value comes from sub.setTopic, not the captured topic, so the
-      // callback cannot outrun the assignment a caller might have made.
       return topic.Subscribe(Repository.SubRec.SubMask.Once | Repository.SubRec.SubMask.Value,
         (p, sub) => apply(sub.setTopic.GetState().As<T>()));
     }
@@ -537,7 +514,7 @@ namespace X13 {
     public static Func<string[], DateTime, int, DateTime, JSL.Array> AQuery { get; set; }
     private static Task<JSL.Array> AQueryJS(JSC.JSValue topicsJS, JSC.JSValue beginJS, int count, JSC.JSValue endJS) {
       var query = AQuery;
-      if(query == null) {  // no archive provider registered, i.e. PersistentStorage is disabled
+      if(query == null) {  // поставщик архива не зарегистрирован, то есть Archivist отключён
         throw new InvalidOperationException("Arch.Query - no archive provider available");
       }
       if(topicsJS == null || !topicsJS.Defined) {
@@ -548,10 +525,6 @@ namespace X13 {
         topics = new string[1];
         topics[0] = topicsJS.AsString(null);
       } else {
-        // JsLib.OfString, not As<string>(): As<string>() coerces, and on JSValue.Null it yields the
-        // four-character string "null", which then travelled on as a topic path. Undefined yields
-        // C# null instead, so the two empty values are not even symmetrical - a null check on the
-        // result would still have let "null" through as data.
         topics = topicsJS.Select(kv => kv.Value.AsString(null)).ToArray();
         if(topics.Any(z => string.IsNullOrEmpty(z))) {
           throw new ArgumentException("Arch.Query(topics, begin, count, end) - every topic must be a non-empty string");

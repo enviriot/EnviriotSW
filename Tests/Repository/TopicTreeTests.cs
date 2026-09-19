@@ -395,6 +395,34 @@ namespace X13.Tests {
       Assert.That(root.Get("/a/x", false), Is.SameAs(fresh));
     }
 
+    /// <summary>Повторное удаление принимается молча: ни исключения, ни второго события.</summary>
+    /// <remarks>Повтор - это задача, уже выполненная, пусть и раньше, поэтому отвечать на него
+    /// исключением не за что; этим Remove() отличается от Move(), которому удалённый топик деть
+    /// некуда и который его отклоняет. Но и работой повтор не является: об одном удалении подписчику
+    /// сообщают один раз.
+    /// <para>Вторая половина теста важнее первой: пока топик ждал своего тика, его место мог занять
+    /// другой, и повторное удаление не должно задеть занявшего - ни отменой команды, ни, если её
+    /// однажды вернут, отсоединением по имени. Unlink снимает пару, а не имя.</para></remarks>
+    [Test]
+    public void Remove_TwiceInDifferentTicksIsAnnouncedOnce() {
+      Topic a = root.Get("/a");
+      Tick();
+      ClearEvents();
+
+      a.Remove();
+      Tick();
+      Assert.That(a.disposed, Is.True);
+      Assert.That(KindsOf(a), Is.EqualTo(new[] { EventKind.Removed }));
+
+      ClearEvents();
+      Topic replacement = root.Get("/a");   // место успел занять другой топик
+      a.Remove();
+      Tick();
+      Assert.That(KindsOf(a), Is.Empty);
+      Assert.That(replacement.disposed, Is.False);
+      Assert.That(root.Get("/a", false), Is.SameAs(replacement));
+    }
+
     #endregion Remove
 
     #region Bill

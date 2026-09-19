@@ -272,6 +272,19 @@ namespace X13.WebUI {
           SendUpd(_rootTopic, null);
           return;
         }
+        // A move is announced to BOTH parents (Topic.Publish walks the abandoned chain too), and
+        // this is the side the topic LEFT: sub.setTopic is the parent it used to hang under, so
+        // the child-focused guard just below - which asks whether Source hangs under sub.setTopic
+        // NOW - rejects it, exactly as it rejects the two root cases above. Handled here rather
+        // than folded into the move branch further down, because the two sides do different work:
+        // the departure side removes the row, the arrival side adds it.
+        // A rename keeps the parent, so both halves land on this one subscription and it is NOT
+        // the departure side - hence the second condition. Publish does not announce a rename
+        // twice for the same reason: the two chains share this very parent.
+        if(perform.Kind == EventKind.Moved && perform.OldParent == sub.setTopic && perform.Source.parent != sub.setTopic) {
+          HandleChildMovedAway(perform, sub.setTopic);
+          return;
+        }
         if(perform.Source.parent != sub.setTopic) return;
 
         string parentVid = _rowProjector.TopicVid(sub.setTopic);
@@ -295,31 +308,16 @@ namespace X13.WebUI {
         } else if(perform.Kind == EventKind.StateChanged || perform.Kind == EventKind.FieldChanged) {
           SendUpd(perform.Source, null);
         } else if(perform.Kind == EventKind.Moved) {
-          string oldPath = perform.OldPath;
-          if(parentExpanded) {
-            if(!string.IsNullOrEmpty(oldPath)) _send(ViewProtocolSerializer.Del(_viewName + "#" + oldPath));
-            SendAdd(perform.Source);
-          }
+          // Normally the arrival side only: dropping the row the topic left behind belongs to
+          // the departure side, which is the one that knows whether that row was on screen -
+          // a question about the OLD parent's expansion, previously answered by asking the NEW
+          // parent's, so a move into a collapsed folder left the old row hanging.
+          // A rename is the exception: there is no departure delivery to do it, so both halves
+          // are done here - the vid is built from the path, so even a rename in place retires
+          // one row and adds another.
+          if(perform.OldParent == sub.setTopic) ForgetOldRow(perform, parentExpanded);
+          if(parentExpanded) SendAdd(perform.Source);
           SendUpd(sub.setTopic, sub.setTopic.HasChildren() ? (parentExpanded ? 2 : 1) : 0);
-
-          // The callback above only fires for the NEW parent's subscription (see the
-          // guard at the top: perform.Source.parent now points at the new parent, so
-          // the OLD parent's own subscription - if any - never matches and never
-          // runs). Without this, the old parent's expander arrow goes stale when it
-          // loses its last child (or gains one back via a subsequent move/paste).
-          // Only relevant if the old parent is actually part of THIS controller's
-          // own rooted subtree - for Workspace (root=Topic.root) that's always true,
-          // but Inspector's Children controller is rooted elsewhere, and a move can
-          // land a topic there from a completely unrelated part of the tree (e.g.
-          // paste from a sibling branch); that old parent belongs to no vid this
-          // controller owns, so building one for it would be meaningless.
-          string oldParentPath = ParentTopicPath(oldPath);
-          if(oldParentPath != null) {
-            Topic oldParent = Topic.root.Get(oldParentPath, false);
-            if(oldParent != null && oldParent != sub.setTopic && IsWithinRoot(oldParent)) {
-              SendUpd(oldParent, oldParent.HasChildren() ? (_expansion.IsExpanded(_rowProjector.TopicVid(oldParent)) ? 2 : 1) : 0);
-            }
-          }
         }
       }
       catch(Exception ex) {
@@ -327,6 +325,27 @@ namespace X13.WebUI {
         // the message alone does not identify the frame that produced it.
         Log.Warning("TopicTreeController.OnTopicChanged - {0}", ex.ToString());
       }
+    }
+
+    // The departure half of a move: what the old parent owes the client once a child has left it.
+    private void HandleChildMovedAway(TopicEvent perform, Topic oldParent) {
+      bool expanded = _expansion.IsExpanded(_rowProjector.TopicVid(oldParent));
+      ForgetOldRow(perform, expanded);
+      // Same guard as the removal branch above: the old parent can be going away in this very
+      // tick, and refreshing a row the client was already told to drop is pointless.
+      if(!oldParent.disposed) SendUpd(oldParent, oldParent.HasChildren() ? (expanded ? 2 : 1) : 0);
+    }
+
+    // Retires everything keyed by where the topic used to be. A vid is built from the path
+    // (viewName + "#" + path), so after a move that key, and every descendant's, names nothing:
+    // the registry entries and collapsed-expander watches under it have to go, exactly as they
+    // do when a topic is removed. The client is told only if the row was actually on screen.
+    private void ForgetOldRow(TopicEvent perform, bool oldParentExpanded) {
+      if(string.IsNullOrEmpty(perform.OldPath)) return;
+      string vid = _viewName + "#" + perform.OldPath;
+      if(oldParentExpanded) _send(ViewProtocolSerializer.Del(vid));
+      _targets.RemoveSubtree(vid);
+      _expansion.RemoveWatchSubtree(vid, VidHelper.IsDescendant);
     }
 
     // Tells the frontend this controller's own root is gone (evnt.del on RootVid - the
@@ -345,11 +364,6 @@ namespace X13.WebUI {
       if(_onRootGone != null) _onRootGone(this);
     }
 
-    private static string ParentTopicPath(string path) {
-      if(string.IsNullOrEmpty(path) || path == "/") return null;
-      int index = path.LastIndexOf('/');
-      return index <= 0 ? "/" : path.Substring(0, index);
-    }
 
     private bool IsWithinRoot(Topic topic) {
       for(Topic cur = topic; cur != null; cur = cur.parent) {

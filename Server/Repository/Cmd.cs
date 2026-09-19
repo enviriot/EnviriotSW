@@ -41,9 +41,14 @@ namespace X13.Repository {
 
   internal sealed class CmdMove : Cmd {
     public readonly string OldPath;
-    public CmdMove(Topic target, string oldPath, Topic author) : base(target, author) { this.OldPath = oldPath; }
+    /// <summary>Родитель, которого топик покинул; запоминается в момент перемещения.</summary>
+    public readonly Topic OldParent;
+    public CmdMove(Topic target, string oldPath, Topic oldParent, Topic author) : base(target, author) {
+      this.OldPath = oldPath;
+      this.OldParent = oldParent;
+    }
     public override Phase Phase { get { return Phase.Struct; } }
-    public override TopicEvent Apply() { return TopicEvent.Moved(Target, OldPath, Author); }
+    public override TopicEvent Apply() { return TopicEvent.Moved(Target, OldPath, OldParent, Author); }
   }
 
   internal sealed class CmdRemove : Cmd {

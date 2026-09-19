@@ -57,16 +57,10 @@ namespace X13 {
       Publish(ll, dt, msg, false);
     }
 
-    /// <summary>Invokes each Write subscriber in isolation.</summary>
-    /// <remarks>Subscribers write to sockets they do not own the lifetime of - a WebUI session
-    /// (WebUI/Host/LogHandler.cs) and an EsBroker connection (EsBroker/EsConnection.cs) both push
-    /// straight to a client that may already be gone, and neither guards the call. A plain
-    /// multicast invoke made that two separate failures: the exception escaped Process before it
-    /// could restore _busy, killing console/file/history logging for the rest of the process
-    /// lifetime (and, with no legacyUnhandledExceptionPolicy, taking the process down from a
-    /// ThreadPool callback), and it also stopped delivery to every subscriber further down the
-    /// invocation list - one dead session starved LiteDB history and all the other sessions.
-    /// Nothing in here may route back through Log.*: that re-enters this very queue.</remarks>
+    /// <summary>Вызывает каждого подписчика Write изолированно от остальных.</summary>
+    /// <remarks>Подписчики записывают в сокеты, временем жизни которых они не управляют. Сеанс WebUI
+    /// (WebUI/Host/LogHandler.cs) отправляет данные непосредственно клиенту, который уже мог отключиться, и ни один из них не защищает вызов.
+    /// Ничто здесь не должно повторно направляться через Log.*: это вновь входит в ту же очередь.</remarks>
     private static void Publish(LogLevel ll, DateTime dt, string msg, bool live) {
       Action<LogLevel, DateTime, string, bool> handlers = Write;
       if (handlers == null) {
@@ -82,7 +76,7 @@ namespace X13 {
       }
     }
 
-    // Bypasses the queue on purpose - see Publish.
+    // Намеренно обходит очередь. См. Publish.
     private static void ReportDirect(string text) {
       try {
         if (_useDiagnostic) {
@@ -98,11 +92,11 @@ namespace X13 {
     }
     public static event Action<LogLevel, DateTime, string, bool> Write;
     public static Func<DateTime, int, IEnumerable<Log.LogRecord>> History;
-    /// <summary>Flushes what is queued and unhooks the writer. Once, at shutdown.</summary>
-    /// <remarks>fin is not the thing being waited for in its own right: Unregister signals it once
-    /// the registered wait has finished running, which is how this knows the last Process call is
-    /// over. It is a local handle like any other and gets disposed like one - it was simply left
-    /// to the finalizer before.</remarks>
+    /// <summary>Записывает всё содержимое очереди и отключает обработчик. Вызывается один раз при завершении.</summary>
+    /// <remarks>Ожидание выполняется не ради самого fin: Unregister устанавливает его после завершения
+    /// зарегистрированного ожидания, благодаря чему определяется окончание последнего вызова Process.
+    /// Это локальный дескриптор, который должен освобождаться так же, как любой другой. Ранее его освобождение
+    /// просто оставлялось финализатору.</remarks>
     public static void Finish() {
       _kickEv.Set();
       using(AutoResetEvent fin = new AutoResetEvent(false)) {
@@ -169,7 +163,7 @@ namespace X13 {
               catch (System.IO.IOException) {
               }
               _lfPath = string.Format(_lfMask, _firstDT.ToString("yyMMdd"));
-              // date rolled over (or first write of this batch): the open handle, if any, points at the wrong file
+              // дата сменилась либо это первая запись пакета: открытый дескриптор, если он есть, указывает на неверный файл
               fs?.Dispose();
               fs = null;
             }
@@ -193,10 +187,10 @@ namespace X13 {
         }
       }
       finally {
-        // batch complete (or Process re-entered on the next signal): don't hold the handle across ThreadPool callbacks
+        // пакет завершён либо Process повторно вызван следующим сигналом: не сохраняем дескриптор между callback ThreadPool
         fs?.Dispose();
-        // Inside the finally, not after it: anything escaping the loop would otherwise leave
-        // _busy at 2 and every later Process call would bail at the CompareExchange above.
+        // Внутри finally, а не после него: иначе исключение из цикла оставило бы _busy равным 2,
+        // и каждый последующий вызов Process завершался бы на CompareExchange выше.
         _busy = 1;
       }
     }

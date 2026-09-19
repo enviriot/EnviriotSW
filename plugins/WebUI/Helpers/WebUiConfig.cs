@@ -31,7 +31,8 @@ namespace X13.WebUI.Helpers {
     /// restored the very problem the limit was added for. A number nobody may set to a harmful
     /// value and nobody has asked to raise is a constant.</para></remarks>
     public const int MaxImportBytes = 16 * 1024 * 1024;
-    public const string DefaultStaticPath = "..\\www";
+    /// <summary>Каталог статики по умолчанию, рядом с bin.</summary>
+    public const string DefaultStaticPath = "../www";
 
     private const Topic.Attribute CfgAttr = Topic.Attribute.Required | Topic.Attribute.Config;
     // Readonly so it is not changed by accident. It stays a free-form path on purpose: behind a
@@ -57,11 +58,25 @@ namespace X13.WebUI.Helpers {
       _owner = owner ?? Topic.root.Get("/$YS/WebUI", true);
     }
 
+    /// <summary>Каталог, от которого отсчитываются относительные пути настроек.</summary>
+    private static readonly string _appDir = GetAppDir();
+    private static string GetAppDir() {
+      try {
+        string loc = typeof(WebUiConfig).Assembly.Location;
+        if(!string.IsNullOrEmpty(loc)) {
+          return Path.GetDirectoryName(loc);
+        }
+      }
+      catch(NotSupportedException) {          // динамическая сборка: Location недоступен
+      }
+      return Directory.GetCurrentDirectory();
+    }
+
     /// <summary>The static root, resolved to an absolute path.</summary>
     /// <remarks>Followed like the rest, but WebUiHost precomputes the prefix it compares every
     /// served path against, so a change here reaches the host only on a restart.</remarks>
     public string StaticPath {
-      get { return Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, _staticPathRaw)); }
+      get { return Path.GetFullPath(Path.Combine(_appDir, _staticPathRaw)); }
     }
 
     public bool VerboseStatic { get { return _verboseStatic; } }

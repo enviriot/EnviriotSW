@@ -18,8 +18,7 @@ namespace X13.Repository {
       this.setTopic = t;
       this.func = func;
       this.mask = mask;
-      this.prefix = (prefix==null && (mask & SubMask.Field)==SubMask.Field)?string.Empty:prefix;
-
+      this.prefix = prefix;
     }
     public override string ToString() {
       return string.Format("{0}{1}{4} > {2}.{3}", setTopic.path, (mask & (SubMask.Children | SubMask.All)) != SubMask.None ? ((mask & SubMask.Children) != SubMask.None ? "/+" : "/#") : string.Empty,

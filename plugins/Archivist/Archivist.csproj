@@ -29,7 +29,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="LiteDB" Version="5.0.21" />
+    <!-- 5.0.20, а НЕ 5.0.21: в 5.0.21 переписан дисковый слой, и checkpoint падает с
+         "ReadFull must read PAGE_SIZE bytes" (https://github.com/mbdavid/LiteDB/issues/2523).
+         Стабильной версии новее нет. Держать в согласии с PersistentStorage. -->
+    <PackageReference Include="LiteDB" Version="5.0.20" />
     <PackageReference Include="NiL.JS" Version="2.6.1722" />
     <!-- Pinned, not taken from LiteDB transitively. Every plugin ships into ONE flat folder, so
          the last project built decides which copy of a shared dependency survives - and the

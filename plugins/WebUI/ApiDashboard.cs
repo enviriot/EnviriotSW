@@ -222,6 +222,17 @@ namespace X13.WebUI {
       // value as if the session had produced it.
       Topic owner = _client.owner;
       if(owner != null && p.Author == owner) return;
+      // A move is announced to the parent the topic LEFT as well as to the one it arrived under,
+      // so this is where the client learns that a path it holds a value for is gone. Without it a
+      // widget bound to that path shows the last value for as long as the page stays open.
+      // Retired before the grant below is checked, and against the OLD path rather than the new
+      // one: the topic may have moved somewhere this client may not read, and forgetting what it
+      // was shown is not reading. Its own move is not echoed back - that is the author check above.
+      if(p.Kind == EventKind.Moved && !string.IsNullOrEmpty(p.OldPath) && DashboardAcl.CanRead(_client.ip, p.OldPath)) {
+        _send(string.Concat("P\t", p.OldPath, "\tnull"));
+        if(_verbose()) Log.Debug("dashboard.snd({0}, null) - moved to {1}", p.OldPath, p.Source.path);
+      }
+
       // A /# subscription spans a subtree that may hold declarations narrower than the one the
       // subscribe was granted under, so the grant is re-checked per value rather than only at
       // subscribe time.
