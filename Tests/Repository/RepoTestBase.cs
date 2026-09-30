@@ -43,7 +43,7 @@ namespace X13.Tests {
       // Контекст NiL.JS привязан к потоку, а JsLib.ParseJson и JsLib.Clone обращаются к нему.
       JsExtLib.ActivateEngineOnThisThread();
       // Каталог ../log статический конструктор Log всё равно создаст; это отключает запись в файл.
-      Log.useFile = false;
+      Log.UseFile = false;
     }
 
     [SetUp]

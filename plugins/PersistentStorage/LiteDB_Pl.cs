@@ -690,7 +690,7 @@ namespace X13.PersistentStorage {
     #endregion Persisten Storage Members
 
     #region History
-    private void Log_Write(LogLevel ll, DateTime dt, string msg, bool local) {
+    private void Log_Write(LogLevel ll, DateTime dt, string msg) {
       if (_history != null && ll != LogLevel.Debug) {
         var d = new BsonDocument {
           ["_id"] = ObjectId.NewObjectId(),

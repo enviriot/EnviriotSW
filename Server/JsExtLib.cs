@@ -319,10 +319,6 @@ namespace X13 {
         }
       }
     }
-    /// <summary>Ошибки таймеров скриптов и завершений с тем же ограничением частоты, что и в цикле движка.</summary>
-    /// <remarks>Поле статическое, поскольку JsExtLib также статический. Таймер скрипта, выбрасывающий исключение, 
-    /// делает это при каждом срабатывании. Это наиболее вероятный источник потока сообщений из трёх.</remarks>
-    private static readonly FaultThrottle _faults = new FaultThrottle();
     /// <summary>Максимальная длительность callback скрипта с момента предыдущего запроса, в миллисекундах.</summary>
     /// <remarks>Публикуется в /$YS/Performance/Script. Callback таймера является единственной написанной пользователем
     /// частью прохода цикла движка, поэтому именно он может привести к пропуску периода. Чтение значения сбрасывает его, 
@@ -350,7 +346,7 @@ namespace X13 {
           act();
         }
         catch(Exception ex) {
-          _faults.Report(false, "JsExtLib.Tick(completion)", null, ex);
+          Log.Fault(LogLevel.Warning, "JsExtLib.Tick(completion)", null, ex);
         }
       }
 
@@ -374,7 +370,7 @@ namespace X13 {
           Longest(cbStart);
         }
         catch(Exception ex) {
-          _faults.Report(false, "JsTimer.Tick", null, ex);
+          Log.Fault(LogLevel.Warning, "JsTimer.Tick", null, ex);
         }
         finally {
           // Очистка _firing, чтение cancelled и повторное планирование должны быть одной атомарной операцией,
@@ -393,7 +389,6 @@ namespace X13 {
           }
         }
       }
-      _faults.Flush(now);
     }
     #endregion Tick
 
@@ -466,7 +461,7 @@ namespace X13 {
       }
       public override Encoding Encoding { get { return Encoding.UTF8; } }
       public override void WriteLine(string msg) {
-        Log.onWrite(_ll, "{0}", msg);  // msg является произвольным текстом скрипта, а не строкой формата
+        Log.OnWrite(_ll, "{0}", msg);  // msg является произвольным текстом скрипта, а не строкой формата
       }
     }
     #endregion Log

@@ -21,7 +21,7 @@ namespace X13 {
     private static bool _isLinux;
 
     private static void Main(string[] args) {
-      string name = Assembly.GetExecutingAssembly().Location;
+      string name = typeof(Program).Assembly.Location;;
       string path = Path.GetDirectoryName(name);
       string cfgPath = Path.Combine(path, "../server.xst");
       int flag = Environment.UserInteractive ? 0 : 1;
@@ -139,7 +139,6 @@ namespace X13 {
     private long _lastPass;
     private long _tickMax;
     private int _tickCount;
-    private readonly FaultThrottle _faults = new FaultThrottle();
     private Mutex _singleInstance;
     private Thread _thread;
     private AutoResetEvent _tick;
@@ -413,7 +412,7 @@ namespace X13 {
           JsExtLib.Tick();
         }
         catch (Exception ex) {
-          _faults.Report(true, "JsExtLib.Tick", null, ex);
+          Log.Fault(LogLevel.Error, "JsExtLib.Tick", null, ex);
         }
         for (i = 0; i < _modules.Length; i++) {
           long started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -421,13 +420,11 @@ namespace X13 {
             _modules[i].Tick();
           }
           catch (Exception ex) {
-            // Плагин после исключения продолжает получать Tick. Его остановка превратила бы один неудачный проход
-            // в навсегда отключённую подсистему.
-            _faults.Report(false, _modules[i].GetType().FullName + ".Tick",
+            // Плагин после исключения продолжает получать Tick.
+            Log.Fault(LogLevel.Warning, _modules[i].GetType().FullName + ".Tick",
               ((System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000 / System.Diagnostics.Stopwatch.Frequency) + " ms", ex);
           }
         }
-        _faults.Flush(now);
         long passTicks = System.Diagnostics.Stopwatch.GetTimestamp() - passStart;
         _tickTicks += passTicks;
         _tickCount++;

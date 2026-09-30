@@ -15,7 +15,7 @@ namespace X13.Tests {
     public void InternalsAreVisible() {
       // Проверяет по существу компилятор, а не эти две строки: до Assert дело дойдёт только
       // если обращения к internal-типам вообще скомпилировались.
-      Assert.That(typeof(X13.FaultThrottle), Is.Not.Null);            // internal в Server
+      Assert.That(typeof(X13.Program), Is.Not.Null);                  // internal в Server
       Assert.That(typeof(X13.WebUI.LogramWireRouter), Is.Not.Null);   // internal в WebUI
     }
   }

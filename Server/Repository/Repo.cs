@@ -272,7 +272,6 @@ namespace X13.Repository {
             Failed("Export", null, ex);
           }
         }
-        _faults.Flush(DateTime.Now);
       }
       finally {
         for(int p = 0; p < PH_COUNT; p++) {
@@ -287,7 +286,7 @@ namespace X13.Repository {
 
     /// <summary>Ошибка во внутренней работе репозитория: тик перехватил её и продолжил выполнение.</summary>
     internal void Failed(string where, object subject, Exception ex) {
-      _faults.Report(true, "Repo." + where, subject, ex);
+      Log.Fault(LogLevel.Error, "Repo." + where, subject, ex);
     }
 
     /// <summary>Ошибка в чужом callback: конструкторе типа, подписчике и т. п.</summary>
@@ -295,9 +294,8 @@ namespace X13.Repository {
     /// не получит уведомление. Поэтому это предупреждение, а не ошибка, и остальные подписчики
     /// продолжают получать события.</remarks>
     internal void PluginFailed(string who, object subject, Exception ex) {
-      _faults.Report(false, who, subject, ex);
+      Log.Fault(LogLevel.Warning, who, subject, ex);
     }
-    private readonly FaultThrottle _faults = new FaultThrottle();
     /// <summary>Одно поле одного топика — ключ объединения записей манифеста в пределах тика.</summary>
     /// <remarks>Топик сравнивается по ссылке, путь — с использованием Ordinal. Два экземпляра Topic
     /// никогда не равны друг другу, а путь поля является именем, а не текстом для нечёткого

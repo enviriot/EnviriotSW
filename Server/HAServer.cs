@@ -12,7 +12,6 @@ using System.Text;
 
 namespace X13 {
   public partial class HAServer : ServiceBase {
-    /// <summary>The name the service is registered under in the SCM. Single source of truth.</summary>
     internal const string SERVICE_NAME = "Enviriot";
 
     public static void InstallService(string name) {
@@ -22,25 +21,25 @@ namespace X13 {
 
       List<SC_ACTION> FailureActions = new List<SC_ACTION>();
 
-      // First Failure Actions and Delay (msec).
+      // Действие и задержка после первого сбоя (мс).
       FailureActions.Add(new SC_ACTION() {
         Type = (int)SC_ACTION_TYPE.RestartService,
         Delay = 1000 * 15
       });
 
-      // Second Failure Actions and Delay (msec).
+      // Действие и задержка после второго сбоя (мс).
       FailureActions.Add(new SC_ACTION() {
         Type = (int)SC_ACTION_TYPE.RestartService,
         Delay = 1000 * 60 * 2
       });
 
-      // Subsequent Failures Actions and Delay (msec).
+      // Действие и задержка после последующих сбоев (мс).
       FailureActions.Add(new SC_ACTION() {
         Type = (int)SC_ACTION_TYPE.None,
         Delay = 1000 * 60 * 3
       });
 
-      // Configure service recovery property.
+      // Настраиваем параметры восстановления службы.
       ServiceRecoveryProperty.ChangeRecoveryProperty(SERVICE_NAME, FailureActions, 60 * 60 * 24, "", false, "");
       Log.Info("The service recovery property is modified successfully");
       using(ServiceController svc = new ServiceController(SERVICE_NAME)) {
@@ -50,8 +49,8 @@ namespace X13 {
           Log.Info("The {0} service is running", SERVICE_NAME);
         }
         catch(System.ServiceProcess.TimeoutException) {
-          // Startup imports the config and PersistentStorage copies the whole database to a
-          // backup first, so a slow start is not necessarily a failed one.
+          // При запуске импортируется конфигурация, а PersistentStorage сначала копирует всю базу данных
+          // в резервную копию, поэтому медленный запуск не обязательно означает ошибку.
           Log.Warning("The {0} service did not report Running within 30 s, see the log", SERVICE_NAME);
         }
       }
@@ -68,7 +67,7 @@ namespace X13 {
             };
       ServiceBase.Run(ServicesToRun);
       if(Program.IsLinux) {
-        System.Threading.Thread.Sleep(5000);   // for mono-service 
+        System.Threading.Thread.Sleep(5000);   // для mono-service 
       }
 
     }

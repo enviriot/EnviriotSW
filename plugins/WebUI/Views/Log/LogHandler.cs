@@ -14,7 +14,7 @@ namespace X13.WebUI {
     private const int MaxCount = 200;
 
     private readonly Action<JSC.JSObject> _send;
-    private readonly Action<LogLevel, DateTime, string, bool> _onWrite;
+    private readonly Action<LogLevel, DateTime, string> _onWrite;
     private readonly Action<string, Action> _post;
     private readonly Action<Action> _query;
     // Set on the engine thread by Dispose, read there by the queued push. Log.Write can fire from
@@ -113,7 +113,7 @@ namespace X13.WebUI {
     // immutable value data, so it needs no repository access, and doing it now means a burst of
     // log lines costs the tick nothing but the writes. The push is queued rather than sent
     // directly so that the socket is written from one thread only.
-    private void OnLogWrite(LogLevel ll, DateTime dt, string msg, bool local) {
+    private void OnLogWrite(LogLevel ll, DateTime dt, string msg) {
       JSC.JSObject evt = SerializeRecord(ll, dt, msg);
       evt["type"] = ViewMessageTypes.EvntLog;
       _post("log push", () => { if(!_disposed) _send(evt); });

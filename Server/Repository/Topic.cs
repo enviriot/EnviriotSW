@@ -718,18 +718,9 @@ namespace X13.Repository {
       }
     }
 
-    /// <summary>Сообщает об ошибке стороннего обработчика через встроенное ограничение частоты сообщений тика.</summary>
-    /// <remarks>Здесь используется не простой Log.Warning, поскольку неисправный подписчик выбрасывает исключение
-    /// для каждого события, а тик выполняется примерно шестьдесят раз в секунду. Без ограничения один сломанный
-    /// плагин заполнит журнал и скроет сообщение, указывающее на него. Ограничением управляет Repo; этот метод
-    /// служит точкой входа для статических путей доставки, у которых нет собственного экземпляра репозитория.</remarks>
+    /// <summary>Сообщает об ошибке стороннего обработчика с ограничением частоты (Log.Fault).</summary>
     internal static void PluginFailed(string who, object subject, Exception ex) {
-      Repo repo = _repo;
-      if (repo != null) {
-        repo.PluginFailed(who, subject, ex);
-      } else {
-        Log.Warning("{0}({1}) - {2}", who, subject, ex);
-      }
+      Log.Fault(LogLevel.Warning, who, subject, ex);
     }
 
     internal static bool Unsubscribe(Topic t, SubRec sr) {
