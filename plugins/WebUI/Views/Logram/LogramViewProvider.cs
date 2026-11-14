@@ -170,10 +170,8 @@ namespace X13.WebUI {
     // stamp the click's grid cell into the manifest's Logram.top/left before
     // creating (same JsLib.SetField dotted-merge ES uses), then create the block
     // itself and every Required-attribute pin its descriptor declares - the recursive
-    // half nothing else in Server/WebUI does (see Server/EsBroker/EsConnection.cs
-    // Create, the only other place this walk exists, unreachable from here since
-    // it's EsBroker-specific). Without it LogramGraphController.BuildLayout finds no
-    // pin child topics and the block renders with no pins at all.
+    // half nothing else in Server/WebUI does. Without it LogramGraphController.BuildLayout
+    // finds no pin child topics and the block renders with no pins at all.
     private static ViewOpResult ExecuteAddBlock(Topic diagram, string typePath, JSC.JSValue args) {
       Topic descriptor = TypeHelper.ResolveTypeTopic(typePath);
       JSC.JSValue descState = descriptor?.GetState();

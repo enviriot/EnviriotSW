@@ -70,8 +70,8 @@ namespace X13.WebUI {
     }
 
     // Quiesce() is gone. It stopped the debounce timer and then waited out a snapshot the
-    // threadpool had already dequeued, because app-shell.js dispatches on the vid prefix alone
-    // (`vid.startsWith('logram#')` -> the ACTIVE document's store), so rows from a diagram the
+    // threadpool had already dequeued, because the client routes on the vid prefix alone
+    // (document-session.js route: `logram#` -> the ACTIVE document's store), so rows from a diagram the
     // user just closed landed in whichever one they opened next. Nothing runs in parallel now, so
     // the flag is the whole of it: work queued earlier and dequeued later sees it and returns.
     public void Dispose() {
@@ -96,8 +96,8 @@ namespace X13.WebUI {
         // TopicTreeController.HandleRootRemoved. SendSnapshot never notices this on
         // its own: it unconditionally treats RootVid as still current, so without
         // this the client would be left showing a diagram whose topic is gone,
-        // with nothing to route it back to the parent (see app-shell.js
-        // #onDocumentRootDeleted). Must be checked before the changedState branch
+        // with nothing to route it back to the parent (see document-session.js
+        // isOwnRoot). Must be checked before the changedState branch
         // below, since a self-remove is also p.Source == _root.
         if(p.Kind == EventKind.Removed && p.Source == _root) {
           HandleRootRemoved();
@@ -304,7 +304,7 @@ namespace X13.WebUI {
       currentVids.Add(rootVid);
 
       List<Topic> elements = new List<Topic>();
-      // Visit order matters: RoutingPass accumulates its edge/cell claims as elements are
+      // Visit order matters: WireRoutingPass accumulates its edge/cell claims as elements are
       // walked, so wires routed later see what earlier ones took. Topic.children already
       // supplies a name-ordered walk - Bill's two-argument ctor passes sorted:true, and only
       // the three-argument one can turn that off - so nothing extra is needed here, but the
@@ -507,16 +507,16 @@ namespace X13.WebUI {
     // Nothing validates Logram.top/left on the way in - LogramViewProvider.Commit writes every
     // key it is handed verbatim, and the client's drag commit only recently learned to clamp -
     // so a coordinate can arrive negative or arbitrarily large. Both alias other cells once
-    // RoutingPass.CellKey packs them as x * 65536 + y: CellKey(0, -1) and CellKey(-1, 65535)
+    // WireRoutingPass.CellKey packs them as x * 65536 + y: CellKey(0, -1) and CellKey(-1, 65535)
     // are the same number, and a y past 65535 overflows into the x field. Clamping on the way
     // out of the manifest keeps the whole routing grid inside the stride no matter what is
     // stored; the ceiling is far beyond any real diagram.
     private const int MaxCell = 8191;
     // Far beyond any real block's pin count, and low enough that MaxCell + it stays inside
     // CellKey's stride even for an element placed at the far edge of the canvas.
-    private const int MaxPinIndex = 255;
+    internal const int MaxPinIndex = 255;
 
-    private static int Cell(JSC.JSValue value) {
+    internal static int Cell(JSC.JSValue value) {
       int cell = value.AsInt(0);
       if(cell < 0) return 0;
       return cell > MaxCell ? MaxCell : cell;
@@ -558,8 +558,8 @@ namespace X13.WebUI {
       Dictionary<Topic, ElementLayout> byTopic = new Dictionary<Topic, ElementLayout>();
       foreach(ElementLayout l in layouts) byTopic[l.Topic] = l;
 
-      RoutingPass pass = new RoutingPass();
-      // Canvas bounds, mirroring logram-document.js's #canvasSize exactly (bounding box of
+      WireRoutingPass pass = new WireRoutingPass();
+      // Canvas bounds, mirroring logram-scene.js's canvasSize exactly (bounding box of
       // every element, floored at MinCanvasCells) - the port had dropped the original's
       // bounds test (ES/Logram/LogramItems.cs GetWeigt returns an over-threshold weight
       // outside the canvas) and without it A* was free to wander into negative and
@@ -569,7 +569,7 @@ namespace X13.WebUI {
       // X + WidthCells and is itself blocked (see BlockedCells), so a wire leaving the
       // RIGHTMOST element has to step into the column past it - without that column every
       // legal first step is out of bounds and the route fails. The client reserves the same
-      // column (#canvasSize's `+ 1`), or a route through it would be drawn outside the SVG
+      // column (canvasSize's `+ 1`), or a route through it would be drawn outside the SVG
       // viewport and clipped. No slack beyond that: the client sizes the canvas to its
       // content on every render, so more kept here would be room it no longer draws. The
       // mirror column on the left costs nothing to keep - it is simply cell 0, which
@@ -604,13 +604,7 @@ namespace X13.WebUI {
     // output-pin column - see BuildLayout), y from l.Y through l.Y + l.HeightCells - 1.
     private static HashSet<long> BlockedCells(List<ElementLayout> layouts) {
       HashSet<long> blocked = new HashSet<long>();
-      foreach(ElementLayout l in layouts) {
-        int xMax = l.X + l.WidthCells;
-        int yMax = l.Y + l.HeightCells - 1;
-        for(int x = l.X; x <= xMax; x++) {
-          for(int y = l.Y; y <= yMax; y++) blocked.Add(RoutingPass.CellKey(x, y));
-        }
-      }
+      foreach(ElementLayout l in layouts) WireRoutingPass.Block(blocked, l.X, l.Y, l.WidthCells, l.HeightCells);
       return blocked;
     }
 
@@ -645,108 +639,7 @@ namespace X13.WebUI {
     internal const string EditorVariable = "LogramVariable";
     internal const string EditorPin = "LogramPin";
 
-    // What one step over an untouched edge costs, what re-using an edge this same source
-    // already claimed costs instead, and the surcharge for entering a cell some OTHER
-    // source's wire already runs through. Named because the router's heuristic has to be
-    // scaled by whichever step cost is actually reachable on a given route - get that
-    // floor wrong and you silently lose either optimality or most of the search's
-    // guidance (see RoutingPass.MinStepCost and LogramWireRouter.Heuristic).
-    private const int EdgeStepCost = 6;
-    private const int ReusedEdgeStepCost = 1;
-    private const int CrossingCost = 16;
-
-    // Everything one ResolveWires pass accumulates as it routes wire after wire, so later
-    // wires see what earlier ones took, plus the canvas every route has to stay inside.
-    // Owns the pricing and the claiming outright rather than exposing its two maps: those
-    // were six near-identical free functions (edge/cell x cost/claim/key) whose only real
-    // differences were a bug - one walked its axis one cell short of the other, and one
-    // overwrote an existing owner where the other kept the first claim.
-    private sealed class RoutingPass {
-      // Edges claimed this pass: lets several sinks fed by the same source converge onto
-      // one shared trunk instead of each drawing its own overlapping line, while forcing
-      // wires from DIFFERENT sources to route around each other rather than run in
-      // parallel. Perpendicular crossings share no edge, so this map cannot see them at
-      // all - that is what the per-cell map below is for.
-      private readonly Dictionary<long, Topic> _edgeOwner = new Dictionary<long, Topic>();
-      private readonly Dictionary<long, Topic> _cellOwner = new Dictionary<long, Topic>();
-      // Sources with at least one claim - the only situation in which a step can cost
-      // less than EdgeStepCost, so this is exactly what decides the admissible floor the
-      // next route's heuristic may be scaled by.
-      private readonly HashSet<Topic> _claimedSources = new HashSet<Topic>();
-      internal int MaxX = MinCanvasCellsW;
-      internal int MaxY = MinCanvasCellsH;
-
-      // The cheapest a single step can possibly cost for this source right now. Only a
-      // source that already has something to merge onto can reach the reuse discount;
-      // handing the router the discount unconditionally stays admissible but throws away
-      // most of its guidance.
-      internal int MinStepCost(Topic source) {
-        return _claimedSources.Contains(source) ? ReusedEdgeStepCost : EdgeStepCost;
-      }
-
-      // null = this edge belongs to a different source and must not be run along in
-      // parallel (the router has to detour). Otherwise the base or discounted edge price,
-      // plus the crossing surcharge when the cell being entered already carries another
-      // source's wire - priced rather than blocked, so a perpendicular crossing stays
-      // possible but is avoided when a comparable clear route exists.
-      internal int? StepCost(int x1, int y1, int x2, int y2, Topic source) {
-        Topic owner;
-        int cost;
-        if(!_edgeOwner.TryGetValue(EdgeKey(x1, y1, x2, y2), out owner)) cost = EdgeStepCost;
-        else if(owner == source) cost = ReusedEdgeStepCost;
-        else return null;
-        if(_cellOwner.TryGetValue(CellKey(x2, y2), out owner) && owner != source) cost += CrossingCost;
-        return cost;
-      }
-
-      // Records a just-routed path so later wires in this pass see it. First claim wins
-      // for edges as well as cells: a route that never went through StepCost at all (the
-      // fallback) could otherwise reassign edges another source legitimately owned, which
-      // then hard-blocks that source's own later wires off their own trunk.
-      internal void Claim(List<LogramWireRouter.GridPoint> cells, Topic source) {
-        _claimedSources.Add(source);
-        for(int i = 0; i < cells.Count - 1; i++) {
-          LogramWireRouter.GridPoint a = cells[i];
-          LogramWireRouter.GridPoint b = cells[i + 1];
-          // Guaranteed axis-aligned by the router (fallback included - see
-          // LogramWireRouter.FallbackPath); skipped rather than trusted, because walking a
-          // diagonal here would claim a whole row of edges the wire never occupies.
-          if(a.X != b.X && a.Y != b.Y) continue;
-          int dx = Math.Sign(b.X - a.X), dy = Math.Sign(b.Y - a.Y);
-          ClaimCell(a.X, a.Y, source);
-          int x = a.X, y = a.Y;
-          while(x != b.X || y != b.Y) {
-            int nx = x + dx, ny = y + dy;
-            long edge = EdgeKey(x, y, nx, ny);
-            if(!_edgeOwner.ContainsKey(edge)) _edgeOwner[edge] = source;
-            ClaimCell(nx, ny, source);
-            x = nx; y = ny;
-          }
-        }
-      }
-
-      private void ClaimCell(int x, int y, Topic source) {
-        long key = CellKey(x, y);
-        if(!_cellOwner.ContainsKey(key)) _cellOwner[key] = source;
-      }
-
-      // Integer keys, not the concatenated strings these used to build: the router asks
-      // for a price on every candidate step of every expansion, so a string key per call
-      // meant tens of thousands of short-lived allocations per wire per snapshot.
-      // Coordinates are canvas-bounded (see IsBlocked) well inside the 16-bit stride.
-      internal static long CellKey(int x, int y) {
-        return (long)x * 65536L + y;
-      }
-
-      // An edge is identified by its lower/left endpoint plus its orientation, so the
-      // same physical segment maps to one key regardless of which end a path reached first.
-      private static long EdgeKey(int x1, int y1, int x2, int y2) {
-        return (CellKey(Math.Min(x1, x2), Math.Min(y1, y2)) << 1) | (y1 == y2 ? 0L : 1L);
-      }
-    }
-
-
-    private void ResolveOneWire(Topic sinkTopic, LogramWireRouter.GridPoint sinkCell, HashSet<long> blocked, Dictionary<Topic, ElementLayout> byTopic, RoutingPass pass) {
+    private void ResolveOneWire(Topic sinkTopic, LogramWireRouter.GridPoint sinkCell, HashSet<long> blocked, Dictionary<Topic, ElementLayout> byTopic, WireRoutingPass pass) {
       string vid = Vid(sinkTopic);
       string sourcePath = sinkTopic.GetField("Logram.bind").AsString(null);
       Topic sourceTopic = string.IsNullOrEmpty(sourcePath) ? null : Topic.root.Get(sourcePath, false);
@@ -824,13 +717,8 @@ namespace X13.WebUI {
     // yMax now that a block's first pin sits flush on its top row (Y, see
     // GetPinCell) instead of one row below it - there's no header row left to give
     // the extra vertical margin variables still get above/below their single pin.
-    private static bool IsBlocked(int x, int y, HashSet<long> blocked, RoutingPass pass) {
-      // Outside the canvas the client actually draws (see ResolveWires/MinCanvasCells).
-      // An element pushed hard against an edge can end up with every legal first step
-      // out of bounds - that's intentional: the route fails and the fallback path is the
-      // visible signal that the element sits where a wire cannot reach its pin.
-      if(x < 0 || y < 0 || x > pass.MaxX || y > pass.MaxY) return true;
-      return blocked.Contains(RoutingPass.CellKey(x, y));
+    private static bool IsBlocked(int x, int y, HashSet<long> blocked, WireRoutingPass pass) {
+      return pass.IsBlocked(x, y, blocked);
     }
 
     // A block's first pin now sits flush on its own top row (Y) - the row used to be
@@ -859,12 +747,13 @@ namespace X13.WebUI {
     // level is the only one of the generic row fields any of the three Serialize*Row
     // methods below actually need - ViewStore's insertion/removal bookkeeping keys off
     // it. expander/readonly (and, on the element row, the embedded pins array -
-    // logram-document.js derives pin geometry from the separate LogramPin rows
-    // instead, grouped by vid prefix) have no consumer in logram-document.js, so
+    // logram-scene.js derives pin geometry from the separate LogramPin rows
+    // instead, grouped by vid prefix) have no consumer on the client, so
     // they're deliberately omitted rather than sent as unused filler. Canvas size
-    // isn't sent at all - logram-document.js derives it from the elements' own
-    // bounding box instead (see #canvasSize), so this row only ever needs sending
-    // once, purely as the "LogramCanvas" row-kind marker (see #renderElement et al.).
+    // isn't sent at all - logram-scene.js derives it from the elements' own
+    // bounding box instead (see canvasSize), so this row only ever needs sending
+    // once, purely as the "LogramCanvas" row-kind marker (see logram-document.js
+    // #renderElement et al.).
     private JSC.JSObject SerializeCanvasRow() {
       JSC.JSObject dto = ViewProtocolSerializer.RowBase(ViewMessageTypes.EvntAdd, RootVid);
       dto["level"] = new JSL.Number(0);
@@ -971,7 +860,7 @@ namespace X13.WebUI {
     // decimal count (approximates ES's exact .NET format-string table from
     // LogramItems.cs loPin.Render without reproducing it verbatim) so a traced
     // number stays short regardless of scale, trailing zeros trimmed.
-    private static string FormatTraceValue(JSC.JSValue value) {
+    internal static string FormatTraceValue(JSC.JSValue value) {
       if(value.IsNullOrUndefined()) return string.Empty;
       if(value.IsNumber) {
         double d = (double)value;

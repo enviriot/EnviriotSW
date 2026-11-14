@@ -37,8 +37,8 @@ export class ViewStore {
     if(!patch || !patch.vid) return;
     const index = this.rows.findIndex((row) => row.vid === patch.vid);
     if(index < 0) return;
-    const allowed = ['expander', 'icon', 'editor', 'value', 'readonly', 'altView', 'options', 'editorView', 'info', 'srcVer', 'actVer', 'downloadEnabled', 'removeEnabled',
-      'x', 'y', 'width', 'height', 'pins', 'pinDirection', 'pinIndex', 'sourceVid', 'sourceLocal', 'sourcePath', 'trace', 'color', 'displayValue'];
+    const allowed = ['expander', 'icon', 'editor', 'value', 'readonly', 'altView', 'options', 'editorView', 'info', 'srcVer', 'actVer', 'downloadEnabled', 'removeEnabled', 'plcModified',
+      'x', 'y', 'width', 'height', 'constructorArgs', 'constructorRows', 'configurationError', 'pins', 'pinDirection', 'pinIndex', 'pinError', 'constantEditable', 'sourceVid', 'sourceLocal', 'sourcePath', 'trace', 'color', 'displayValue'];
     const next = { ...this.rows[index] };
     for(const key of allowed) {
       if(Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
@@ -125,13 +125,19 @@ function normalizeRow(row) {
     ...(Object.prototype.hasOwnProperty.call(row, 'actVer') ? { actVer: row.actVer } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'downloadEnabled') ? { downloadEnabled: !!row.downloadEnabled } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'removeEnabled') ? { removeEnabled: !!row.removeEnabled } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'plcModified') ? { plcModified: row.plcModified } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'x') ? { x: row.x } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'y') ? { y: row.y } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'width') ? { width: row.width } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'height') ? { height: row.height } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'constructorArgs') ? { constructorArgs: row.constructorArgs } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'constructorRows') ? { constructorRows: row.constructorRows } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'configurationError') ? { configurationError: row.configurationError } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'pins') ? { pins: row.pins } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'pinDirection') ? { pinDirection: row.pinDirection } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'pinIndex') ? { pinIndex: row.pinIndex } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'pinError') ? { pinError: !!row.pinError } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'constantEditable') ? { constantEditable: !!row.constantEditable } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'sourceVid') ? { sourceVid: row.sourceVid } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'sourceLocal') ? { sourceLocal: row.sourceLocal } : {}),
     ...(Object.prototype.hasOwnProperty.call(row, 'sourcePath') ? { sourcePath: row.sourcePath } : {}),

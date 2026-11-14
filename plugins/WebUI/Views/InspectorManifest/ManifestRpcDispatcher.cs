@@ -35,6 +35,7 @@ namespace X13.WebUI {
       if(schema != null && (schema.AsInt("attr", 0) & 1) != 0) {
         return ViewOpResult.Error("delete_target_required", "Required field cannot be deleted: " + fieldPath);
       }
+      if(PlcReportFields.RejectWrite(rootTopic, fieldPath, JSC.JSValue.Null)) return ViewOpResult.Error("field_readonly", "PLC availability reports are read-only");
       rootTopic.SetField(fieldPath, JSC.JSValue.Null, prim);
       return ViewOpResult.Success();
     }
@@ -73,6 +74,7 @@ namespace X13.WebUI {
 
       string targetPath = string.IsNullOrEmpty(fieldPath) ? relative : (fieldPath + "." + relative);
       JSC.JSValue newValue = JsLib.Clone(descriptor["default"]);
+      if(PlcReportFields.RejectWrite(rootTopic, targetPath, newValue)) return ViewOpResult.Error("field_readonly", "PLC availability reports are read-only");
       rootTopic.SetField(targetPath, newValue, prim);
       return ViewOpResult.Success();
     }

@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 
 namespace X13 {
-  /// <summary>Журнал: консоль, файл и подписчики - панель лога в IDE и история в базе.</summary>
+  /// <summary>Журнал: консоль, суточные файлы, файловая история и живые подписчики.</summary>
   /// <remarks>Статическая часть - публичный API и ссылка на журнал процесса; всё остальное принадлежит
   /// экземпляру: очередь, потребитель, файл, подписчики, часы и ограничение повторяющихся сбоев. Журнал
   /// процесса - один экземпляр за этим API, а тест создаёт собственный, со своими часами, очередью и
@@ -20,9 +20,7 @@ namespace X13 {
     private static readonly Log _default;
 
     static Log() {
-      // Маска собирается здесь, а не в конструкторе экземпляра: вызывающая сборка статического конструктора -
-      // та, что первой обратилась к журналу, а из конструктора ею оказалась бы сама эта сборка.
-      _default = new Log("../log/{0}_" + Path.GetFileNameWithoutExtension(typeof(Log).Assembly.Location) + ".log", null, true, 30000);
+      _default = new Log("../log", null, true, 30000);
     }
     public static void Debug(string format, params object[] arg) {
       _default.Enqueue(LogLevel.Debug, format, arg);
@@ -50,9 +48,12 @@ namespace X13 {
       add { _default.Written += value; }
       remove { _default.Written -= value; }
     }
-    public static Func<DateTime, int, IEnumerable<Log.LogRecord>> History {
-      get { return _default._history; }
-      set { _default._history = value; }
+    public static event Action<LogEntry> RecordWritten {
+      add { _default.EntryWritten += value; }
+      remove { _default.EntryWritten -= value; }
+    }
+    public static IReadOnlyList<LogEntry> ReadHistory(string beforeId, int count) {
+      return _default.ReadFileHistory(beforeId, count);
     }
     /// <summary>Писать ли журнал процесса в файл.</summary>
     public static bool UseFile {
@@ -81,40 +82,31 @@ namespace X13 {
     private readonly bool _useDiagnostic;
     private readonly bool _useConsole;
     private readonly Func<DateTime> _clock;
-    private readonly string _lfMask;
+    private readonly FileLogHistory _files;
     private readonly System.Collections.Concurrent.ConcurrentQueue<LogRecord> _records;
     private readonly AutoResetEvent _kickEv;
     private readonly RegisteredWaitHandle _wh;
-    private bool _useFile;
-    private Func<DateTime, int, IEnumerable<LogRecord>> _history;
-    private string _lfPath;
-    private DateTime _firstDT;
+    private volatile bool _useFile;
+    private DateTime _lastPruned;
+    private bool _fileError;
     private int _busy;
 
-    /// <param name="lfMask">Путь файла, {0} - дата: "../log/{0}_enviriot.log". Каталог создаётся здесь же.
-    /// null - файла нет вовсе, и тогда useFile тоже false.</param>
+    /// <param name="directory">Каталог суточных файлов. При null файлового источника нет.</param>
     /// <param name="clock">Часы журнала: метки записей, а через них и смена суточного файла, и сутки
-    /// удержанных сбоев; null - DateTime.Now. Вымышленные часы при включённом файле дали бы файлы с
-    /// вымышленной датой в общем каталоге журналов, поэтому тестовый экземпляр создают без файла.
+    /// удержанных сбоев; null - DateTime.Now. Файловые тесты используют отдельный временный каталог.
     /// Удаление старых файлов этих часов не слушает, см. Process.</param>
     /// <param name="useFile">Писать ли в файл: у журнала процесса true, у тестового - false.</param>
     /// <param name="idleWakeMs">Сон потребителя и окно ограничения сбоев, см. _idleWakeMs. У журнала процесса
     /// 30 секунд; тестовому экземпляру короткое окно нужно, чтобы хвост, выписанный без FlushFaults, не
     /// заставлял тест ждать полминуты.</param>
-    internal Log(string lfMask, Func<DateTime> clock, bool useFile, int idleWakeMs) {
+    internal Log(string directory, Func<DateTime> clock, bool useFile, int idleWakeMs) {
       _useDiagnostic = System.Diagnostics.Debugger.IsAttached;
       try { int window_height = Console.WindowHeight; _useConsole = true; }
       catch { _useConsole = false; }
-      if (lfMask != null) {
-        string dir = Path.GetDirectoryName(lfMask);
-        if (!Directory.Exists(dir)) {
-          Directory.CreateDirectory(dir);
-        }
-      }
-      _useFile = useFile;
+      _files = directory == null ? null : new FileLogHistory(directory);
+      _useFile = useFile && _files != null;
       _idleWakeMs = idleWakeMs;
       _clock = clock ?? (() => DateTime.Now);
-      _lfMask = lfMask;
       _records = new System.Collections.Concurrent.ConcurrentQueue<LogRecord>();
       _kickEv = new AutoResetEvent(false);
       _busy = 1;
@@ -124,9 +116,18 @@ namespace X13 {
 
     /// <summary>Подписчики этого экземпляра; у журнала процесса - через Log.Write.</summary>
     internal event Action<LogLevel, DateTime, string> Written;
+    internal event Action<LogEntry> EntryWritten;
+
+    internal IReadOnlyList<LogEntry> ReadFileHistory(string beforeId, int count) {
+      if(!_useFile || _files == null) {
+        throw new InvalidOperationException("File logging is disabled");
+      }
+      return _files.Read(beforeId, count);
+    }
 
     /// <summary>Ставит запись в очередь; у журнала процесса - через Log.OnWrite и соседей.</summary>
     internal void Enqueue(LogLevel ll, string format, params object[] arg) {
+      if(!Enum.IsDefined(typeof(LogLevel), ll)) throw new ArgumentOutOfRangeException(nameof(ll));
       _records.Enqueue(new LogRecord() { ll = ll, dt = _clock(), format = format, args = arg });
       _kickEv.Set();
     }
@@ -165,6 +166,27 @@ namespace X13 {
       }
     }
 
+    private void PublishEntry(LogEntry entry) {
+      var handlers = EntryWritten;
+      if(handlers == null) return;
+      foreach(Delegate handler in handlers.GetInvocationList()) {
+        try {
+          ((Action<LogEntry>)handler)(entry);
+        }
+        catch(Exception ex) {
+          ReportDirect("Log subscriber failed - " + ex);
+        }
+      }
+    }
+
+    private void FileDiagnostic(string message) {
+      ReportDirect(message);
+      // Не возвращаем ошибку файловой записи в очередь того же неисправного файла.
+      var entry = new LogEntry(null, _clock(), LogLevel.Error, message);
+      Publish(entry.Level, entry.Timestamp, entry.Message);
+      PublishEntry(entry);
+    }
+
     // Намеренно обходит очередь. См. Publish.
     private void ReportDirect(string text) {
       try {
@@ -186,7 +208,6 @@ namespace X13 {
       }
       LogRecord r;
       string msg;
-      FileStream fs = null;
       try {
         // На каждом вызове, а не только по тайм-ауту: при непрерывной записи тайм-аут не наступает вовсе.
         // До выборки - чтобы строки, выписанные сбросом, ушли этим же проходом.
@@ -200,7 +221,6 @@ namespace X13 {
             msg = "Bad format: " + r.format;
           }
 
-          Publish(r.ll, r.dt, msg);
           string msgA;
           ConsoleColor cc;
           switch (r.ll) {
@@ -228,49 +248,43 @@ namespace X13 {
             Console.ForegroundColor = cc;
             Console.WriteLine(msgA);
           }
-          if (_useFile) {
-            if (_lfPath == null || _firstDT != r.dt.Date) {
-              _firstDT = r.dt.Date;
-              try {
-                string m1 = string.Format(_lfMask, "*");
-                // Возраст - по настоящим часам, а не по дате записи: времена файлов настоящие, а каталог ../log
-                // и сами файлы у тестов и отладочного сервера общие. Вымышленные часы с датой в будущем
-                // стёрли бы живые журналы.
-                DateTime today = DateTime.Today;
-                foreach (string f in Directory.GetFiles(Path.GetDirectoryName(m1), Path.GetFileName(m1), SearchOption.TopDirectoryOnly)) {
-                  if (File.GetLastWriteTime(f).AddDays(20) < today)
-                    File.Delete(f);
-                }
-              }
-              catch (System.IO.IOException) {
-              }
-              _lfPath = string.Format(_lfMask, _firstDT.ToString("yyMMdd"));
-              // дата сменилась либо это первая запись пакета: открытый дескриптор, если он есть, указывает на неверный файл
-              fs?.Dispose();
-              fs = null;
+          var entry = new LogEntry(null, r.dt, r.ll, msg);
+          if(_useFile && _files != null) {
+            if(_lastPruned != r.dt.Date) {
+              _lastPruned = r.dt.Date;
+              _files.Prune(DateTime.Today, FileDiagnostic);
             }
-            byte[] ba = Encoding.UTF8.GetBytes(msgA + "\r\n");
-            for (int i = 2; i >= 0; i--) {
+            Exception failure = null;
+            for(int attempt = 0; attempt < 3; attempt++) {
               try {
-                if (fs == null) {
-                  fs = File.Open(_lfPath, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
-                  fs.Seek(0, SeekOrigin.End);
-                }
-                fs.Write(ba, 0, ba.Length);
+                entry = _files.Append(r.ll, r.dt, msg);
+                failure = null;
+                _fileError = false;
                 break;
               }
-              catch (System.IO.IOException) {
-                fs?.Dispose();
-                fs = null;
+              catch(InvalidDataException ex) {
+                failure = ex;
+                break;
+              }
+              catch(IOException ex) {
+                failure = ex;
                 Thread.Sleep(15);
               }
+              catch(UnauthorizedAccessException ex) {
+                failure = ex;
+                break;
+              }
+            }
+            if(failure != null && !_fileError) {
+              _fileError = true;
+              FileDiagnostic("Log file write failed: " + failure.Message);
             }
           }
+          Publish(r.ll, r.dt, msg);
+          PublishEntry(entry);
         }
       }
       finally {
-        // пакет завершён либо Process повторно вызван следующим сигналом: не сохраняем дескриптор между callback ThreadPool
-        fs?.Dispose();
         // Внутри finally, а не после него: иначе исключение из цикла оставило бы _busy равным 2,
         // и каждый последующий вызов Process завершался бы на CompareExchange выше.
         _busy = 1;

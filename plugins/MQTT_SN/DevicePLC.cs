@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using X13.LogramPLC;
 using X13.Repository;
 
 namespace X13.Periphery {
@@ -13,6 +14,7 @@ namespace X13.Periphery {
     private readonly int _idx;
     private readonly Topic _owner;
     private readonly Action<byte[]> _pub;
+    private readonly X13.DevicePLC.EP_Target _target;
     private bool _plcStoped;
     private bool PlcStoped {
       get {
@@ -32,15 +34,35 @@ namespace X13.Periphery {
     private SortedSet<Chunk> _prg;
     private uint _stackBottom;
 
-    public DevicePLC(Topic owner, Action<byte[]> pub) {
+    public DevicePLC(Topic owner, Action<byte[]> pub, X13.DevicePLC.EP_Target target) {
       _idx = System.Threading.Interlocked.Increment(ref _cntCom);
       this._owner = owner;
       this._pub = pub;
+      this._target = target;
       _st = 0;
       _owner.SetState(0);
+      if(target == X13.DevicePLC.EP_Target.EspNode) {
+        _lplc = new LP_Program(owner, target);
+      }
+    }
+    /// <summary>pa1: программа - диаграмма LPLC; у pa0 - null.</summary>
+    private readonly LP_Program _lplc;
+
+    /// <summary>Узел, программы которого исполняет объект управления tag, или null - tag не объект PLC.</summary>
+    /// <remarks>pa0 - X13, pa1 - EspNode. Протокол у них один, а программы несовместимы, и до загрузки
+    /// различить узлы можно только по имени объекта - поэтому EspNode и назвал его иначе.</remarks>
+    internal static X13.DevicePLC.EP_Target? TargetOf(string tag) {
+      switch(tag) {
+      case "pa0":
+        return X13.DevicePLC.EP_Target.X13;
+      case "pa1":
+        return X13.DevicePLC.EP_Target.EspNode;
+      default:
+        return null;
+      }
     }
 
-    /// <summary>/$YS/DevicePLC/verbose, declared once by the plugin rather than per device.</summary>
+    /// <summary>/$YS/MQTT-SN/DPLC_verbose, declared once by the plugin rather than per device.</summary>
     public bool Verbose {
       get {
         return MQTT_SNPl.verbosePlc;
@@ -48,14 +70,43 @@ namespace X13.Periphery {
     }
     public string Path { get { return _owner.path; } }
 
+    /// <summary>Скомпилированная программа - то, что нужно Run и от src (pa0), и от диаграммы (pa1).</summary>
+    private sealed class PlcProgram {
+      public SortedList<uint, byte[]> Hex;
+      public uint StackBottom;
+      /// <summary>Переменные программы: имя - меркер.</summary>
+      public IEnumerable<KeyValuePair<string, string>> Vars;
+      public List<string> IoList;
+      /// <summary>pa1: результат диаграммы и отпечаток программы; у pa0 - null.</summary>
+      public LP_DiagramCompiler Diagram;
+      public string Fingerprint;
+    }
+    /// <summary>Отпечаток программы, которая сейчас загружается; пишется в LPLC.loaded, когда загрузка закончилась.</summary>
+    private string _loading;
+
     #region RPC Members
-    public X13.DevicePLC.EP_Compiler Build() {
+    public void Build() {
+      Compile(true);
+    }
+    /// <summary>pa0 - рукописный src, pa1 - диаграмма LPLC из дерева.</summary>
+    private PlcProgram Compile(bool log) {
+      if(_lplc != null) {
+        string fp;
+        var r = _lplc.Compile(log, out fp);
+        return r == null ? null : new PlcProgram() { Hex = r.Hex, StackBottom = r.StackBottom, Vars = r.Variables, Diagram = r, Fingerprint = fp };
+      }
       var st = _owner.Get("src", false, _owner);
       // One read instead of three, and AsString carries the type test and the default with it.
       string src = st == null ? string.Empty : st.GetState().AsString(string.Empty);
-      var c = new X13.DevicePLC.EP_Compiler();
-      c.CMsg += C_CMsg;
-      return c.Parse(src)?c:null;
+      var c = new X13.DevicePLC.EP_Compiler(_target);
+      c.CMsg += (level, coords, message) => {
+        if(log) C_CMsg(level, coords, message);
+      };
+      if(!c.Parse(src)) {
+        if(log) Log.Error("{0}/src - {1}", _owner.path, c.Error ?? "compilation failed");
+        return null;
+      }
+      return new PlcProgram() { Hex = c.Hex, StackBottom = c.StackBottom, Vars = c.varList, IoList = c.ioList };
     }
     public void StartPlc() {
       _st = 9;
@@ -65,21 +116,21 @@ namespace X13.Periphery {
       _pub(new byte[] { (byte)Cmd.PlcStopReq });
     }
     public void Run(MsDevice dev) {
-      var c = this.Build();
+      var c = Compile(true);
       if(c == null) {
         return;
       }
-      if(c.ioList != null) {
-        foreach(var v in c.ioList) {  // register IO variables
+      if(c.IoList != null) {
+        foreach(var v in c.IoList) {  // register IO variables
           var t = _owner.parent.Get(v, true, _owner);
           t.SetField("MQTT-SN.tag", v);
         }
       }
       var ch_t = JSC.JSObject.CreateObject();
-      if(c.varList != null) {
+      if(c.Vars != null) {
         string n;
         JSC.JSObject o, mo, mqo;
-        foreach(var kv in c.varList) {
+        foreach(var kv in c.Vars) {
           n = kv.Key.Replace('.', '_');
           o = JSC.JSObject.CreateObject();
           mo = JSC.JSObject.CreateObject();
@@ -102,6 +153,10 @@ namespace X13.Periphery {
             o["default"] = string.Empty;
             o["type"] = "String";
             break;
+          case MsDevice.DType.Float:
+            o["default"] = 0;
+            o["type"] = "Double";
+            break;
           default:
             o["default"] = 0;
             o["type"] = "Integer";
@@ -111,22 +166,29 @@ namespace X13.Periphery {
           ch_t[n] = o;
         }
       }
-      _owner.parent.SetField("Children", ch_t, _owner);
-      string sTag;
-      var varLst = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").AsString(null)) != null && sTag.StartsWith("M")).ToArray();
-      var rereg = new List<Tuple<Topic, string>>();
-      foreach(var t in varLst) {
-        sTag = t.GetField("MQTT-SN.tag").AsString(null);
-        var vt = c.varList.FirstOrDefault(z => t.name == z.Key.Replace('.', '_'));
-        if(vt.Key==null) {
-          rereg.Add(new Tuple<Topic, string>(t, string.Empty));
-        } else if(sTag!=vt.Value) {
-          rereg.Add(new Tuple<Topic,string>(t, vt.Value));
+      if(c.Diagram != null) {
+        LP_Program.AddVarTemplates(ch_t);
+        _owner.parent.SetField("Children", ch_t, _owner);
+        _lplc.Retag(c.Diagram);
+      } else {
+        _owner.parent.SetField("Children", ch_t, _owner);
+        string sTag;
+        var varLst = _owner.parent.children.Where(z => (sTag = z.GetField("MQTT-SN.tag").AsString(null)) != null && sTag.StartsWith("M")).ToArray();
+        var rereg = new List<Tuple<Topic, string>>();
+        foreach(var t in varLst) {
+          sTag = t.GetField("MQTT-SN.tag").AsString(null);
+          var vt = c.Vars.FirstOrDefault(z => t.name == z.Key.Replace('.', '_'));
+          if(vt.Key==null) {
+            rereg.Add(new Tuple<Topic, string>(t, string.Empty));
+          } else if(sTag!=vt.Value) {
+            rereg.Add(new Tuple<Topic,string>(t, vt.Value));
+          }
+        }
+        if(rereg.Any()) {
+          dev.ReReg(rereg);
         }
       }
-      if(rereg.Any()) {
-        dev.ReReg(rereg);
-      }
+      _loading = c.Fingerprint;
       _stackBottom = (c.StackBottom + 3) / 4;
       _prg = new SortedSet<Chunk>();
       foreach(var kv in c.Hex) {
@@ -142,17 +204,29 @@ namespace X13.Periphery {
     }
     #endregion RPC Members
 
+    /// <summary>Загрузка закончилась: отпечаток программы узла - в LPLC.loaded (он есть только у pa1).</summary>
+    private void Loaded() {
+      if(_loading != null) {
+        _lplc.MarkLoaded(_loading);
+        _loading = null;
+      }
+    }
+    /// <summary>Место команды по адресу pc в программе, для журнала; у pa0 сказать нечего.</summary>
+    private string BlockAt(uint pc) {
+      return _lplc == null ? string.Empty : _lplc.BlockAt(pc);
+    }
+
     private void C_CMsg(NiL.JS.MessageLevel level, NiL.JS.Core.CodeCoordinates coords, string message) {
       switch(level) {
       case NiL.JS.MessageLevel.Error:
-      case NiL.JS.MessageLevel.CriticalWarning:
-        Log.Error("{0} [{1}, {2}] {3}", _owner.path, coords.Line, coords.Column, message);
+        Log.Error("{0}/src [{1}, {2}] {3}", _owner.path, coords.Line, coords.Column, message);
         break;
+      case NiL.JS.MessageLevel.CriticalWarning:
       case NiL.JS.MessageLevel.Warning:
-        Log.Warning("{0} [{1}, {2}] {3}", _owner.path, coords.Line, coords.Column, message);
+        Log.Warning("{0}/src [{1}, {2}] {3}", _owner.path, coords.Line, coords.Column, message);
         break;
       default:
-        Log.Info("{0} [{1}, {2}] {3}", _owner.path, coords.Line, coords.Column, message);
+        Log.Info("{0}/src [{1}, {2}] {3}", _owner.path, coords.Line, coords.Column, message);
         break;
       }
 
@@ -186,7 +260,7 @@ namespace X13.Periphery {
           if(msgData.Length == 18) {
             processed = true;
             PlcStoped = true;
-            Log.Warning("{0}.PlcStop({1}) SP={2:X4}, *SP={3:X4}, SFP={4:X4}, PC={5:X4}", _owner, ((ErrorCode)msgData[1]).ToString(), BitConverter.ToUInt32(msgData, 2), BitConverter.ToInt32(msgData, 6), BitConverter.ToUInt32(msgData, 10), BitConverter.ToUInt32(msgData, 14));
+            Log.Warning("{0}.PlcStop({1}) SP={2:X4}, *SP={3:X4}, SFP={4:X4}, PC={5:X4}{6}", _owner, ((ErrorCode)msgData[1]).ToString(), BitConverter.ToUInt32(msgData, 2), BitConverter.ToInt32(msgData, 6), BitConverter.ToUInt32(msgData, 10), BitConverter.ToUInt32(msgData, 14), BlockAt(BitConverter.ToUInt32(msgData, 14)));
           } else {
             processed = false;
           }
@@ -216,6 +290,7 @@ namespace X13.Periphery {
         _st = 0;
         PlcStoped = false;
         processed = true;
+        Loaded();
       }
       if(!processed) {
         if(Verbose) {
@@ -248,6 +323,7 @@ namespace X13.Periphery {
                 _pub(new byte[] { (byte)Cmd.WriteStackBottomReq, (byte)_stackBottom, (byte)(_stackBottom >> 8), (byte)(_stackBottom >> 16), (byte)(_stackBottom >> 24) });
               } else {
                 _st = 0;
+                Loaded();   // все куски уже на узле, и он их выполняет
               }
               return;
             }

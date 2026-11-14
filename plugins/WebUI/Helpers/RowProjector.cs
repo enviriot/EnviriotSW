@@ -45,14 +45,16 @@ namespace X13.WebUI {
     /// does not need it either: ViewSession.HandleOpenAuto resolves the same thing server-side
     /// and opens the right side in the same round trip, so a row-carried hint would only let
     /// the client duplicate a decision already made for it.
-    /// <para>"logram" is the resolved manifest type; "chart" is the same Arch.enable the
+    /// <para>"logram" and "lplc" are the resolved manifest type (Core/Logram, Ext/LogramPLC); "chart" is the same Arch.enable the
     /// archivist itself reads, so a row cannot promise a chart for a topic ArchivistPl ignores.
     /// Logram wins when a topic somehow has both: it carries no state of its own, so an archive
     /// of that state is the less useful of the two - and MenuBuilder still offers Chart from the
     /// context menu either way, so nothing becomes unreachable.</para></remarks>
     internal static string ResolveAltView(Topic topic) {
       if(topic == null) return null;
-      if(string.Equals(topic.GetField("type").AsString(null), "Core/Logram", StringComparison.Ordinal)) return "logram";
+      string type = topic.GetField("type").AsString(null);
+      if(string.Equals(type, "Core/Logram", StringComparison.Ordinal)) return "logram";
+      if(string.Equals(type, LplcModel.ProgramType, StringComparison.Ordinal)) return LplcModel.ViewName;
       return IsArchived(topic) ? "chart" : null;
     }
 

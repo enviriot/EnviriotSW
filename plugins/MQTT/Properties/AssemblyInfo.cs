@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyDescription("MQTT plugin for Enviriot")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCulture("")]
+[assembly: InternalsVisibleTo("X13.Tests")]
 
 // Setting ComVisible to false makes the types in this assembly not visible 
 // to COM components.  If you need to access a type in this assembly from 

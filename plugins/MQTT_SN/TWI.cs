@@ -31,7 +31,7 @@ namespace X13.Periphery {
       }
     }
 
-    /// <summary>/$YS/TWI/verbose, declared once by the plugin rather than per bus.</summary>
+    /// <summary>/$YS/MQTT-SN/TWI_verbose, declared once by the plugin rather than per bus.</summary>
     public bool Verbose {
       get {
         return MQTT_SNPl.verboseTwi;

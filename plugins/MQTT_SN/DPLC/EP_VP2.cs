@@ -11,6 +11,7 @@ using NiL.JS.Statements;
 namespace X13.DevicePLC {
   internal class EP_VP2 : Visitor<EP_VP2> {
     private readonly EP_Compiler _compiler;
+    private readonly HashSet<EP_Compiler.Merker> _activeLocals = new HashSet<EP_Compiler.Merker>();
 
     public EP_VP2(EP_Compiler compiler) {
       _compiler = compiler;
@@ -32,7 +33,7 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(Assignment node) {
       EP_Compiler.Instruction d2 = new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true };
       _compiler._sp.Push(d2);
-      node.Children[1].Visit(this);
+      EmitAs(node.Children[1] as Expression, _compiler.TypeOf(node.Children[0] as Expression));
       _compiler.cur.AddInst(d2);
       Store(node, node.Children[0] as Expression);
       return this;
@@ -41,20 +42,29 @@ namespace X13.DevicePLC {
       Property p;
       Variable f;
       EP_Compiler.Merker m;
-      Constant c;
       EP_Compiler.Instruction d;
-      EP_Compiler.Scope sc;
 
-      if((p = node.Children[0] as Property) != null
-        && (((f = p.Source as Variable) != null && (m = _compiler.GetMerker(f.Descriptor)) != null && (sc = m.scope) != null) || (p.Source is This && (sc = _compiler.cur) != null))
-        && (c = p.FieldName as Constant) != null && c.Value != null && c.Value.ValueType == JSValueType.String) {
+      if((p = node.Children[0] as Property) != null) {
+        EP_Compiler.Merker mp;
+        if((f = p.Source as Variable) != null && (mp = _compiler.GetMerker(f.Descriptor)) != null && mp.pin != null) {
+          CallPin(node, p, mp);
+          return this;
+        }
+        string mathFn = _compiler.MathFunction(p);
+        if(mathFn != null) {
+          CallMath(node, mathFn);
+          return this;
+        }
         EP_Compiler.Merker mf;
-        if((mf = sc.GetProperty(c.Value.ToString())) != null) {
+        if((mf = _compiler.FindMethod(p)) != null) {
           CallFunction(node, mf, p.Source as Expression);
           return this;
         }
       }
       f = node.Children[0] as Variable;
+      if(f != null && _compiler.GetMerker(f.Descriptor) == null && CallBuiltin(node, f.Name)) {
+        return this;
+      }
       if(f != null) {
         if(node.CallMode == CallMode.Regular) {
           m = _compiler.GetMerker(f.Descriptor);
@@ -62,16 +72,25 @@ namespace X13.DevicePLC {
             throw new ArgumentException("Unknown function: " + f.Descriptor.Name);
           }
           if(m.type == EP_Type.API) {
+            if(m.Addr == EP_Compiler.API_PRINT_F) {
+              CallPrintF(node, m);
+              return this;
+            }
+            if(f.Name == "SendByte" && node.Arguments.Length != m.ParameterTypes.Length)
+              throw new NotSupportedException(_compiler.Where(node) + f.Name + ": expected " + m.ParameterTypes.Length + " arguments");
+            if(_compiler.Device != null && m.Addr == EP_Compiler.API_CONFIG_PIN) {
+              CheckConfigPin(node);
+            }
             int i;
-            for(i = m.pIn - 1; i >= 0; i--) {
+            for(i = m.ParameterTypes.Length - 1; i >= 0; i--) {
               if(i < node.Arguments.Length) {
-                node.Arguments[i].Visit(this);
+                EmitAs(node.Arguments[i], m.ParameterTypes[i]);
                 _compiler._sp.Pop();
               } else {
                 _compiler.cur.AddInst(EP_InstCode.LDI_0);
               }
             }
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.API, m, node), 0, m.pOut);
+            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.API, m, node), 0, m.ResultType.HasValue ? 1 : 0);
             return this;
           } else {  // m.type == EP_Type.FUNCTION
             CallFunction(node, m, null);
@@ -97,6 +116,41 @@ namespace X13.DevicePLC {
       }
       return this;
     }
+    private void CallPrintF(Call node, EP_Compiler.Merker api) {
+      if(node.Arguments.Length < 2 || !(node.Arguments[1] is Constant literal) || literal.Value == null || literal.Value.ValueType != JSValueType.String)
+        throw new NotSupportedException(_compiler.Where(node) + "PrintF requires stream and a constant format string");
+      string format = literal.Value.AsString(null);
+      EP_ValType[] types;
+      try { types = EP_PrintF.Arguments(format); }
+      catch(FormatException ex) { throw new NotSupportedException(_compiler.Where(literal) + ex.Message); }
+      if(node.Arguments.Length != types.Length + 2)
+        throw new NotSupportedException(_compiler.Where(node) + "PrintF argument count does not match the format");
+      var data = new EP_Compiler.Merker { type = EP_Type.U8_CARR, ElementCount = format.Length, init = literal };
+      _compiler.dataBlock.AddInst(new EP_Compiler.Instruction(format.Select(c => (byte)c).ToArray()) { _param = data, _cn = literal });
+      for(int i = types.Length - 1; i >= 0; i--) {
+        var arg = node.Arguments[i + 2];
+        if(arg is Constant constant && (constant.Value == null || !constant.Value.IsNumber && constant.Value.ValueType != JSValueType.Boolean))
+          throw new NotSupportedException(_compiler.Where(arg) + "PrintF value arguments must be numeric");
+        Constant number = arg as Constant;
+        bool negative = arg is Negation;
+        if(negative) number = arg.Children[0] as Constant;
+        double value = number != null && number.Value.IsNumber ? (double)number.Value * (negative ? -1 : 1) : double.NaN;
+        if(types[i] != EP_ValType.Float && !double.IsNaN(value) && value == Math.Truncate(value)) {
+          if(value < int.MinValue || value > uint.MaxValue)
+            throw new NotSupportedException(_compiler.Where(arg) + "PrintF integer literal must fit 32 bits");
+          LoadConstant(arg, unchecked((int)(long)value));
+        } else {
+          EmitAs(arg, types[i]);
+        }
+        _compiler._sp.Pop();
+      }
+      LoadConstant(node, types.Length); _compiler._sp.Pop();
+      LoadConstant(literal, data.ElementCount); _compiler._sp.Pop();
+      _compiler.cur.AddInst(EP_Compiler.Instruction.LoadProgramAddress(data, literal), 0, 1); _compiler._sp.Pop();
+      EmitAs(node.Arguments[0], api.ParameterTypes[0]); _compiler._sp.Pop();
+      _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.API, api, node), 0, api.ResultType.HasValue ? 1 : 0);
+    }
+
     protected override EP_VP2 Visit(ClassDefinition node) {
       var mc = _compiler.GetMerker(node.Reference.Descriptor);
       if(mc == null || mc.type != EP_Type.CLASS) {
@@ -119,6 +173,10 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP2 Visit(Constant node) {
+      if(EP_Compiler.IsFloatConst(node)) {
+        _compiler.cur.AddInst(EP_Compiler.Instruction.LoadFloat(node.Value.As<double>(), node), 0, 1);
+        return this;
+      }
       int v = node.Value == null ? 0 : (int)node.Value;
       LoadConstant(node, v);
       return this;
@@ -126,16 +184,17 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(Decrement node) {
       Expression a;
       EP_Compiler.Instruction d2;
+      bool isFloat = _compiler.TypeOf(node.Children[0] as Expression) == EP_ValType.Float;
       node.Children[0].Visit(this);
       _compiler._sp.Pop();
       if(node.Type == DecrimentType.Predecriment) {
         d2 = new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true };
         _compiler._sp.Push(d2);
-        _compiler.cur.AddInst(EP_InstCode.DEC, 0, 1);
+        StepOne(EP_InstCode.DEC, isFloat);
         _compiler.cur.AddInst(d2);
       } else {
         _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true }, 0, 1);
-        _compiler.cur.AddInst(EP_InstCode.DEC, 0, 1);
+        StepOne(EP_InstCode.DEC, isFloat);
       }
 
       if((a = node.Children[0] as Expression) != null) {
@@ -152,11 +211,11 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP2 Visit(Division node) {
-      Arg2Op(node, EP_InstCode.DIV);
+      Arg2Op(node, EP_InstCode.DIV, EP_InstCode.FDIV);   // int / int остаётся целочисленным
       return this;
     }
     protected override EP_VP2 Visit(Equal node) {
-      Arg2Op(node, EP_InstCode.CEQ);
+      Arg2Op(node, EP_InstCode.CEQ, EP_InstCode.FCEQ);
       return this;
     }
     protected override EP_VP2 Visit(Expression node) {
@@ -183,37 +242,34 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(Property node) {
       Variable f;
       EP_Compiler.Merker m;
-      Constant c;
-      EP_Compiler.Scope sc;
 
       if((f = node.Source as Variable) != null && (m = _compiler.GetMerker(f.Descriptor)) != null) {
         switch(m.type) {
         case EP_Type.REFERENCE:  //TODO: LDM_xx_C16  (m.addr+offset)
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_S4, m), 0, 1);
-          sc = m.scope;
           break;
         case EP_Type.U8_CARR:
-          node.FieldName.Visit(this);
+          EmitAs(node.FieldName as Expression, EP_ValType.Int);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.CHECK_IDX, m), 0, 0);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LPM_U1, m, node), 1, 1);
           return this;
         case EP_Type.I8_CARR:
-          node.FieldName.Visit(this);
+          EmitAs(node.FieldName as Expression, EP_ValType.Int);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.CHECK_IDX, m), 0, 0);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LPM_S1, m, node), 1, 1);
           return this;
         case EP_Type.U16_CARR:
-          node.FieldName.Visit(this);
+          EmitAs(node.FieldName as Expression, EP_ValType.Int);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.CHECK_IDX, m), 0, 0);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LPM_U2, m, node), 1, 1);
           return this;
         case EP_Type.I16_CARR:
-          node.FieldName.Visit(this);
+          EmitAs(node.FieldName as Expression, EP_ValType.Int);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.CHECK_IDX, m), 0, 0);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LPM_S2, m, node), 1, 1);
           return this;
         case EP_Type.I32_CARR:
-          node.FieldName.Visit(this);
+          EmitAs(node.FieldName as Expression, EP_ValType.Int);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.CHECK_IDX, m), 0, 0);
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LPM_S4, m, node), 1, 1);
           return this;
@@ -222,60 +278,44 @@ namespace X13.DevicePLC {
         }
       } else if(node.Source is This) {
         _compiler.cur.AddInst(EP_InstCode.LD_P0, 0, 1);
-        sc = _compiler.cur;
-        while(sc.fm.type!=EP_Type.CLASS) {
-          sc = sc._parent;
-          if(sc==null) {
-            sc = _compiler.cur;
-            break;
-          }
-        }
       } else {
         throw new NotSupportedException("P2: " + node.ToString());
       }
-      if((c = node.FieldName as Constant) != null && c.Value != null && c.Value.ValueType == JSValueType.String) {
-        string pn = c.Value.ToString();
-        m = sc.GetProperty(pn);
-        if(m == null) {
-          sc = _compiler._scope.Skip(1).FirstOrDefault();
-          if(sc != null) {
-            m = sc.GetProperty(pn);
-          }
+      m = _compiler.FindProperty(_compiler.PropertyScope(node.Source as Expression), node.FieldName as Expression);
+      if(m != null) {
+        EP_InstCode cmd;
+        switch(m.type) {
+        case EP_Type.PropB1:
+          cmd = m.Addr < 256 ? EP_InstCode.LDM_B1_CS8 : EP_InstCode.LDM_B1_CS16;
+          break;
+        case EP_Type.PropS1:
+          cmd = m.Addr < 256 ? EP_InstCode.LDM_S1_CS8 : EP_InstCode.LDM_S1_CS16;
+          break;
+        case EP_Type.PropU1:
+          cmd = m.Addr < 256 ? EP_InstCode.LDM_U1_CS8 : EP_InstCode.LDM_U1_CS16;
+          break;
+        case EP_Type.PropS2:
+          cmd = m.Addr < 256 ? EP_InstCode.LDM_S2_CS8 : EP_InstCode.LDM_S2_CS16;
+          break;
+        case EP_Type.PropU2:
+          cmd = m.Addr < 256 ? EP_InstCode.LDM_U2_CS8 : EP_InstCode.LDM_U2_CS16;
+          break;
+        case EP_Type.PropS4:
+        case EP_Type.PropF4:    // float - те же 4 байта
+          cmd = m.Addr < 256 ? EP_InstCode.LDM_S4_CS8 : EP_InstCode.LDM_S4_CS16;
+          break;
+        default:
+          throw new ApplicationException("Merker " + m.ToString() + " is not property");
         }
-        if(m != null) {
-          EP_InstCode cmd;
-          switch(m.type) {
-          case EP_Type.PropB1:
-            cmd = m.Addr < 256 ? EP_InstCode.LDM_B1_CS8 : EP_InstCode.LDM_B1_CS16;
-            break;
-          case EP_Type.PropS1:
-            cmd = m.Addr < 256 ? EP_InstCode.LDM_S1_CS8 : EP_InstCode.LDM_S1_CS16;
-            break;
-          case EP_Type.PropU1:
-            cmd = m.Addr < 256 ? EP_InstCode.LDM_U1_CS8 : EP_InstCode.LDM_U1_CS16;
-            break;
-          case EP_Type.PropS2:
-            cmd = m.Addr < 256 ? EP_InstCode.LDM_S2_CS8 : EP_InstCode.LDM_S2_CS16;
-            break;
-          case EP_Type.PropU2:
-            cmd = m.Addr < 256 ? EP_InstCode.LDM_U2_CS8 : EP_InstCode.LDM_U2_CS16;
-            break;
-          case EP_Type.PropS4:
-            cmd = m.Addr < 256 ? EP_InstCode.LDM_S4_CS8 : EP_InstCode.LDM_S4_CS16;
-            break;
-          default:
-            throw new ApplicationException("Merker " + m.ToString() + " is not property");
-          }
-          _compiler.cur.AddInst(new EP_Compiler.Instruction(cmd, m), 1, 1);
-          return this;
-        }
+        _compiler.cur.AddInst(new EP_Compiler.Instruction(cmd, m), 1, 1);
+        return this;
       }
       throw new NotSupportedException("Field name in " + node.ToString());
     }
     protected override EP_VP2 Visit(Variable node) {
       EP_Compiler.Merker m = _compiler.GetMerker(node.Descriptor);
       if(m == null) {
-        throw new ArgumentException("undefined variable " + node.Name);
+        throw new ArgumentException(_compiler.Where(node) + "undefined variable " + node.Name);
       }
       EP_Compiler.Instruction d;
       switch(m.type) {
@@ -295,6 +335,7 @@ namespace X13.DevicePLC {
         d = new EP_Compiler.Instruction(EP_InstCode.LDM_S2_C16, m, node);
         break;
       case EP_Type.SINT32:
+      case EP_Type.FLOAT:     // float - те же 4 байта
         d = new EP_Compiler.Instruction(EP_InstCode.LDM_S4_C16, m, node);
         break;
       case EP_Type.PARAMETER:
@@ -309,6 +350,9 @@ namespace X13.DevicePLC {
         break;
       case EP_Type.FUNCTION:
         d = new EP_Compiler.Instruction(EP_InstCode.LDI_U2, m, node);
+        break;
+      case EP_Type.CONST:
+        d = EP_Compiler.Instruction.LoadInt((int)m.Addr, node);
         break;
       default:
         throw new NotImplementedException(node.ToString());
@@ -325,16 +369,17 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(Increment node) {
       Expression a;
       EP_Compiler.Instruction d2;
+      bool isFloat = _compiler.TypeOf(node.Children[0] as Expression) == EP_ValType.Float;
       node.Children[0].Visit(this);
       _compiler._sp.Pop();
       if(node.Type == IncrimentType.Preincriment) {
         d2 = new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true };
         _compiler._sp.Push(d2);
-        _compiler.cur.AddInst(EP_InstCode.INC, 0, 1);
+        StepOne(EP_InstCode.INC, isFloat);
         _compiler.cur.AddInst(d2);
       } else {
         _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true }, 0, 1);
-        _compiler.cur.AddInst(EP_InstCode.INC, 0, 1);
+        StepOne(EP_InstCode.INC, isFloat);
       }
 
       if((a = node.Children[0] as Expression) != null) {
@@ -351,75 +396,84 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP2 Visit(Less node) {
-      Arg2Op(node, EP_InstCode.CLT);
+      Arg2Op(node, EP_InstCode.CLT, EP_InstCode.FCLT);
       return this;
     }
     protected override EP_VP2 Visit(LessOrEqual node) {
-      Arg2Op(node, EP_InstCode.CLE);
+      Arg2Op(node, EP_InstCode.CLE, EP_InstCode.FCLE);
       return this;
     }
     protected override EP_VP2 Visit(LogicalConjunction node) {
       EP_Compiler.Instruction j1, j2;
-      node.Children[0].Visit(this);
+      EmitCond(node.Children[0]);
       _compiler.cur.AddInst(EP_InstCode.DUP, 0, 1);
       _compiler.cur.AddInst(j1 = new EP_Compiler.Instruction(EP_InstCode.JZ), 1);
       _compiler.cur.AddInst(EP_InstCode.DROP, 1, 0);
-      node.Children[1].Visit(this);
+      EmitCond(node.Children[1]);
       _compiler.cur.AddInst(j2 = new EP_Compiler.Instruction(EP_InstCode.LABEL));
       j1._ref = j2;
       return this;
     }
     protected override EP_VP2 Visit(LogicalNegation node) {
       node.Children[0].Visit(this);
-      _compiler.cur.AddInst(EP_InstCode.CZE, 1, 1);
+      bool isFloat = _compiler.TypeOf(node.Children[0] as Expression) == EP_ValType.Float;
+      _compiler.cur.AddInst(isFloat ? EP_InstCode.FCZE : EP_InstCode.CZE, 1, 1);
       return this;
 
     }
     protected override EP_VP2 Visit(LogicalDisjunction node) {
       EP_Compiler.Instruction j1, j2;
-      node.Children[0].Visit(this);
+      EmitCond(node.Children[0]);
       _compiler.cur.AddInst(EP_InstCode.DUP, 0, 1);
       _compiler.cur.AddInst(j1 = new EP_Compiler.Instruction(EP_InstCode.JNZ), 1, 0);
       _compiler.cur.AddInst(EP_InstCode.DROP, 1, 0);
-      node.Children[1].Visit(this);
+      EmitCond(node.Children[1]);
       _compiler.cur.AddInst(j2 = new EP_Compiler.Instruction(EP_InstCode.LABEL));
       j1._ref = j2;
       return this;
     }
     protected override EP_VP2 Visit(Modulo node) {
+      // FMOD в VM нет, а тихое усечение до int дало бы не тот остаток
+      if(_compiler.TypeOf(node.Children[0] as Expression) == EP_ValType.Float || _compiler.TypeOf(node.Children[1] as Expression) == EP_ValType.Float) {
+        throw new NotSupportedException(_compiler.Where(node) + "operator % is not supported for float: " + node.ToString());
+      }
       Arg2Op(node, EP_InstCode.MOD);
       return this;
     }
     protected override EP_VP2 Visit(More node) {
-      Arg2Op(node, EP_InstCode.CGT);
+      Arg2Op(node, EP_InstCode.CGT, EP_InstCode.FCGT);
       return this;
     }
     protected override EP_VP2 Visit(MoreOrEqual node) {
-      Arg2Op(node, EP_InstCode.CGE);
+      Arg2Op(node, EP_InstCode.CGE, EP_InstCode.FCGE);
       return this;
     }
     protected override EP_VP2 Visit(Multiplication node) {
-      Arg2Op(node, EP_InstCode.MUL);
+      Arg2Op(node, EP_InstCode.MUL, EP_InstCode.FMUL);
       return this;
     }
     protected override EP_VP2 Visit(Negation node) {
       node.Children[0].Visit(this);
-      _compiler.cur.AddInst(EP_InstCode.NEG, 1, 1);
+      bool isFloat = _compiler.TypeOf(node.Children[0] as Expression) == EP_ValType.Float;
+      _compiler.cur.AddInst(isFloat ? EP_InstCode.FNEG : EP_InstCode.NEG, 1, 1);
       return this;
     }
     protected override EP_VP2 Visit(New node) {
       return Visit(node as Expression);
     }
     protected override EP_VP2 Visit(Comma node) {
-      return Visit(node as Expression);
+      var children = node.Children.ToArray();
+      for(int i = 0; i < children.Length - 1; i++) SafeCodeBlock(children[i]);
+      children[children.Length - 1].Visit(this);
+      return this;
     }
     protected override EP_VP2 Visit(BitwiseNegation node) {
-      node.Children[0].Visit(this);
+      EmitAs(node.Children[0] as Expression, EP_ValType.Int);
       _compiler.cur.AddInst(EP_InstCode.NOT, 1, 1);
       return this;
     }
     protected override EP_VP2 Visit(NotEqual node) {
-      Arg2Op(node, EP_InstCode.CNE);
+      Arg2Op(node, EP_InstCode.CNE, EP_InstCode.FCNE);
       return this;
     }
     protected override EP_VP2 Visit(NumberAddition node) {
@@ -427,19 +481,19 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP2 Visit(NumberLess node) {
-      Arg2Op(node, EP_InstCode.CLT);
+      Arg2Op(node, EP_InstCode.CLT, EP_InstCode.FCLT);
       return this;
     }
     protected override EP_VP2 Visit(NumberLessOrEqual node) {
-      Arg2Op(node, EP_InstCode.CLE);
+      Arg2Op(node, EP_InstCode.CLE, EP_InstCode.FCLE);
       return this;
     }
     protected override EP_VP2 Visit(NumberMore node) {
-      Arg2Op(node, EP_InstCode.CGT);
+      Arg2Op(node, EP_InstCode.CGT, EP_InstCode.FCGT);
       return this;
     }
     protected override EP_VP2 Visit(NumberMoreOrEqual node) {
-      Arg2Op(node, EP_InstCode.CGE);
+      Arg2Op(node, EP_InstCode.CGE, EP_InstCode.FCGE);
       return this;
     }
     protected override EP_VP2 Visit(BitwiseDisjunction node) {
@@ -458,15 +512,16 @@ namespace X13.DevicePLC {
       if((fd = node.Value as FunctionDefinition) == null) {
         EP_Compiler.Instruction d2 = new EP_Compiler.Instruction(EP_InstCode.DUP) { canOptimized = true };
         _compiler._sp.Push(d2);
-        if((ca = node.Value as Call) != null && (f = ca.Children[0] as Variable) != null && (new string[] { "Boolean", "Int8", "UInt8", "Int16", "UInt16", "Int32" }).Any(z => z == f.Name)) {
+        var pt = EP_Compiler.IsFloat(_compiler.FindProperty(_compiler.PropertyScope(node.Source as Expression), node.FieldName as Expression)) ? EP_ValType.Float : EP_ValType.Int;
+        if((ca = node.Value as Call) != null && (f = ca.Children[0] as Variable) != null && TypeNames.Any(z => z == f.Name)) {
           if(ca.Arguments.Length > 0) {
-            ca.Arguments[0].Visit(this);
+            EmitAs(ca.Arguments[0], pt);
           } else {
             _compiler._sp.Pop();
             return this;
           }
         } else {
-          node.Value.Visit(this);
+          EmitAs(node.Value, pt);
         }
         _compiler.cur.AddInst(d2);
 
@@ -481,54 +536,43 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP2 Visit(SignedShiftLeft node) {
-      var c = node.Children[1] as Constant;
-      if(c == null) {
-        throw new NotImplementedException(node.ToString());
-      } else {
-        node.Children[0].Visit(this);
-        _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LSL, null, c), 1, 1);
-      }
+      EmitShift(node, EP_InstCode.LSL, EP_ValType.Int);
       return this;
     }
     protected override EP_VP2 Visit(SignedShiftRight node) {
-      var c = node.Children[1] as Constant;
-      if(c == null) {
-        throw new NotImplementedException(node.ToString());
-      } else {
-        node.Children[0].Visit(this);
-        _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.ASR, null, c), 1, 1);
-      }
+      EmitShift(node, EP_InstCode.ASR, EP_ValType.Int);
       return this;
     }
     protected override EP_VP2 Visit(StrictEqual node) {
-      Arg2Op(node, EP_InstCode.CEQ);
+      Arg2Op(node, EP_InstCode.CEQ, EP_InstCode.FCEQ);
       return this;
     }
     protected override EP_VP2 Visit(StrictNotEqual node) {
-      Arg2Op(node, EP_InstCode.CNE);
+      Arg2Op(node, EP_InstCode.CNE, EP_InstCode.FCNE);
       return this;
     }
     protected override EP_VP2 Visit(StringConcatenation node) {
       return Visit(node as Expression);
     }
     protected override EP_VP2 Visit(Substract node) {
-      Arg2Op(node, EP_InstCode.SUB);
+      Arg2Op(node, EP_InstCode.SUB, EP_InstCode.FSUB);
       return this;
     }
     protected override EP_VP2 Visit(Conditional node) {
       EP_Compiler.Instruction j1, j2, j3;
-      node.Children[0].Visit(this);
+      var rt = _compiler.TypeOf(node);   // обе ветви приводятся к общему типу
+      EmitCond(node.Children[0]);
       j1 = new EP_Compiler.Instruction(EP_InstCode.JZ, null, node.Children[0]);
       _compiler.cur.AddInst(j1);
       _compiler._sp.Pop();
-      node.Branches[0].Visit(this);
+      EmitAs(node.Branches[0], rt);
       if(node.Branches.Count > 1) {
         j2 = new EP_Compiler.Instruction(EP_InstCode.JMP);
         _compiler.cur.AddInst(j2);
         j3 = new EP_Compiler.Instruction(EP_InstCode.LABEL);
         j1._ref = j3;
         _compiler.cur.AddInst(j3);
-        node.Branches[1].Visit(this);
+        EmitAs(node.Branches[1], rt);
         _compiler._sp.Pop();
         j3 = new EP_Compiler.Instruction(EP_InstCode.LABEL);
         j2._ref = j3;
@@ -543,7 +587,11 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(ConvertToBoolean node) {
       return this;
     }
+    /// <summary>x | 0, x >> 0, x << 0 - NiL сворачивает их в этот узел.</summary>
+    /// <remarks>Раньше операнд не вычислялся вовсе: b = a | 0 записывал в b то, что лежало на стеке.
+    /// Целое уже 32-битное, так что для него это пустая операция, для float - FTOS32.</remarks>
     protected override EP_VP2 Visit(ConvertToInteger node) {
+      EmitAs(node.Children[0] as Expression, EP_ValType.Int);
       return this;
     }
     protected override EP_VP2 Visit(ConvertToNumber node) {
@@ -552,20 +600,16 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(ConvertToString node) {
       return Visit(node as Expression);
     }
+    /// <summary>x >>> 0: биты целого те же, меняется только тип (UInt), float - FTOU32.</summary>
     protected override EP_VP2 Visit(ConvertToUnsignedInteger node) {
-      return Visit(node as Expression);
+      EmitAs(node.Children[0] as Expression, EP_ValType.UInt);
+      return this;
     }
     protected override EP_VP2 Visit(TypeOf node) {
       return Visit(node as Expression);
     }
     protected override EP_VP2 Visit(UnsignedShiftRight node) {
-      var c = node.Children[1] as Constant;
-      if(c == null) {
-        throw new NotImplementedException(node.ToString());
-      } else {
-        node.Children[0].Visit(this);
-        _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LSR, null, c), 1, 1);
-      }
+      EmitShift(node, EP_InstCode.LSR, EP_ValType.UInt);
       return this;
     }
     protected override EP_VP2 Visit(BitwiseExclusiveDisjunction node) {
@@ -597,11 +641,7 @@ namespace X13.DevicePLC {
     protected override EP_VP2 Visit(CodeBlock node) {
       EP_Compiler.Merker m;
       int sp2 = _compiler._sp.Count;
-
-      List<Assignment> inList = new List<Assignment>();
-      foreach(var vd in node.Body.Select(z => z as VariableDefinition).Where(z => z != null)) {
-        inList.AddRange(vd.Initializers.Select(z => z as Assignment).Where(z => z != null));
-      }
+      var locals = new List<EP_Compiler.Merker>();
       if(node.Variables!=null) {
         foreach(var v in node.Variables) {
           if(v.Initializer is ClassDefinition) {
@@ -611,17 +651,15 @@ namespace X13.DevicePLC {
           if(m == null) {
             throw new ApplicationException("Unknown Merker in Pass2: " + v.Name);
           }
-          if(m.vd.Initializer != null) {
+          if(m.type == EP_Type.LOCAL) {
+            // Резервируем ячейку, но RHS вычисляем в точке объявления, после предыдущих операторов.
+            // VP1 нумерует по обходу дерева, а не по реальному размещению вложенных блоков в стеке.
+            m.Addr = (uint)_compiler.cur.memory.Count(z => _activeLocals.Contains(z));
+            _activeLocals.Add(m);
+            locals.Add(m);
+            _compiler.cur.AddInst(EP_InstCode.LDI_0, 0, 1);
+          } else if(m.vd.Initializer != null) {
             m.vd.Initializer.Visit(this);
-          } else if(m.type == EP_Type.LOCAL) {
-            var a2 = inList.FirstOrDefault(z => (z.Children[0] as Variable) != null && (z.Children[0] as Variable).Descriptor == m.vd);
-            if(a2 != null) {
-              a2.Children[1].Visit(this);
-              m.initialized = true;
-              _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LABEL, null, a2));
-            } else {
-              _compiler.cur.AddInst(EP_InstCode.LDI_0, 0, 1);
-            }
           }
         }
       }
@@ -632,10 +670,10 @@ namespace X13.DevicePLC {
       }
       while(_compiler._sp.Count > sp2) {
         _compiler.cur.AddInst(EP_InstCode.DROP, 1, 0);
-        uint idx = (uint)_compiler.cur.memory.Where(z => z.type == EP_Type.LOCAL).Count();
-        if(idx == 0 || _compiler.cur.memory.RemoveAll(z => z.type == EP_Type.LOCAL && z.Addr == idx - 1) != 1) {
-          throw new ApplicationException("Stack error in " + node.ToString());
-        }
+      }
+      foreach(var local in locals) {
+        _activeLocals.Remove(local);
+        _compiler.cur.memory.Remove(local);
       }
 
       return this;
@@ -672,7 +710,7 @@ namespace X13.DevicePLC {
       SafeCodeBlock(node.Body);
 
       _compiler.cur.AddInst(cl.L2);
-      node.Condition.Visit(this);
+      EmitCond(node.Condition);
       _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.JNZ, null, node.Condition) { _ref = cl.L1 });
       _compiler.cur.AddInst(cl.L3);
       _compiler._sp.Pop();
@@ -697,7 +735,7 @@ namespace X13.DevicePLC {
         node.Initializer.Visit(this);
       }
       _compiler.cur.AddInst(cl.L1);
-      node.Condition.Visit(this);
+      EmitCond(node.Condition);
       _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.JZ, null, node.Condition) { _ref = cl.L3 });
       _compiler._sp.Pop();
       cl.sp2 = _compiler._sp.Count;
@@ -715,7 +753,7 @@ namespace X13.DevicePLC {
     }
     protected override EP_VP2 Visit(IfElse node) {
       EP_Compiler.Instruction j1, j2, j3;
-      node.Condition.Visit(this);
+      EmitCond(node.Condition);
 
       j1 = new EP_Compiler.Instruction(EP_InstCode.JZ, null, node.Condition);
       _compiler.cur.AddInst(j1, 1);
@@ -757,7 +795,9 @@ namespace X13.DevicePLC {
     }
     protected override EP_VP2 Visit(Return node) {
       if(node.Value != null) {
-        node.Value.Visit(this);
+        // тип возврата выведен EP_Compiler.InferTypes: в float-функции и return 0 - float
+        var fm = _compiler.cur.fm;
+        EmitAs(node.Value, fm != null && fm.isFloat ? EP_ValType.Float : EP_ValType.Int);
         _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.ST_P0, null, node), 1);
       }
       _compiler.cur.AddInst(EP_InstCode.RET);
@@ -828,8 +868,23 @@ namespace X13.DevicePLC {
           if(m.initialized) {
             continue;
           }
+          if(m.type == EP_Type.LOCAL) {
+            SafeCodeBlock(node.Initializers[i]);
+            continue;
+          }
           if((ca = a1.Children[1] as Call) != null && ca.CallMode == CallMode.Construct && (f = ca.Children[0] as Variable) != null) {
-            if((new string[] { "Boolean", "Int8", "UInt8", "Int16", "UInt16", "Int32" }).Any(z => z == f.Name)) {
+            if(m.pin != null) {   // конструктор блока Pin: настройка пина в init
+              tmp = _compiler.cur;
+              _compiler.cur = _compiler.initBlock;
+              LoadConstant(ca, m.pin.Option);
+              LoadConstant(ca, m.pin.Mode.Value);
+              LoadConstant(ca, m.pin.Gpio);
+              var configure = EP_Compiler.Merker.Api(EP_Compiler.API_CONFIG_PIN, null, EP_ValType.Int, EP_ValType.Int, EP_ValType.Int);
+              _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.API, configure, ca), configure.ParameterTypes.Length, configure.ResultType.HasValue ? 1 : 0);
+              _compiler.cur = tmp;
+              continue;
+            }
+            if(TypeNames.Any(z => z == f.Name)) {
               mf = null;
             } else if((new string[] { "Uint8Array", "Uint16Array", "Int8Array", "Int16Array", "Int32Array"}).Any(z => z == f.Name)) {
               continue;
@@ -846,7 +901,7 @@ namespace X13.DevicePLC {
                 }
                 mf = mc;
               }
-              m.pOut = (int)(m.scope.memBlocks.Last().start + 31) / 32;
+              m.InstanceWords = (int)(m.scope.memBlocks.Last().start + 31) / 32;
             }
 
             tmp = _compiler.cur;
@@ -858,7 +913,7 @@ namespace X13.DevicePLC {
               _compiler.cur.AddInst(EP_InstCode.DROP, 1, 0);
             } else {
               if(ca.Arguments.Length > 0) {
-                ca.Arguments[0].Visit(this);
+                EmitAs(ca.Arguments[0], _compiler.TypeOf(v));
                 Store(a1, v);
               }
             }
@@ -889,7 +944,7 @@ namespace X13.DevicePLC {
 
       _compiler.cur.AddInst(cl.L1);
       _compiler.cur.AddInst(cl.L2);
-      node.Condition.Visit(this);
+      EmitCond(node.Condition);
       _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.JZ, null, node.Condition) { _ref = cl.L3 });
       _compiler._sp.Pop();
 
@@ -905,38 +960,56 @@ namespace X13.DevicePLC {
       return Visit(node as CodeNode);
     }
 
-    private void LoadConstant(CodeNode node, int v) {
-      if(v == 0) {
-        _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_0, null, node), 0, 1);
-      } else if(v > 0) {
-        if(v < 256) {
-          if(v == 1) {
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_1, null, node), 0, 1);
-          } else {
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_U1, null, node), 0, 1);
-          }
-        } else {
-          if(v < 65536) {
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_U2, null, node), 0, 1);
-          } else {
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_S4, null, node), 0, 1);
-          }
-        }
-      } else {
-        if(v > -128) {
-          if(v == -1) {
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_M1, null, node), 0, 1);
-          } else {
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_S1, null, node), 0, 1);
-          }
-        } else {
-          if(v > -32768) {
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_S2, null, node), 0, 1);
-          } else {
-            _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_S4, null, node), 0, 1);
-          }
-        }
+    /// <summary>Метод экземпляра Pin: Tick() читает пин, Tick(x) пишет; оба обновляют выход value.</summary>
+    /// <remarks>Номер пина зашит в команды IN/OUT, поэтому код подставляется на месте вызова, а не вызывается.
+    /// Tick() оставляет значение на стеке, Tick(x) - ничего.</remarks>
+    private void CallPin(Call node, Property p, EP_Compiler.Merker m) {
+      var c = p.FieldName as Constant;
+      if(c == null || c.Value == null || c.Value.ToString() != "Tick" || node.Arguments.Length > 1) {
+        throw new NotSupportedException(_compiler.Where(node) + node.ToString() + ": Pin has only Tick() and Tick(value)");
       }
+      if(node.Arguments.Length > 0 && m.pin.Mode.Io == EP_Device.PinIo.In) {
+        throw new NotSupportedException(_compiler.Where(node) + node.ToString() + ": " + m.pin.Mode.Name + " is an input");
+      }
+      var io = new EP_Compiler.Merker() { type = EP_Type.OUTPUT, Addr = (uint)m.pin.Gpio };   // операнд IN/OUT: place и type - 0
+      if(node.Arguments.Length == 0) {
+        _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.IN, io, node), 0, 1);
+      } else {
+        EmitAs(node.Arguments[0], EP_ValType.Int);
+      }
+      _compiler.cur.AddInst(EP_InstCode.DUP, 0, 1);
+      _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_S4, m), 0, 1);
+      _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.STM_S4_CS8, m.scope.GetProperty("value"), node), 2, 0);
+      if(node.Arguments.Length > 0) {
+        _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.OUT, io, node), 1, 0);
+      }
+    }
+
+    /// <summary>ConfigPin с константными пином и режимом - по описанию узла.</summary>
+    /// <remarks>Параметр не проверяется: это низкоуровневый вызов с правилами прошивки, где 0 - «по
+    /// умолчанию», и ConfigPin(4, PWM, 0) законен при min частоты 1. По описанию целиком живёт только Pin.</remarks>
+    private void CheckConfigPin(Call node) {
+      if(node.Arguments.Length < 2) {
+        return;
+      }
+      int? pin = _compiler.ConstValue(node.Arguments[0]);
+      int? mv = _compiler.ConstValue(node.Arguments[1]);
+      if(pin == null || mv == null) {
+        return;
+      }
+      var mode = _compiler.Device.ModeOf(mv.Value);
+      if(mode == null) {
+        throw new NotSupportedException(_compiler.Where(node) + node.ToString() + ": mode " + mv.Value + " is not in the device description");
+      }
+      if(!_compiler.Device.Allows(pin.Value, mode)) {
+        throw new NotSupportedException(_compiler.Where(node) + node.ToString() + ": " + mode.Name + " is not available on pin " + pin.Value);
+      }
+    }
+
+    /// <remarks>Код команды по v прежде выбирался здесь, а значение Prepare брал из node - и для свёрнутой
+    /// суммы двух констант, где node - сложение, загрузил бы 0. Теперь значение несёт сама команда.</remarks>
+    private void LoadConstant(CodeNode node, int v) {
+      _compiler.cur.AddInst(EP_Compiler.Instruction.LoadInt(v, node), 0, 1);
     }
     private void Store(CodeNode node, Expression e) {
       Variable a;
@@ -945,7 +1018,7 @@ namespace X13.DevicePLC {
       if((a = e as Variable) != null || ((a2 = e as AssignmentOperatorCache) != null && (a = a2.Source as Variable) != null)) {
         var m = _compiler.GetMerker(a.Descriptor);
         if(m == null) {
-          throw new ApplicationException("Unknown variable: " + a.Descriptor.Name);
+          throw new ApplicationException(_compiler.Where(node) + "Unknown variable: " + a.Descriptor.Name);
         }
         switch(m.type) {
         case EP_Type.BOOL:
@@ -960,6 +1033,7 @@ namespace X13.DevicePLC {
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.STM_S2_C16, m, node), 1, 0);
           break;
         case EP_Type.SINT32:
+        case EP_Type.FLOAT:
           _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.STM_S4_C16, m, node), 1, 0);
           break;
         case EP_Type.PARAMETER:
@@ -974,7 +1048,7 @@ namespace X13.DevicePLC {
         default:
           throw new NotSupportedException(node.ToString());
         }
-      } else if((p = e as Property) != null) {
+      } else if((p = e as Property) != null || ((a2 = e as AssignmentOperatorCache) != null && (p = a2.Source as Property) != null)) {
         StoreProperty(node, p.Source as Expression, p.FieldName as Expression);
       } else {
         throw new NotImplementedException(node.ToString());
@@ -983,58 +1057,39 @@ namespace X13.DevicePLC {
     private void StoreProperty(CodeNode node, Expression src, Expression name) {
       Variable f;
       EP_Compiler.Merker m;
-      Constant c;
-      EP_Compiler.Scope sc;
 
-      if((f = src as Variable) != null && (m = _compiler.GetMerker(f.Descriptor)).type == EP_Type.REFERENCE) {
+      if((f = src as Variable) != null && (m = _compiler.GetMerker(f.Descriptor)) != null && m.type == EP_Type.REFERENCE) {
         _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.LDI_S4, m), 0, 1);
-        sc = m.scope;
         //TODO: STM_xx_C16  (m.addr*size+offset)
       } else if(src is This) {
         _compiler.cur.AddInst(EP_InstCode.LD_P0, 0, 1);
-        sc = _compiler.cur;
-        while(sc.fm.type!=EP_Type.CLASS) {
-          sc = sc._parent;
-          if(sc==null) {
-            sc = _compiler.cur;
-            break;
-          }
-        }
       } else {
         throw new NotSupportedException(src.ToString() + " as object");
       }
-      if((c = name as Constant) != null && c.Value != null && c.Value.ValueType == JSValueType.String) {
-        string pn = c.Value.ToString();
-        m = sc.GetProperty(pn);
-        if(m == null) {
-          sc = _compiler._scope.Skip(1).FirstOrDefault();
-          if(sc != null) {
-            m = sc.GetProperty(pn);
-          }
+      m = _compiler.FindProperty(_compiler.PropertyScope(src), name);
+      if(m != null) {
+        EP_InstCode cmd;
+        switch(m.type) {
+        case EP_Type.PropB1:
+          cmd = m.Addr < 256 ? EP_InstCode.STM_B1_CS8 : EP_InstCode.STM_B1_CS16;
+          break;
+        case EP_Type.PropS1:
+        case EP_Type.PropU1:
+          cmd = m.Addr < 256 ? EP_InstCode.STM_S1_CS8 : EP_InstCode.STM_S1_CS16;
+          break;
+        case EP_Type.PropS2:
+        case EP_Type.PropU2:
+          cmd = m.Addr < 256 ? EP_InstCode.STM_S2_CS8 : EP_InstCode.STM_S2_CS16;
+          break;
+        case EP_Type.PropS4:
+        case EP_Type.PropF4:
+          cmd = m.Addr < 256 ? EP_InstCode.STM_S4_CS8 : EP_InstCode.STM_S4_CS16;
+          break;
+        default:
+          throw new ApplicationException("Merker " + m.ToString() + " is not property");
         }
-        if(m != null) {
-          EP_InstCode cmd;
-          switch(m.type) {
-          case EP_Type.PropB1:
-            cmd = m.Addr < 256 ? EP_InstCode.STM_B1_CS8 : EP_InstCode.STM_B1_CS16;
-            break;
-          case EP_Type.PropS1:
-          case EP_Type.PropU1:
-            cmd = m.Addr < 256 ? EP_InstCode.STM_S1_CS8 : EP_InstCode.STM_S1_CS16;
-            break;
-          case EP_Type.PropS2:
-          case EP_Type.PropU2:
-            cmd = m.Addr < 256 ? EP_InstCode.STM_S2_CS8 : EP_InstCode.STM_S2_CS16;
-            break;
-          case EP_Type.PropS4:
-            cmd = m.Addr < 256 ? EP_InstCode.STM_S4_CS8 : EP_InstCode.STM_S4_CS16;
-            break;
-          default:
-            throw new ApplicationException("Merker " + m.ToString() + " is not property");
-          }
-          _compiler.cur.AddInst(new EP_Compiler.Instruction(cmd, m, node), 2, 0);
-          return;
-        }
+        _compiler.cur.AddInst(new EP_Compiler.Instruction(cmd, m, node), 2, 0);
+        return;
       }
       throw new NotSupportedException("Field name in " + node.ToString());
     }
@@ -1051,6 +1106,12 @@ namespace X13.DevicePLC {
     }
 
     private void AddCommon(CodeNode node, Expression a, Expression b) {
+      if(_compiler.TypeOf(a) == EP_ValType.Float || _compiler.TypeOf(b) == EP_ValType.Float) {
+        EmitAs(a, EP_ValType.Float);
+        EmitAs(b, EP_ValType.Float);
+        _compiler.cur.AddInst(EP_InstCode.FADD, 2, 1);
+        return;
+      }
       var c1 = a as Constant;
       var c2 = b as Constant;
       if(c1 != null && c2 != null) {
@@ -1081,10 +1142,11 @@ namespace X13.DevicePLC {
       if(m.scope != null) {
         var al = m.scope.memory.Where(z => z.type == EP_Type.PARAMETER).OrderBy(z => z.Addr).ToArray();
         for(int i = al.Length - 1; i >= 0; i--) {
+          var pt = al[i].isFloat ? EP_ValType.Float : EP_ValType.Int;
           if(i < node.Arguments.Length) {
-            node.Arguments[i].Visit(this);
+            EmitAs(node.Arguments[i], pt);
           } else if(al[i].init != null) {  //TODO: check function(a, b=7)
-            al[i].init.Visit(this);
+            EmitAs(al[i].init, pt);
           } else {
             _compiler.cur.AddInst(EP_InstCode.LDI_0, 0, 1);
           }
@@ -1109,10 +1171,158 @@ namespace X13.DevicePLC {
         throw new ApplicationException("undefined function: " + m.vd.Name);
       }
     }
-    private void Arg2Op(Expression node, EP_InstCode c) {
-      node.Children[0].Visit(this);
-      node.Children[1].Visit(this);
-      _compiler.cur.AddInst(c, 2, 1);
+    /// <param name="fc">float-вариант команды; null - команда только целая, и float-операнды
+    /// приводятся к int (как ToInt32 в JS для & | ^)</param>
+    private void Arg2Op(Expression node, EP_InstCode c, EP_InstCode? fc = null) {
+      var a = node.Children[0] as Expression;
+      var b = node.Children[1] as Expression;
+      if(fc != null && (_compiler.TypeOf(a) == EP_ValType.Float || _compiler.TypeOf(b) == EP_ValType.Float)) {
+        EmitAs(a, EP_ValType.Float);
+        EmitAs(b, EP_ValType.Float);
+        _compiler.cur.AddInst(fc.Value, 2, 1);
+      } else {
+        EmitAs(a, EP_ValType.Int);
+        EmitAs(b, EP_ValType.Int);
+        _compiler.cur.AddInst(c, 2, 1);
+      }
+    }
+    /// <summary>Имена конструкторов типа меркера: new Int32(5), this.k = new Float(0).</summary>
+    private static readonly string[] TypeNames = { "Boolean", "Int8", "UInt8", "Int16", "UInt16", "Int32", "Float" };
+
+    /// <summary>Значение выражения, приведённое к типу want.</summary>
+    /// <remarks>Константа сворачивается при компиляции: целая в float-контексте сразу грузится
+    /// как float, без S32TOF в рантайме. Int и UInt в стеке неразличимы, между ними приведения нет.</remarks>
+    private void EmitAs(Expression e, EP_ValType want) {
+      var have = _compiler.TypeOf(e);
+      Constant c;
+      if(want == EP_ValType.Float && have != EP_ValType.Float && (c = e as Constant) != null) {
+        _compiler.cur.AddInst(EP_Compiler.Instruction.LoadFloat(c.Value == null ? 0 : c.Value.As<double>(), c), 0, 1);
+        return;
+      }
+      e.Visit(this);
+      if(want == EP_ValType.Float) {
+        if(have == EP_ValType.Int) {
+          _compiler.cur.AddInst(EP_InstCode.S32TOF, 1, 1);
+        } else if(have == EP_ValType.UInt) {
+          _compiler.cur.AddInst(EP_InstCode.U32TOF, 1, 1);
+        }
+      } else if(have == EP_ValType.Float) {
+        _compiler.cur.AddInst(want == EP_ValType.UInt ? EP_InstCode.FTOU32 : EP_InstCode.FTOS32, 1, 1);
+      }
+    }
+    /// <summary>Условие перехода: JZ/JNZ проверяют биты, а у -0.0f они не нулевые, поэтому
+    /// float сначала превращается в 0/1.</summary>
+    private void EmitCond(CodeNode n) {
+      n.Visit(this);
+      if(_compiler.TypeOf(n as Expression) == EP_ValType.Float) {
+        _compiler.cur.AddInst(EP_InstCode.FCZE, 1, 1);
+        _compiler.cur.AddInst(EP_InstCode.CZE, 1, 1);
+      }
+    }
+    /// <summary>a &lt;&lt; b, a &gt;&gt; b, a &gt;&gt;&gt; b: число бит берётся по модулю 32, как в JS.</summary>
+    /// <remarks>Команды VM сдвигают только на число из своего байта, поэтому сдвиг на значение
+    /// выражения - цикл из сдвигов на 1 бит; работает на прошивках без новой команды.
+    /// Порядок вычисления как в JS: сначала a, потом b.</remarks>
+    /// <param name="vt">тип левого операнда: UInt у &gt;&gt;&gt;, иначе Int</param>
+    private void EmitShift(Expression node, EP_InstCode ic, EP_ValType vt) {
+      var a = node.Children[0] as Expression;
+      var b = node.Children[1] as Expression;
+      Constant c;
+      int? n = (c = b as Constant) != null ? (int)c.Value : _compiler.ConstValue(b);
+      EmitAs(a, vt);
+      if(n != null) {
+        _compiler.cur.AddInst(EP_Compiler.Instruction.Shift(ic, n.Value, b), 1, 1);
+        return;
+      }
+      EmitAs(b, EP_ValType.Int);
+      _compiler.cur.AddInst(EP_Compiler.Instruction.LoadInt(31, null), 0, 1);
+      _compiler.cur.AddInst(EP_InstCode.AND, 2, 1);
+      // a n -- a<<n; проверка счётчика внизу: за итерацию на один переход меньше
+      var body = new EP_Compiler.Instruction(EP_InstCode.LABEL);
+      var test = new EP_Compiler.Instruction(EP_InstCode.LABEL);
+      _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.JMP) { _ref = test });
+      _compiler.cur.AddInst(body);
+      _compiler.cur.AddInst(EP_InstCode.SWAP);
+      _compiler.cur.AddInst(EP_Compiler.Instruction.Shift(ic, 1, node));
+      _compiler.cur.AddInst(EP_InstCode.SWAP);
+      _compiler.cur.AddInst(EP_InstCode.DEC);
+      _compiler.cur.AddInst(test);
+      _compiler.cur.AddInst(EP_InstCode.DUP);
+      _compiler.cur.AddInst(new EP_Compiler.Instruction(EP_InstCode.JNZ) { _ref = body });
+      _compiler.cur.AddInst(EP_InstCode.DROP, 2, 1);
+    }
+    /// <summary>INC/DEC для ++/--; у float - сложение с 1.0f.</summary>
+    /// <remarks>Учёт стека как у INC(0, 1): загруженное значение вызывающий уже снял с _sp.</remarks>
+    private void StepOne(EP_InstCode ic, bool isFloat) {
+      if(isFloat) {
+        _compiler.cur.AddInst(EP_Compiler.Instruction.LoadFloat(1, null), 0, 0);
+        _compiler.cur.AddInst(ic == EP_InstCode.INC ? EP_InstCode.FADD : EP_InstCode.FSUB, 0, 1);
+      } else {
+        _compiler.cur.AddInst(ic, 0, 1);
+      }
+    }
+    /// <summary>Float(x), Int32(x), UInt32(x), isNaN(x), isFinite(x); false - не встроенная.</summary>
+    private bool CallBuiltin(Call node, string name) {
+      EP_ValType t;
+      EP_InstCode? op = null;
+      switch(name) {
+      case "Float":
+        t = EP_ValType.Float;
+        break;
+      case "Int32":
+        t = EP_ValType.Int;
+        break;
+      case "UInt32":
+        t = EP_ValType.UInt;
+        break;
+      case "isNaN":
+        t = EP_ValType.Float;
+        op = EP_InstCode.FISNAN;
+        break;
+      case "isFinite":
+        t = EP_ValType.Float;
+        op = EP_InstCode.FISFINITE;
+        break;
+      default:
+        return false;
+      }
+      if(node.Arguments.Length == 0) {
+        if(op != null) {
+          throw new NotSupportedException(_compiler.Where(node) + name + "() needs an argument");
+        }
+        _compiler.cur.AddInst(EP_InstCode.LDI_0, 0, 1);   // Float() - 0.0f, те же нулевые биты
+        return true;
+      }
+      EmitAs(node.Arguments[0], t);
+      if(op != null) {
+        _compiler.cur.AddInst(op.Value, 1, 1);
+      }
+      return true;
+    }
+    /// <summary>Math.abs/round/trunc(x), Math.min/max(a, b, ...) - всегда float.</summary>
+    private void CallMath(Call node, string name) {
+      int argc = node.Arguments.Length;
+      if(argc == 0 || (argc > 1 && name != "min" && name != "max")) {
+        throw new NotSupportedException(_compiler.Where(node) + "wrong number of arguments: " + node.ToString());
+      }
+      EmitAs(node.Arguments[0], EP_ValType.Float);
+      switch(name) {
+      case "abs":
+        _compiler.cur.AddInst(EP_InstCode.FABS, 1, 1);
+        break;
+      case "round":
+        _compiler.cur.AddInst(EP_InstCode.FROUND, 1, 1);
+        break;
+      case "trunc":
+        _compiler.cur.AddInst(EP_InstCode.FTRUNC, 1, 1);
+        break;
+      default:   // min, max - цепочкой
+        for(int i = 1; i < argc; i++) {
+          EmitAs(node.Arguments[i], EP_ValType.Float);
+          _compiler.cur.AddInst(name == "min" ? EP_InstCode.FMIN : EP_InstCode.FMAX, 2, 1);
+        }
+        break;
+      }
     }
     private void SafeCodeBlock(CodeNode node, int sp = -1) {
       if(node is CodeBlock) {
@@ -1121,12 +1331,21 @@ namespace X13.DevicePLC {
         if(sp < 0) {
           sp = _compiler._sp.Count;
         }
-        node.Visit(this);
-        while(_compiler._sp.Count > sp) {
-          var d = _compiler._sp.Pop();
-          if(d == null || !d.canOptimized || !_compiler.cur.code.Remove(d)) {
-            _compiler.cur.AddInst(EP_InstCode.DROP);
+        // Команды без своего узла (арифметика, загрузка поля) получат строку этого оператора, см.
+        // EP_Compiler.CodeLines; вложенный оператор переопределит её на время своего разбора.
+        var outer = _compiler.Statement;
+        _compiler.Statement = node;
+        try {
+          node.Visit(this);
+          while(_compiler._sp.Count > sp) {
+            var d = _compiler._sp.Pop();
+            if(d == null || !d.canOptimized || !_compiler.cur.code.Remove(d)) {
+              _compiler.cur.AddInst(EP_InstCode.DROP);
+            }
           }
+        }
+        finally {
+          _compiler.Statement = outer;
         }
       }
     }

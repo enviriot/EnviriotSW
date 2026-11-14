@@ -2,9 +2,10 @@
 using System;
 
 namespace X13.Archivist {
-  /// <summary>Bucket arithmetic for the archive. Pure - no state, no IO, no clock.</summary>
+  /// <summary>Вычисления временных корзин и ключей архива без ввода-вывода и чтения часов.</summary>
+  /// <remarks>Обоснование формата и шкалы UTC — в <see href="Archivist.md#ключи-хранения-и-временная-модель">общих правилах ключей и времени</see>.</remarks>
   internal static class ArchTime {
-    /// <summary>Bucket numbering origin. UTC, so the numbering never moves with the time zone.</summary>
+    /// <summary>Начало нумерации сохранённых корзин в UTC, независимое от местного часового пояса.</summary>
     internal static readonly DateTime Epoch = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     internal const int GRAN_RAW = 0;
@@ -12,17 +13,12 @@ namespace X13.Archivist {
     internal const int GRAN_HOUR = 3600;
     internal const int GRAN_DAY = 86400;
 
-    /// <summary>Every stored granularity, coarsest first.</summary>
+    /// <summary>Уровни сохранённых свёрток, начиная с самых крупных корзин.</summary>
     internal static readonly int[] LEVELS = { GRAN_DAY, GRAN_HOUR, GRAN_5MIN };
 
-    /// <summary>Picks the coarsest source that still satisfies the requested resolution.</summary>
-    /// <remarks>A bucket can be used only when it fits inside one step. The default chart is 2 days
-    /// wide and asks for ~500 points - a step of 5.8 minutes, so five-minute buckets.
-    /// <para>The five-minute level was nearly left out on the argument that raw already carries that
-    /// resolution and is retained anyway. Measurement against the live archive killed that: two days
-    /// of raw is 166 734 rows there, and thirty days runs into the read ceiling outright. Recent
-    /// data is an order of magnitude denser than the archive average, so raw is only affordable for
-    /// windows of hours.</para></remarks>
+    /// <summary>Выбирает самый крупный источник, сохраняющий запрошенное разрешение.</summary>
+    /// <remarks>Корзина должна помещаться в один шаг запроса; иначе нужны более мелкие корзины или исходные отсчёты. 
+    /// Здесь выбирается разрешение, а не проверяется готовность свёрток.</remarks>
     internal static int Granularity(double stepSeconds) {
       foreach(var g in LEVELS) {
         if(stepSeconds >= g) {
@@ -52,32 +48,26 @@ namespace X13.Archivist {
       return Epoch.AddDays(index);
     }
 
-    /// <summary>Bucket index at any granularity, so callers do not branch.</summary>
-    /// <remarks>Uniform seconds-since-epoch arithmetic: it agrees with HourIndex and DayIndex
-    /// exactly, and extends to any bucket width without another special case.</remarks>
+    /// <summary>Вычисляет номер корзины заданной длительности относительно Epoch.</summary>
+    /// <remarks>Время должно быть в UTC, длительность — положительной и заданной в секундах.
+    /// Для часа и суток используется та же нумерация, что в HourIndex и DayIndex; GRAN_RAW здесь не применяется.</remarks>
     internal static long BucketIndex(DateTime utc, int granularity) {
       return (long)Math.Floor((utc - Epoch).TotalSeconds / granularity);
     }
     internal static DateTime BucketStart(long index, int granularity) {
       return Epoch.AddSeconds((double)index * granularity);
     }
-    /// <summary>The stamp a bucket carries: its midpoint, the convention ArchCompact2 already used.</summary>
+    /// <summary>Возвращает середину интервала корзины в UTC.</summary>
     internal static DateTime BucketMid(long index, int granularity) {
       return BucketStart(index, granularity).AddSeconds(granularity / 2.0);
     }
 
-    /// <summary>Packs topic and bucket into one key, so the primary index doubles as the
-    /// per-topic ordered index and no second index has to be maintained.</summary>
-    /// <remarks>The bucket occupies the low 32 bits, which holds ~490 000 years of hours; the
-    /// guard is against a pre-2000 timestamp, whose negative index would otherwise borrow into
-    /// the topic id and silently attribute the row to a different topic.</remarks>
+    /// <summary>Объединяет идентификатор топика и номер корзины в упорядоченный первичный ключ.</summary>
+    /// <remarks>Старшие 32 бита отведены топику, младшие — корзине. 
+    /// Проверки исключают отрицательные номера корзин (до Epoch) и выход за диапазон UInt32: приведение к uint не должно обрезать номер и создавать другой ключ.</remarks>
     internal static long PackId(int topicId, long bucket) {
-      if(topicId < 0) {
-        throw new ArgumentOutOfRangeException("topicId", topicId, "topic id must not be negative");
-      }
-      if(bucket < 0 || bucket > uint.MaxValue) {
-        throw new ArgumentOutOfRangeException("bucket", bucket, "bucket index outside the packable range");
-      }
+      if(topicId < 0) throw new ArgumentOutOfRangeException("topicId", topicId, "topic id must not be negative");
+      if(bucket < 0 || bucket > uint.MaxValue) throw new ArgumentOutOfRangeException("bucket", bucket, "bucket index outside the packable range");
       return ((long)topicId << 32) | (uint)bucket;
     }
     internal static int TopicOf(long packed) {
@@ -86,7 +76,7 @@ namespace X13.Archivist {
     internal static long BucketOf(long packed) {
       return packed & 0xFFFFFFFFL;
     }
-    /// <summary>Inclusive key range covering every bucket of one topic - a single PK seek.</summary>
+    /// <summary>Включительные границы первичных ключей всех корзин одного топика.</summary>
     internal static void TopicRange(int topicId, out long lo, out long hi) {
       lo = PackId(topicId, 0);
       hi = PackId(topicId, uint.MaxValue);
@@ -94,34 +84,15 @@ namespace X13.Archivist {
 
     #region sample keys
 
-    /// <summary>Width of a raw sample key: topic id then instant, both big-endian.</summary>
+    /// <summary>Размер ключа исходного отсчёта в байтах: идентификатор топика, затем время.</summary>
     internal const int KEY_LEN = 12;
 
-    /// <summary>Key for a raw sample: the topic, then the instant, as one comparable blob.</summary>
-    /// <remarks>Twelve bytes rather than a packed Int64, and the reason is that there is nothing
-    /// left to budget. Packing forces sixty-three bits to be divided between the topic count, the
-    /// calendar span and the resolution, and each of those three is a guess about how the server
-    /// will be used decades from now; two such guesses were already made and revised while this
-    /// was being designed. Here the topic gets a whole Int32 and the instant a whole Int64 of
-    /// ticks, so no arrangement of them can run out. Measured against the packed alternative the
-    /// cost is eighteen bytes a document - some 58 MB over the live archive - at identical query
-    /// time, both being a primary-key range.
-    /// <para>Big-endian on both halves, because LiteDB compares Binary bytewise: written this way
-    /// the primary key sorts by topic first and by time within a topic, which turns every
-    /// per-topic read - folding, seeding, retention - into an exact range instead of a scan across
-    /// every other topic's rows. That is the point of the layout, and it is why the topic id is no
-    /// longer a field beside the key. What it costs is the free cross-topic time ordering: a chart
-    /// over several topics now merges one ordered stream per topic instead of reading one.</para>
-    /// <para>Ticks, not milliseconds: eight bytes hold the whole DateTime range, so the stored
-    /// instant is the one handed in, exactly. That removes the sequence counter a packed key needs
-    /// - on a 100 ns grid two samples of one topic cannot collide - and with it the assumption
-    /// that a topic never reports twice in one server tick, which is a property of today's
-    /// scheduler rather than of the format.</para>
-    /// <para>Time belongs in the key rather than in a DateTime field beside it for a separate
-    /// reason that still holds: LiteDB puts DateTime through LOCAL time end to end - on write, on
-    /// read and in query parameters - so in the hour the clock repeats every autumn two instants an
-    /// hour apart read back identical and a window over that hour collapses to nothing. Raw bytes
-    /// have no such notion.</para></remarks>
+    /// <summary>Кодирует топик и время исходного отсчёта в единый двоичный ключ.</summary>
+    /// <remarks>Четыре байта отведены идентификатору, восемь — тикам времени без потери точности.
+    /// Обе части записываются старшим байтом вперёд.
+    /// <para>Время должно быть уже в UTC: перегрузка DateTime берёт Ticks без преобразования Kind.</para>
+    /// <para>Разрешение в 100 нс не гарантирует уникальность: одинаковые топик и время дают одинаковый ключ.
+    /// Обработка повторяющихся временных меток остаётся за вызывающей стороной.</para></remarks>
     internal static byte[] PackSample(int topicId, DateTime utc) {
       return PackSample(topicId, utc.Ticks);
     }
@@ -144,11 +115,11 @@ namespace X13.Archivist {
       return b;
     }
 
-    /// <summary>Lowest key one topic can hold - the inclusive start of a whole-topic range.</summary>
+    /// <summary>Нижняя включительная граница ключей исходных отсчётов одного топика.</summary>
     internal static byte[] TopicFloor(int topicId) {
       return PackSample(topicId, 0L);
     }
-    /// <summary>Highest key one topic can hold - the inclusive end of a whole-topic range.</summary>
+    /// <summary>Верхняя включительная граница ключей отсчётов топика в диапазоне DateTime.</summary>
     internal static byte[] TopicCeil(int topicId) {
       return PackSample(topicId, DateTime.MaxValue.Ticks);
     }
@@ -157,7 +128,7 @@ namespace X13.Archivist {
       return (key[0] << 24) | (key[1] << 16) | (key[2] << 8) | key[3];
     }
 
-    /// <summary>The instant a sample key stands for, in UTC.</summary>
+    /// <summary>Восстанавливает время отсчёта из ключа в представлении UTC.</summary>
     internal static DateTime TimeOfSample(byte[] key) {
       long t = 0;
       for(int i = 0; i < 8; i++) {

@@ -63,9 +63,8 @@ namespace X13.WebUI {
     // accepted all three; here anything that was not a data: URI returned null and fell
     // through to the semantic fallback keyed on the *value shape*. For /$YS/TYPES/Core/Boolean
     // and friends that happened to land on the same file, so nothing looked broken, but a
-    // type whose icon has no value-shape twin lost it outright: Ext/Connection's
-    // "icon":"EsConnection" never reached a row, which is why ty_es.png only ever showed up
-    // in the Add menu. Core/Logram is that same case.
+    // type whose icon has no value-shape twin lost it outright: Core/Logram's "icon":"Logram"
+    // never reached a row, which is why ty_logram.png only ever showed up in the Add menu.
     internal static string ResolveIconRef(string icon, string dynamicName) {
       if (string.IsNullOrWhiteSpace(icon)) return null;
       if (IsAllowedIconPath(icon)) return icon;
@@ -145,7 +144,6 @@ namespace X13.WebUI {
       case "Date": return "ty_dt.png";
       case "Double": return "ty_double.png";
       case "Editor": return "ic_editor.png";
-      case "EsConnection": return "ty_es.png";
       case "Folder": return "ty_topic.png";
       case "Hexadecimal": return "ed_hex.png";
       case "Integer": return "ty_int.png";

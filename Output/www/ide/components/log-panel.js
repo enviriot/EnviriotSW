@@ -1,8 +1,8 @@
 import { LitElement, html, css, repeat } from '../../lib/lit-all.min.js';
 import { readBoolean } from '../services/local-storage-utils.js';
+import { formatLogTime, logDateKey, formatLogDate } from '../services/log-store.js';
 
 const SHOW_DEBUG_KEY = 'x13.logpanel.showDebug';
-const HISTORY_PAGE_SIZE = 50;
 
 const LEVEL_INFO = {
   0: { label: 'Debug', color: '#9aa5b1' },
@@ -22,6 +22,7 @@ export class X13LogPanel extends LitElement {
     showDebug: { type: Boolean },
     historyLoading: { type: Boolean },
     historyExhausted: { type: Boolean },
+    historyError: {},
   };
 
   static styles = css`
@@ -117,6 +118,7 @@ export class X13LogPanel extends LitElement {
     .row .time, .last-line .time { color: #91a0b1; flex: 0 0 auto; }
     .level-dot { border-radius: 50%; flex: 0 0 auto; height: 12px; width: 12px; }
     .row .msg { flex: 1 1 auto; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .history-error { padding: 6px 10px; color: #b91c1c; background: #fef2f2; white-space: pre-wrap; }
   `;
 
   constructor() {
@@ -128,6 +130,7 @@ export class X13LogPanel extends LitElement {
     this.showDebug = readBoolean(SHOW_DEBUG_KEY, false);
     this.historyLoading = false;
     this.historyExhausted = false;
+    this.historyError = '';
     this.unsubscribe = null;
   }
 
@@ -175,6 +178,7 @@ export class X13LogPanel extends LitElement {
         <button class="action clear" title="Clear log" @click=${this.#clear}>×</button>
         <button class="toggle" @click=${this.#toggleCollapse} title="Collapse">▼</button>
       </div>
+      ${this.historyError ? html`<div class="history-error" role="alert">${this.historyError}</div>` : ''}
       <div class="body">
         ${repeat(groups, (group) => group.key, (group) => html`
           <div class="group-header">${group.label}</div>
@@ -233,9 +237,15 @@ export class X13LogPanel extends LitElement {
     this.unsubscribe?.();
     this.unsubscribe = null;
     this.entries = [];
+    this.historyLoading = false;
+    this.historyExhausted = false;
+    this.historyError = '';
     if(!this.store) return;
     this.unsubscribe = this.store.subscribe((entries) => {
       this.entries = entries;
+      this.historyLoading = this.store.historyLoading;
+      this.historyExhausted = this.store.historyExhausted && !this.store.gapBoundary;
+      this.historyError = this.store.error;
     });
   }
 
@@ -273,42 +283,20 @@ export class X13LogPanel extends LitElement {
 
   async #loadHistory() {
     if(!this.api || this.historyLoading || this.historyExhausted) return;
-    this.historyLoading = true;
-    const before = this.entries[0]?.dt;
-    try {
-      const result = await this.api.log(before, HISTORY_PAGE_SIZE);
-      const items = result?.items || [];
-      if(items.length < HISTORY_PAGE_SIZE) this.historyExhausted = true;
-      if(items.length > 0) this.store?.prependHistory(items);
-    }
-    catch(error) {
-      console.warn('req.log history failed', error);
-    }
-    finally {
-      this.historyLoading = false;
-    }
+    await this.store?.loadHistory(this.api);
   }
 }
 
 customElements.define('x13-log-panel', X13LogPanel);
 
 function formatTime(iso) {
-  const date = new Date(iso);
-  if(Number.isNaN(date.getTime())) return '';
-  const hh = String(date.getHours()).padStart(2, '0');
-  const mm = String(date.getMinutes()).padStart(2, '0');
-  const ss = String(date.getSeconds()).padStart(2, '0');
-  const ff = String(Math.floor(date.getMilliseconds() / 10)).padStart(2, '0');
-  return `${hh}:${mm}:${ss}.${ff}`;
+  return formatLogTime(iso);
 }
 
 function formatDateKey(iso) {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toDateString();
+  return logDateKey(iso);
 }
 
 function formatDateLabel(iso) {
-  const date = new Date(iso);
-  if(Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  return formatLogDate(iso);
 }

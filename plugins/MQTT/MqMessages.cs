@@ -6,7 +6,7 @@ using System.Text;
 using System.IO;
 
 namespace X13.MQTT {
-  /// <summary>The different types of messages defined in the MQTT protocol</summary>
+  /// <summary>Типы пакетов MQTT; NONE используется как внутренний признак отсутствия типа.</summary>
   internal enum MessageType : byte {
     NONE        = 0,
     CONNECT 	= 1,
@@ -88,10 +88,10 @@ namespace X13.MQTT {
       this.Retained=false;
       this.MessageID=0;
     }
-    /// <summary>Creates an MqttMessage from a data stream</summary>
-    /// <param name="header">The first byte of the fixed header of the message</param>
-    /// <param name="len">Variable header length</param>
-    /// <param name="str">Input stream</param>
+    /// <summary>Разбирает флаги фиксированного заголовка и сохраняет длину оставшейся части пакета.</summary>
+    /// <param name="header">Первый байт фиксированного заголовка.</param>
+    /// <param name="len">Remaining Length: длина переменного заголовка и полезной нагрузки вместе.</param>
+    /// <param name="str">Поток тела пакета; базовый конструктор его не читает.</param>
     protected MqMessage(byte header, uint len, Stream str) { //-V3117
       this.MsgType = (MessageType)((header & 0xf0) >> 4);
       this.Duplicate = (header & 0x08) != 0;
@@ -99,13 +99,13 @@ namespace X13.MQTT {
       this.Retained = (header & 0x01) != 0;
       variableHeaderLength = len;
     }
-    /// <summary>Encodes the length of the variable header to the format specified in the MQTT protocol and writes it to the given stream</summary>
-    /// <param name="str">Output Stream</param>
+    /// <summary>Записывает фиксированный заголовок; тело пакета добавляет конкретный тип сообщения.</summary>
+    /// <param name="str">Выходной поток.</param>
     public virtual void Serialise(Stream str) {
-      // Write the fixed header to the stream
+      // Первый байт содержит тип пакета и флаги.
       byte header = (byte)(((byte)this.MsgType << 4) | (this.Duplicate?8:0) | ((byte)this.QualityOfService << 1) | (this.Retained?1:0));
       str.WriteByte(header);
-      // Add the second byte of the fixed header (The variable header length)
+      // Remaining Length кодируется переменным числом байтов.
       WriteToStreamPacked(str, variableHeaderLength);
     }
     public override string ToString() {
@@ -135,7 +135,7 @@ namespace X13.MQTT {
       str.Write(bs, 0, bs.Length);
     }
     protected static ushort ReadUshortFromStream(Stream str) {
-      // Read two bytes and interpret as ushort in Network Order
+      // Сетевой порядок: старший байт перед младшим.
       byte[] data = new byte[2];
       ReadCompleteBuffer(str, data);
       return (ushort)((data[0] << 8) + data[1]);
@@ -160,9 +160,9 @@ namespace X13.MQTT {
   }
 
   internal class MqConnect : MqMessage {
-    /// <summary>The version of the MQTT protocol we are using</summary>
+    /// <summary>Обозначение уровня протокола 3, соответствующего MQTT 3.1.</summary>
     private const byte VERSION = 3;
-    /// <summary>Constant description of the protocol</summary>
+    /// <summary>Имя и уровень протокола в заголовке CONNECT.</summary>
     private static readonly byte[] protocolDesc3 = new byte[] { 0, 6, (byte)'M', (byte)'Q', (byte)'I', (byte)'s', (byte)'d', (byte)'p', 3};
     private static readonly byte[] protocolDesc4 = new byte[] { 0, 4, (byte)'M', (byte)'Q', (byte)'T', (byte)'T', 4 };
 
@@ -228,13 +228,13 @@ namespace X13.MQTT {
       }
     }
     public override void Serialise(Stream str) {
-      byte _connectFlags=(byte)((cleanSession ? 0x02 : 0)); // Clean Start
+      byte _connectFlags=(byte)((cleanSession ? 0x02 : 0)); // Флаг чистой сессии.
 
       base.variableHeaderLength = (uint)(
-        version==4? protocolDesc4.Length:protocolDesc3.Length         //Length of the protocol description
-        +3                          //Connect Flags + Keep alive
-        +enc.GetByteCount(clientId) // Length of the client ID string
-        +2                          // The length of the length of the clientID
+        version==4? protocolDesc4.Length:protocolDesc3.Length         // Длина описания протокола.
+        +3                          // Флаги подключения и интервал keep-alive.
+        +enc.GetByteCount(clientId) // Размер идентификатора клиента в UTF-8.
+        +2                          // Поле длины идентификатора клиента.
       );
 
       if(!string.IsNullOrEmpty(willTopic)) {
@@ -253,12 +253,12 @@ namespace X13.MQTT {
       base.Serialise(str);
       str.Write(version == 4 ? protocolDesc4 : protocolDesc3, 0, (version == 4 ? protocolDesc4 : protocolDesc3).Length);
       str.WriteByte(_connectFlags);
-      // Write the keep alive value
+      // Интервал keep-alive.
       WriteToStream(str, this.keepAlive);
-      // Write the payload
+      // Полезная нагрузка начинается с идентификатора клиента.
       WriteToStream(str, clientId);
 
-      if(!string.IsNullOrEmpty(willTopic)) {    // Write the will topic
+      if(!string.IsNullOrEmpty(willTopic)) {
         WriteToStream(str, willTopic);
         if(willPayload!=null) {
           WriteToStream(str, (ushort)willPayload.Length);
@@ -280,7 +280,7 @@ namespace X13.MQTT {
   }
 
   internal class MqConnack : MqMessage {
-    /// <summary>Connect return code</summary>
+    /// <summary>Код результата подключения в CONNACK.</summary>
     public enum MqttConnectionResponse : byte {
       Accepted                    = 0,
       UnacceptableProtocolVersion = 1,
@@ -314,7 +314,7 @@ namespace X13.MQTT {
 
   internal class MqSubscribe : MqMessage {
     private List<KeyValuePair<string, QoS>> _list=new List<KeyValuePair<string,QoS>>();
-    /// <summary>Subscribe to multiple topics</summary>
+    /// <summary>Создаёт пакет подписки на несколько топиков.</summary>
     public MqSubscribe()
       : base(MessageType.SUBSCRIBE) {
       base.QualityOfService = QoS.AtLeastOnce;
@@ -338,15 +338,15 @@ namespace X13.MQTT {
     }
     public List<KeyValuePair<string, QoS>> list { get { return _list; } }
     public override void Serialise(Stream str) {
-      // calculate Length
+      // Длина переменного заголовка и полезной нагрузки.
       base.variableHeaderLength=2;
       foreach(var s in _list) {
         base.variableHeaderLength+=(uint)(3+enc.GetByteCount(s.Key));
       }
-      // Send
+      // Заголовок и идентификатор пакета.
       base.Serialise(str);
       WriteToStream(str, base.MessageID);
-      // Write the subscription payload
+      // Фильтры подписки и запрошенные уровни QoS.
       foreach(var s in _list) {
         WriteToStream(str, s.Key);
         str.WriteByte((byte)s.Value);
@@ -384,13 +384,13 @@ namespace X13.MQTT {
       grantedQos.Add(gQoS);
     }
     public override void Serialise(Stream str) {
-      // calculate Length
+      // Длина идентификатора пакета и кодов результата.
       base.variableHeaderLength=(uint)(2+grantedQos.Count);
 
-      // Send
+      // Заголовок и идентификатор пакета.
       base.Serialise(str);
       WriteToStream(str, base.MessageID);
-      // Write the subscription payload
+      // Коды результата подписки.
       for(int i=0; i<grantedQos.Count; i++) {
         str.WriteByte((byte)grantedQos[i]);
       }
@@ -454,9 +454,9 @@ namespace X13.MQTT {
       }
       byte[] payloadBuf=Encoding.UTF8.GetBytes(pys);
       base.variableHeaderLength =(uint)(
-        2 + pathBuf.Length    // Topic + length
-          +(base.QualityOfService  == QoS.AtMostOnce ? 0 : 2)  // Message ID for QoS > 0
-          +((payloadBuf==null)?0:payloadBuf.Length));                     // Message Payload
+        2 + pathBuf.Length    // Топик и поле его длины.
+          +(base.QualityOfService  == QoS.AtMostOnce ? 0 : 2)  // Идентификатор пакета при QoS > 0.
+          +((payloadBuf==null)?0:payloadBuf.Length));                     // Полезная нагрузка.
       base.Serialise(str);
 
       WriteToStream(str, (ushort)pathBuf.Length);
@@ -536,15 +536,15 @@ namespace X13.MQTT {
     }
     public List<string> list { get { return _subscriptions; } }
     public override void Serialise(Stream str) {
-      // calculate Length
+      // Длина идентификатора пакета и списка фильтров.
       base.variableHeaderLength=2;
       foreach(string s in _subscriptions) {
         base.variableHeaderLength+=(uint)(2+enc.GetByteCount(s));
       }
-      // Send
+      // Заголовок и идентификатор пакета.
       base.Serialise(str);
       WriteToStream(str, base.MessageID);
-      // Write the subscription payload
+      // Фильтры отменяемых подписок.
       foreach(string s in _subscriptions) {
         WriteToStream(str, s);
       }
@@ -570,9 +570,9 @@ namespace X13.MQTT {
       base.Reason=MessageType.UNSUBSCRIBE;
     }
     public override void Serialise(Stream str) {
-      // calculate Length
+      // Длина идентификатора пакета.
       base.variableHeaderLength=2;
-      // Send
+      // Заголовок и идентификатор пакета.
       base.Serialise(str);
       WriteToStream(str, base.MessageID);
     }

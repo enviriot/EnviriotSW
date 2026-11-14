@@ -1,5 +1,9 @@
-import { LitElement, html, css } from '../../lib/lit-all.min.js';
+import { LitElement, html, css, live } from '../../lib/lit-all.min.js';
 import { formatDefault, autoGrowTextarea } from './editor-format.js';
+
+// Сколько прокрутка колёсиком должна молчать, чтобы расхождение state с последним шагом считалось
+// решением сервера, а не запоздалым эхом одного из прежних шагов.
+const WHEEL_SETTLE_MS = 1000;
 
 export class X13ScalarTextEditor extends LitElement {
   static properties = {
@@ -96,8 +100,16 @@ export class X13ScalarTextEditor extends LitElement {
     this.#draft = null;
     this.#lastSentDraft = null;
     this.#suppressBlur = false;
-    this.#pendingSelection = null;
-    this.#pendingInputText = null;
+    this.#wheelText = null;
+    this.#wheelValue = undefined;
+    this.#wheelAt = 0;
+    this.#wheelSeq = 0;
+    this.#wheelTimer = null;
+  }
+
+  disconnectedCallback() {
+    this.#endWheel();
+    super.disconnectedCallback();
   }
 
   willUpdate(changed) {
@@ -108,11 +120,11 @@ export class X13ScalarTextEditor extends LitElement {
       this.#draft = null;
       this.#lastSentDraft = null;
       this.#suppressBlur = false;
+      this.#settleWheel(false);
     }
   }
 
-  updated(changed) {
-    if(changed.has('state')) this.#restorePendingSelection();
+  updated() {
     if(this.#isMultiline()) this.#growTextarea();
   }
 
@@ -121,7 +133,7 @@ export class X13ScalarTextEditor extends LitElement {
       return html`<textarea
         class="text-editor-multiline"
         rows="1"
-        .value=${this.#currentText()}
+        .value=${live(this.#currentText())}
         ?disabled=${this.readonly}
         @input=${this.#onMultilineInput}
         @keydown=${this.#onMultilineKeyDown}
@@ -129,7 +141,7 @@ export class X13ScalarTextEditor extends LitElement {
     }
     return html`<input
       class=${this.inputClass()}
-      .value=${this.#currentText()}
+      .value=${live(this.#currentText())}
       ?disabled=${this.readonly}
       @beforeinput=${this.#onBeforeInput}
       @input=${this.#onInput}
@@ -154,6 +166,7 @@ export class X13ScalarTextEditor extends LitElement {
   }
 
   restoreConfirmed(input = null) {
+    this.#endWheel();
     this.#draft = null;
     this.#lastSentDraft = null;
     this.#suppressBlur = true;
@@ -171,6 +184,7 @@ export class X13ScalarTextEditor extends LitElement {
   }
 
   #onMultilineInput(e) {
+    this.#endWheel();
     this.#draft = e.currentTarget.value;
     this.#suppressBlur = false;
     autoGrowTextarea(e.currentTarget);
@@ -192,7 +206,7 @@ export class X13ScalarTextEditor extends LitElement {
   }
 
   #currentText() {
-    return this.#draft ?? this.format(this.state);
+    return this.#draft ?? this.#wheelText ?? this.format(this.state);
   }
 
   #onBeforeInput(e) {
@@ -208,6 +222,7 @@ export class X13ScalarTextEditor extends LitElement {
   }
 
   #onInput(e) {
+    this.#endWheel();
     this.#draft = e.currentTarget.value;
     this.#suppressBlur = false;
   }
@@ -238,11 +253,45 @@ export class X13ScalarTextEditor extends LitElement {
     const direction = e.deltaY < 0 ? 1 : -1;
     const nextValue = this.wheelValue(parsed.value, direction, step, text, caret);
     if(typeof nextValue !== 'number' || !Number.isFinite(nextValue)) return;
-    this.#pendingSelection = { start: caret, end: caret };
-    this.#pendingInputText = this.formatWheelValue(nextValue, text, caret);
-    input.value = this.#pendingInputText;
-    this.#restorePendingSelection();
-    this.commit(nextValue);
+    // Шаг вырос из того, что было в поле, в том числе из набранного, - так что черновик он заменяет.
+    this.#draft = null;
+    this.#lastSentDraft = null;
+    this.#wheelText = this.formatWheelValue(nextValue, text, caret);
+    this.#wheelValue = nextValue;
+    this.#wheelAt = Date.now();
+    clearTimeout(this.#wheelTimer);
+    this.#wheelTimer = setTimeout(() => {
+      this.#wheelTimer = null;
+      if(this.#settleWheel(true)) this.requestUpdate();
+    }, WHEEL_SETTLE_MS);
+    input.value = this.#wheelText;
+    const at = Math.min(caret, input.value.length);
+    try { input.setSelectionRange(at, at); }
+    catch { }
+    const seq = ++this.#wheelSeq;
+    // Отказ откатывает поле, только если это последний шаг и после него не начали печатать.
+    Promise.resolve(this.commit(nextValue)).catch(() => {
+      if(seq === this.#wheelSeq && this.#wheelText !== null) this.restoreConfirmed(input);
+    });
+  }
+
+  // Текст колёсика держится в поле поверх state, пока они не разошлись: при быстрой прокрутке эхо
+  // прежних шагов приходит, когда в поле уже следующий, и без этого поле прыгало бы назад. Совпадение
+  // со state его не снимает - значение то же, а форма шага (ведущие нули Hexadecimal, позиция
+  // курсора) нужна следующему шагу. Расхождение снимает, но только когда прокрутка успокоилась
+  // (quiet): раньше это может быть эхо прежнего шага. Ответ на req.commit тут не помогает -
+  // сервер шлёт его сразу после Commit, а эхо приходит то раньше, то позже.
+  #settleWheel(quiet) {
+    if(this.#wheelText === null || scalarEditorValuesEqual(this.state, this.#wheelValue)) return false;
+    if(!quiet && Date.now() - this.#wheelAt < WHEEL_SETTLE_MS) return false;
+    this.#endWheel();
+    return true;
+  }
+
+  #endWheel() {
+    clearTimeout(this.#wheelTimer);
+    this.#wheelTimer = null;
+    this.#wheelText = null;
   }
 
   #onBlur() {
@@ -251,17 +300,6 @@ export class X13ScalarTextEditor extends LitElement {
       return;
     }
     this.#tryCommit();
-  }
-
-  #restorePendingSelection() {
-    if(!this.#pendingSelection) return;
-    const input = this.renderRoot?.querySelector('input');
-    if(!input) return;
-    if(this.#pendingInputText !== null) input.value = this.#pendingInputText;
-    const start = Math.min(this.#pendingSelection.start, input.value.length);
-    const end = Math.min(this.#pendingSelection.end, input.value.length);
-    try { input.setSelectionRange(start, end); }
-    catch { }
   }
 
   #tryCommit() {
@@ -288,8 +326,11 @@ export class X13ScalarTextEditor extends LitElement {
   #draft;
   #lastSentDraft;
   #suppressBlur;
-  #pendingSelection;
-  #pendingInputText;
+  #wheelText;
+  #wheelValue;
+  #wheelAt;
+  #wheelSeq;
+  #wheelTimer;
 }
 
 

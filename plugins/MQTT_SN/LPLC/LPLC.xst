@@ -1,0 +1,319 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes'?>
+<xst path='/$YS/TYPES'>
+  <i n='Ext' m='{"attr":65}'>
+    <i n='LogramPLC' s='{"Action":[{"name":"MQTT_SN.PLC.Build","text":"Build programm"},{"name":"MQTT_SN.PLC.Run","text":"Run"},{"name":"MQTT_SN.PLC.Start","text":"Start PLC"},{"name":"MQTT_SN.PLC.Stop","text":"Stop PLC"}],"Children":"/$YS/TYPES/LPLC","editor":"DevicePLC","hint":"LPLC program of an EspNode (pa1): the blocks are its children","icon":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAACxMAAAsTAQCanBgAAAA5UExURQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAm/wCU/wD/kP8AAMNYIEMAAAAOdFJOUwAZGh9AaHJ7gMvc5ebo3msmjQAAAGBJREFUGNONj1sOgCAMBFcRKCAv739YCykYjYnOT5PJpt0C35jdABszRDwiQMwQNllQYqZJHMilZIKNpgumCR41SOglkVqCHjvk0HVFxOyhvFe9aZCmulZ9+2F1bvnxKk6PwgS5I8stGwAAAABJRU5ErkJggg=="}' m='{"attr":69}' ver='0.5.2610.21001' />
+  </i>
+  <i n='LPLC' m='{"attr":65}'>
+    <i n='Binary' m='{"attr":65}'>
+      <i n='bAND' s='{
+        "hint": "LPLC bitwise AND of the connected inputs A..H, -1 if none is connected",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2UzZmZkYSIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTExLjUgMTIuNSA2LjYgNi45YTEuOCAxLjggMCAxIDEgMi41IDBMNS43IDkuM2ExLjkgMS45IDAgMCAwIDEuMyAzLjJjMS45IDAgMy0xLjMgMy41LTMiLz48L3N2Zz4=",
+        "willful": true,
+        "LPLC": { "op": "&amp;", "in": [ "A", "B", "C", "D", "E", "F", "G", "H" ] },
+        "manifest": { "type": "LPLC/Binary/bAND", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": {
+            "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+            "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='bNOT' s='{
+        "hint": "LPLC bitwise NOT: Q = ~A",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2UzZmZkYSIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTMuNSA5QzQuNSA3IDYgNi42IDcuNSA3LjVTMTAuNSA4LjUgMTEuNSA2LjUiLz48L3N2Zz4=",
+        "willful": true,
+        "LPLC": { "expr": "~A", "in": [ "A" ] },
+        "manifest": { "type": "LPLC/Binary/bNOT", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='bOR' s='{
+        "hint": "LPLC bitwise OR of the connected inputs A..H, 0 if none is connected",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2UzZmZkYSIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTcuNSAzdjEwIi8+PC9zdmc+",
+        "willful": true,
+        "LPLC": { "op": "|", "in": [ "A", "B", "C", "D", "E", "F", "G", "H" ] },
+        "manifest": { "type": "LPLC/Binary/bOR", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": {
+            "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+            "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='bXOR' s='{
+        "hint": "LPLC bitwise XOR of the connected inputs A..H, 0 if none is connected",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2UzZmZkYSIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTMgNy41YTQuNSA0LjUgMCAxIDAgOSAwIDQuNSA0LjUgMCAxIDAtOSAwTTcuNSAzdjlNMyA3LjVoOSIvPjwvc3ZnPg==",
+        "willful": true,
+        "LPLC": { "op": "^", "in": [ "A", "B", "C", "D", "E", "F", "G", "H" ] },
+        "manifest": { "type": "LPLC/Binary/bXOR", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": {
+            "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+            "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='Trigger' s='{
+        "hint": "LPLC flip-flop: R resets, otherwise S sets, otherwise a rising C edge samples D; Q starts at 0, NQ = !Q",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2UzZmZkYSIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTQgM2g4djEwSDR6IE0xIDVoM20tMyA2aDNtOC02aDNtLTMgNmgzIE00IDdsMiAxLTIgMSIvPjwvc3ZnPg==",
+        "willful": true,
+        "LPLC": { "src": "class Trigger {\n  constructor() {\n    this.Q = false;\n    this.NQ = true;\n    this.CO = false;\n  }\n  Tick(S, D, C, R) {\n    if(R) { this.Q = false; } else if(S) { this.Q = true; } else if(!this.CO &amp;&amp; C) { this.Q = !!D; }\n    this.CO = !!C;\n    this.NQ = !this.Q;\n  }\n}", "in": [ "S", "D", "C", "R" ] },
+        "manifest": { "type": "LPLC/Binary/Trigger", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "S": 0, "D": 0, "C": 0, "R": 0 }, "out": { "Q": true, "NQ": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "S": { "default": 0 }, "D": { "default": 0 }, "C": { "default": 0 }, "R": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true }, "NQ": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27002' />
+    </i>
+    <i n='SerialPort' s='{
+      "hint":"Programmable UART: state is Tick(A..H), like Func. Use SendByte/PrintF and UartGetByte/UartBytesToRead with this.Port. Port is read-only. DE=-1 disables RS-485.",
+      "icon":"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzI0MzQ0NyIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgZD0iTTEuNSAzLjVoMTNsLTIgN2gtOXpNNi41IDEwLjV2M2gzdi0zIi8+PGcgZmlsbD0iIzI0MzQ0NyI+PGNpcmNsZSBjeD0iNCIgY3k9IjUuNSIgcj0iLjY1Ii8+PGNpcmNsZSBjeD0iNiIgY3k9IjUuNSIgcj0iLjY1Ii8+PGNpcmNsZSBjeD0iOCIgY3k9IjUuNSIgcj0iLjY1Ii8+PGNpcmNsZSBjeD0iMTAiIGN5PSI1LjUiIHI9Ii42NSIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iNS41IiByPSIuNjUiLz48Y2lyY2xlIGN4PSI1IiBjeT0iOCIgcj0iLjY1Ii8+PGNpcmNsZSBjeD0iNyIgY3k9IjgiIHI9Ii42NSIvPjxjaXJjbGUgY3g9IjkiIGN5PSI4IiByPSIuNjUiLz48Y2lyY2xlIGN4PSIxMSIgY3k9IjgiIHI9Ii42NSIvPjwvZz48L3N2Zz4=",
+      "editor":"JS", "default":"", "willful":true,
+      "LPLC":{"args":["Port","TxPin","TxMode","RxPin","RxMode","Baud","Format","DePin","DeMode"],
+        "provides":[{"kind":"serial","numberArg":"Port"}]},
+      "manifest":{"type":"LPLC/SerialPort","MQTT-SN":{"tag":"---"},"attr":4,
+        "LPLC":{"pos":{"top":0,"left":0},"args":{"Baud":9600,"Format":0,"DePin":-1},
+          "in":{"A":0},"out":{"Q":true},"run":{}}},
+      "mi":{"LPLC":{"mi":{
+        "args":{"mi":{
+          "Port":{"cdr":1,"label":"UART","editor":"Integer","choices":{"provider":"bus","kind":"serial","scope":"supported"}},
+          "TxPin":{"cdr":2,"label":"TX","choices":{"provider":"pin","kind":"serial","busArg":"Port","role":"TX","excludeArgs":["RxPin","DePin"]}},
+          "RxPin":{"cdr":3,"label":"RX","choices":{"provider":"pin","kind":"serial","busArg":"Port","role":"RX","excludeArgs":["TxPin","DePin"]}},
+          "Baud":{"cdr":4,"label":"Baud","editor":"Integer","default":9600,"min":1,"max":5000000,"option":{"provider":"bus-option","kind":"serial","busArg":"Port","role":"TX"}},
+          "Format":{"cdr":5,"label":"Frame","editor":"Integer","default":0,"choices":{"provider":"bus-option","kind":"serial","busArg":"Port","role":"RX"}},
+          "DePin":{"cdr":6,"label":"DE","default":-1,"choices":{"provider":"pin","kind":"serial","busArg":"Port","role":"DE","allowNone":true,"excludeArgs":["TxPin","RxPin"]}},
+          "TxMode":{"cdr":0,"derive":{"provider":"bus-mode","kind":"serial","busArg":"Port","role":"TX"}},
+          "RxMode":{"cdr":0,"derive":{"provider":"bus-mode","kind":"serial","busArg":"Port","role":"RX"}},
+          "DeMode":{"cdr":0,"derive":{"provider":"bus-mode","kind":"serial","busArg":"Port","role":"DE","pinArg":"DePin"}}
+        }},
+        "in":{"mi":{"A":{"default":0},"B":{"default":0},"C":{"default":0},"D":{"default":0},"E":{"default":0},"F":{"default":0},"G":{"default":0},"H":{"default":0}}},
+        "out":{"mi":{"Q":{"default":true}}}
+      }}}
+    }' m='{"attr":69}' ver='0.5.2611.3003' />
+    <i n='Func' s='{
+      "hint": "LPLC function: src is the body of Tick(A..H); the return value is output Q, every this.X field is an output too",
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgc3Ryb2tlPSIjN2U3ZTdlIiBkPSJNLjUuNWgxNXYxNUguNXoiLz48cGF0aCBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAiIGQ9Ik0xMS41IDNDMTAuNSAyLjIgOC45IDIuNCA4LjYgNEw3LjIgMTEuM0M2LjkgMTIuOSA1LjYgMTMuMyA0IDEyLjZNNSA2LjVoNS41Ii8+PC9zdmc+",
+      "default": "",
+      "editor": "JS",
+      "willful": true,
+      "manifest": { "type": "LPLC/Func", "MQTT-SN": { "tag": "---" }, "attr": 4,
+                    "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0 }, "out": { "Q": true }, "run": {} } },
+      "mi": { "LPLC": { "mi": {
+        "in": { "mi": {
+          "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+          "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+        "out": { "mi": { "Q": { "default": true } } } } } }
+    }' m='{"attr":69}' ver='0.5.2610.27001' />
+    <i n='Logic' m='{"attr":65}'>
+      <i n='COMP_LT' s='{
+        "hint": "LPLC comparison: Q = A &lt; B, 1 or 0",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTExIDMgNSA3LjUgMTEgMTIiLz48L3N2Zz4=",
+        "willful": true,
+        "LPLC": { "expr": "A &lt; B", "in": [ "A", "B" ] },
+        "manifest": { "type": "LPLC/Logic/COMP_LT", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 }, "B": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='COMP_LE' s='{
+        "hint": "LPLC comparison: Q = A &lt;= B, 1 or 0",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTExIDIuNSA1IDYuNSAxMSAxMC41IE01IDEzaDYiLz48L3N2Zz4=",
+        "willful": true,
+        "LPLC": { "expr": "A &lt;= B", "in": [ "A", "B" ] },
+        "manifest": { "type": "LPLC/Logic/COMP_LE", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 }, "B": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='COMP_EQ' s='{
+        "hint": "LPLC comparison: Q = (A == B), 1 or 0",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTQgNS41aDggTTQgMTAuNWg4Ii8+PC9zdmc+",
+        "willful": true,
+        "LPLC": { "expr": "A == B", "in": [ "A", "B" ] },
+        "manifest": { "type": "LPLC/Logic/COMP_EQ", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 }, "B": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='COMP_NE' s='{
+        "hint": "LPLC comparison: Q = A != B, 1 or 0",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTQgNS41aDggTTQgMTAuNWg4IE0xMC41IDIgNS41IDE0Ii8+PC9zdmc+",
+        "willful": true,
+        "LPLC": { "expr": "A != B", "in": [ "A", "B" ] },
+        "manifest": { "type": "LPLC/Logic/COMP_NE", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 }, "B": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='COMP_GT' s='{
+        "hint": "LPLC comparison: Q = A &gt; B, 1 or 0",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTUgMyAxMSA3LjUgNSAxMiIvPjwvc3ZnPg==",
+        "willful": true,
+        "LPLC": { "expr": "A &gt; B", "in": [ "A", "B" ] },
+        "manifest": { "type": "LPLC/Logic/COMP_GT", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 }, "B": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='COMP_GE' s='{
+        "hint": "LPLC comparison: Q = A &gt;= B, 1 or 0",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTUgMi41IDExIDYuNSA1IDEwLjUgTTUgMTNoNiIvPjwvc3ZnPg==",
+        "willful": true,
+        "LPLC": { "expr": "A &gt;= B", "in": [ "A", "B" ] },
+        "manifest": { "type": "LPLC/Logic/COMP_GE", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 }, "B": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='lAND' s='{
+        "hint": "LPLC logical AND of the connected inputs A..H: Q is 1 or 0, 1 if none is connected",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTMuNSAxMi41IDcuNSAzbDQgOS41Ii8+PC9zdmc+",
+        "willful": true,
+        "LPLC": { "op": "&amp;&amp;", "in": [ "A", "B", "C", "D", "E", "F", "G", "H" ] },
+        "manifest": { "type": "LPLC/Logic/lAND", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": {
+            "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+            "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='lNOT' s='{
+        "hint": "LPLC logical NOT: Q = !A, 1 or 0",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTMgNi41aDkuNVYxMCIvPjwvc3ZnPg==",
+        "willful": true,
+        "LPLC": { "expr": "!A", "in": [ "A" ] },
+        "manifest": { "type": "LPLC/Logic/lNOT", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='lOR' s='{
+        "hint": "LPLC logical OR of the connected inputs A..H: Q is 1 or 0, 0 if none is connected",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2ZmZjRjYyIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTMuNSAzIDcuNSAxMi41bDQtOS41Ii8+PC9zdmc+",
+        "willful": true,
+        "LPLC": { "op": "||", "in": [ "A", "B", "C", "D", "E", "F", "G", "H" ] },
+        "manifest": { "type": "LPLC/Logic/lOR", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": {
+            "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+            "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+    </i>
+    <i n='Math' m='{"attr":65}'>
+      <i n='ADD' s='{
+        "hint": "LPLC addition: Q is the sum of the connected inputs A..H, 0 if none is connected",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTcuNSA0djdNNCA3LjVoNyIvPjwvc3ZnPg==",
+        "willful": true,
+        "LPLC": { "op": "+", "in": [ "A", "B", "C", "D", "E", "F", "G", "H" ] },
+        "manifest": { "type": "LPLC/Math/ADD", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": {
+            "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+            "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='Div' s='{
+        "hint": "LPLC integer division: Q = A / B, both taken as integers, the quotient truncated",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTMgNy41aDkiLz48cGF0aCBkPSJNNyA0aDF2MUg3em0wIDZoMXYxSDd6Ii8+PC9zdmc+",
+        "willful": true,
+        "LPLC": { "expr": "Int32(A) / Int32(B)", "in": [ "A", "B" ] },
+        "manifest": { "type": "LPLC/Math/Div", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 1 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 }, "B": { "default": 1 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='fDiv' s='{
+        "hint": "LPLC float division: Q = A / B, both taken as float",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTEwLjUgMyA0LjUgMTIiLz48L3N2Zz4=",
+        "willful": true,
+        "LPLC": { "expr": "Float(A) / Float(B)", "in": [ "A", "B" ] },
+        "manifest": { "type": "LPLC/Math/fDiv", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 1 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": { "A": { "default": 0 }, "B": { "default": 1 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='Mul' s='{
+        "hint": "LPLC multiplication: Q is the product of the connected inputs A..H, 1 if none is connected",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTQuNSA0LjVsNiA2bTAtNi02IDYiLz48L3N2Zz4=",
+        "willful": true,
+        "LPLC": { "op": "*", "in": [ "A", "B", "C", "D", "E", "F", "G", "H" ] },
+        "manifest": { "type": "LPLC/Math/Mul", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": {
+            "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+            "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+      <i n='SUB' s='{
+        "hint": "LPLC subtraction: Q = A - B - ... - H; A is always the minuend (0 if not connected), the other inputs count only if connected",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMCIgZD0iTTQgNy41aDciLz48L3N2Zz4=",
+        "willful": true,
+        "LPLC": { "op": "-", "in": [ "A", "B", "C", "D", "E", "F", "G", "H" ] },
+        "manifest": { "type": "LPLC/Math/SUB", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "in": { "A": 0, "B": 0 }, "out": { "Q": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "in": { "mi": {
+            "A": { "default": 0 }, "B": { "default": 0 }, "C": { "default": 0 }, "D": { "default": 0 },
+            "E": { "default": 0 }, "F": { "default": 0 }, "G": { "default": 0 }, "H": { "default": 0 } } },
+          "out": { "mi": { "Q": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2610.27001' />
+    </i>
+    <i n='TWI' m='{"attr":65}'>
+      <i n='SCAN_BUS' s='{
+        "hint": "Scan TWI addresses 0x08..0x77 on a Scan rising edge; return Scan to 0 to rearm. Addr retains the last found address, or -1 until the first hit. Found addresses are logged at Info. Requires a configured, exclusive bus and PrintF-capable firmware.",
+        "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzI0MzQ0NyIgZD0iTTMuNSAxLjVoOXY1aC05ek0xIDEwLjVoOG0zIDBoM00xIDEzLjVoMTRNNS41IDYuNXY0bTUtNHY3Ii8+PGcgZmlsbD0iIzI0MzQ0NyI+PGNpcmNsZSBjeD0iNS41IiBjeT0iMTAuNSIgcj0iMSIvPjxjaXJjbGUgY3g9IjEwLjUiIGN5PSIxMy41IiByPSIxIi8+PC9nPjwvc3ZnPg==",
+        "willful": true,
+        "LPLC": { "args": [ "TwiNr" ], "in": [ "Scan" ],
+          "src": "class SCAN_BUS {\n  constructor(TwiNr) {\n    this.Bus = TwiNr;\n    this.Address = 0;\n    this.Waiting = false;\n    this.PreviousScan = false;\n    this.Addr = new Int32(-1);\n  }\n  Tick(Scan) {\n    let trigger = Scan &amp;&amp; !this.PreviousScan;\n    this.PreviousScan = !!Scan;\n    if(this.Address == 0) {\n      if(!trigger) return;\n      this.Address = 0x08;\n    }\n    let status = TwiBusStatus(this.Bus);\n    if(!this.Waiting) {\n      if(status != 0) return;\n      TwiBusControl(this.Bus, this.Address);\n      this.Waiting = true;\n      return;\n    }\n    if((status &amp; 0xF000) == 0) return;\n    if((status &amp; 0xF000) == 0x1000 &amp;&amp; (status &amp; 0xFF) == this.Address) {\n      this.Addr = this.Address;\n      this.Report();\n    }\n    this.Waiting = false;\n    this.Address++;\n    if(this.Address > 0x77) this.Address = 0;\n  }\n  Report() {\n    PrintF(LOG_INFO, \"TWI%d addr=%d\\x00\", this.Bus, this.Addr);\n  }\n}" },
+        "manifest": { "type": "LPLC/TWI/SCAN_BUS", "MQTT-SN": { "tag": "---" },
+                      "LPLC": { "pos": { "top": 0, "left": 0 }, "args": { "TwiNr": 0 }, "in": { "Scan": 0 }, "out": { "Addr": true }, "run": {} } },
+        "mi": { "LPLC": { "mi": {
+          "args": { "mi": { "TwiNr": { "cdr": 1, "label": "TWI", "editor": "Integer", "default": 0, "choices": { "provider": "bus", "kind": "twi", "scope": "configured" } } } },
+          "in": { "mi": { "Scan": { "default": 0 } } },
+          "out": { "mi": { "Addr": { "default": true } } } } } }
+      }' m='{"attr":69}' ver='0.5.2611.3003' />
+    </i>
+    <i n='TwiMaster' s='{
+      "hint":"TWI Master: initializes SDA/SCL in the constructor; Tick is empty",
+      "icon":"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iI2RjZmZmZiIgZD0iTTAgMGgxNnYxNkgweiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzI0MzQ0NyIgZD0iTTMuNSAxLjVoOXY1aC05ek0xIDEwLjVoOG0zIDBoM00xIDEzLjVoMTRNNS41IDYuNXY0bTUtNHY3Ii8+PGcgZmlsbD0iIzI0MzQ0NyI+PGNpcmNsZSBjeD0iNS41IiBjeT0iMTAuNSIgcj0iMSIvPjxjaXJjbGUgY3g9IjEwLjUiIGN5PSIxMy41IiByPSIxIi8+PC9nPjwvc3ZnPg==",
+       "LPLC":{"args":["SdaPin","SdaMode","SclPin","SclMode"],"in":[],
+         "provides":[{"kind":"twi","numberArg":"TwiNr"}],
+         "src":"class TwiMaster {\n  constructor(SdaPin, SdaMode, SclPin, SclMode) {\n    ConfigPin(SdaPin, SdaMode, 0);\n    ConfigPin(SclPin, SclMode, 0);\n  }\n  Tick() {}\n}"},
+       "manifest":{"type":"LPLC/TwiMaster","MQTT-SN":{"tag":"---"},
+                   "LPLC":{"pos":{"top":0,"left":0},"args":{},"in":{},"out":{},"run":{}}},
+       "mi":{"LPLC":{"mi":{"args":{"mi":{
+         "TwiNr":{"cdr":1,"label":"TWI","editor":"Integer","required":true,"choices":{"provider":"bus","kind":"twi","scope":"supported"}},
+         "SdaPin":{"cdr":2,"label":"SDA","choices":{"provider":"pin","kind":"twi","busArg":"TwiNr","role":"SDA","excludeArg":"SclPin"}},
+         "SclPin":{"cdr":3,"label":"SCL","choices":{"provider":"pin","kind":"twi","busArg":"TwiNr","role":"SCL","excludeArg":"SdaPin"}},
+         "SdaMode":{"cdr":0,"readonly":true,"derive":{"provider":"bus-mode","kind":"twi","busArg":"TwiNr","role":"SDA"}},
+         "SclMode":{"cdr":0,"readonly":true,"derive":{"provider":"bus-mode","kind":"twi","busArg":"TwiNr","role":"SCL"}}}}}}}
+     }' m='{"attr":69}' ver='0.5.2610.27005' />
+    <i n='Pin' s='{
+      "hint": "LPLC pin of the node: args pin, mode and option by the device description; input x for output modes, output value",
+      "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iIzU1NSIgZD0iTTUgMmg2djEySDV6Ii8+PHBhdGggc3Ryb2tlPSIjNTU1IiBkPSJNMiAzLjVoM20tMyAzaDNtLTMgM2gzbS0zIDNoM202LTloM20tMyAzaDNtLTMgM2gzbS0zIDNoMyIvPjwvc3ZnPg==",
+      "willful": true,
+      "manifest": { "type": "LPLC/Pin", "MQTT-SN": { "tag": "---" },
+                    "LPLC": { "pos": { "top": 0, "left": 0 }, "args": { "pin": 0, "mode": "IN" }, "in": { "x": 0 }, "out": { "value": true }, "run": {} } },
+      "mi": { "LPLC": { "mi": {
+        "args": { "mi": { "option": { "default": 0 } } },
+        "in": { "mi": { "x": { "default": 0 } } },
+        "out": { "mi": { "value": { "default": true } } } } } }
+    }' m='{"attr":69}' ver='0.5.2610.27001' />
+  </i>
+</xst>

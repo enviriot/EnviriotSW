@@ -28,6 +28,12 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="DevicePlcFloatTests.cs" />
+    <EmbeddedResource Include="Fixtures\BME280.xst" LogicalName="X13.Tests.BME280.xst" />
+    <EmbeddedResource Include="Fixtures\HDC1080.xst" LogicalName="X13.Tests.HDC1080.xst" />
+  </ItemGroup>
+
   <!-- Test.Sdk даёт хост и интеграцию со сборкой: без него vstest.console проект не подхватит.
        Адаптер называется NUnit3TestAdapter по историческим причинам - его 6.x обслуживает NUnit 4,
        и никакого NUnit4TestAdapter не существует.

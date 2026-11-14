@@ -203,7 +203,7 @@ namespace X13.WebUI {
       List<MenuItemDto> addItems = new List<MenuItemDto>();
       foreach(KeyValuePair<string, AddActionEntry> action in actions.OrderBy(z => z.Key, StringComparer.Ordinal)) {
         if(ResourceBusy(topic, actions, action.Key, action.Value.Action)) continue;
-        addItems.Add(BuildAddItem(action.Key, action.Value.Action, action.Value.SourcePath));
+        addItems.Add(BuildAddItem(action.Key, action.Value.Action, action.Value.SourcePath, action.Value.Menu));
       }
       if(addItems.Count == 0) return;
 
@@ -239,6 +239,9 @@ namespace X13.WebUI {
     internal sealed class AddActionEntry {
       public JSC.JSValue Action;
       public string SourcePath;
+      // Submenu given by the catalog folder the action sits in (Math for
+      // /$YS/TYPES/LPLC/Math/ADD under "Children":"/$YS/TYPES/LPLC"); null - none.
+      public string Menu;
     }
 
     internal static Dictionary<string, AddActionEntry> ResolveAddActions(Topic topic) {
@@ -292,12 +295,19 @@ namespace X13.WebUI {
       }
     }
 
-    private static void AddActionsFromTopicChildren(Topic source, Dictionary<string, AddActionEntry> actions) {
+    // A child that is no action itself is a group folder of the catalog: its actions
+    // go into a submenu named after it, so a catalog can be grouped the way
+    // /$YS/TYPES/LoBlock is, without each type repeating its group in "menu".
+    private static void AddActionsFromTopicChildren(Topic source, Dictionary<string, AddActionEntry> actions, string group = null) {
       if(source == null) return;
       foreach(Topic child in source.children) {
-        if(child == null || child.disposed || actions.ContainsKey(child.name)) continue;
+        if(child == null || child.disposed) continue;
         JSC.JSValue state = child.GetState();
-        if(IsAddAction(state)) actions.Add(child.name, new AddActionEntry() { Action = state, SourcePath = source.path });
+        if(!IsAddAction(state)) {
+          AddActionsFromTopicChildren(child, actions, group == null ? child.name : group + "/" + child.name);
+        } else if(!actions.ContainsKey(child.name)) {
+          actions.Add(child.name, new AddActionEntry() { Action = state, SourcePath = source.path, Menu = group });
+        }
       }
     }
 
@@ -311,8 +321,9 @@ namespace X13.WebUI {
     // to real ddr'd pins not already present) rather than going through
     // ResolveAddActions - that method's Core-fallback (for typeless topics) doesn't
     // make sense on a Logram canvas element, so it deliberately isn't reused here.
-    internal static MenuItemDto BuildAddItem(string key, JSC.JSValue action, string sourcePath) {
+    internal static MenuItemDto BuildAddItem(string key, JSC.JSValue action, string sourcePath, string group = null) {
       string menu = action.AsString("menu", null);
+      if(group != null) menu = string.IsNullOrWhiteSpace(menu) ? group : group + "/" + menu;
       string hint = action.AsString("hint", null);
       MenuItemDto item = new MenuItemDto() {
         Kind = MenuItemKind.Item,

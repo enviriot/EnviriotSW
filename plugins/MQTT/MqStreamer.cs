@@ -52,11 +52,8 @@ namespace X13.MQTT {
       }
     }
 
-    /// <summary> Send Message to broker</summary>
-    /// <param name="msg">MQTT message</param>
-    /// <remarks>Upon receipt of subscription switches to pause.
-    /// Resumes at a pause in the receive of data over 300 ms.
-    /// When paused publish are not sent</remarks>
+    /// <summary>Передаёт пакет асинхронно или ставит в очередь.</summary>
+    /// <param name="msg">Пакет MQTT.</param>
     public void Send(MqMessage msg) {
       if(msg.QualityOfService!=QoS.AtMostOnce && msg.MessageID==0) {
         int tmp=Interlocked.Increment(ref _messageIdGen);
@@ -67,12 +64,18 @@ namespace X13.MQTT {
         tmp^=0x8000;
         msg.MessageID=(ushort)tmp;
       }
-      if(Interlocked.Exchange(ref _sendProcessed, 1)==0) {
-        SendIntern(msg);
-      } else {
-        lock(_sendQ) {
+      bool start;
+      // Проверка занятости, постановка и освобождение отправителя используют одну блокировку.
+      lock(_sendQ) {
+        start = _sendProcessed == 0;
+        if(start) {
+          _sendProcessed = 1;
+        } else {
           _sendQ.Enqueue(msg);
         }
+      }
+      if(start) {
+        SendIntern(msg);
       }
     }
 
@@ -92,6 +95,9 @@ namespace X13.MQTT {
       MqMessage msg;
       lock(_sendQ) {
         msg=_sendQ.Count>0?_sendQ.Dequeue():null;
+        if(msg == null) {
+          _sendProcessed = 0;
+        }
         if(_sendQ.Count==32) {
           _sendQ.TrimExcess();
         }
@@ -99,7 +105,6 @@ namespace X13.MQTT {
       if(msg!=null) {
         SendIntern(msg);
       } else {
-        _sendProcessed=0;
         if(_waitAck.Count>0) {
           _sendTimer.Change(900, Timeout.Infinite);
         } else {
@@ -178,7 +183,7 @@ namespace X13.MQTT {
               _rcvBuf[0] = (byte)_stream.ReadByte();
             }
             switch(_rcvState) {
-            case 0:           // header
+            case 0:           // Первый байт фиксированного заголовка.
               _rcvHeader = _rcvBuf[0];
               _rcvLengt = 0;
               _rcvLengthPos = 0;
@@ -221,7 +226,7 @@ namespace X13.MQTT {
                         nid++;
                       }
                       if(nid > (int)_messageIdGen || (nid > 0xFF00 && _messageIdGen < 0x0100)) {
-                        _messageIdGen = (ushort)nid;      // synchronize messageId
+                        _messageIdGen = (ushort)nid;      // Согласуем генератор идентификаторов с принятым пакетом.
                       }
                     }
                   }
@@ -231,7 +236,7 @@ namespace X13.MQTT {
                 }
 
                 if(_waitAck.Count > 0) {
-                  _sendTimer.Change(900, Timeout.Infinite); // connection is busy
+                  _sendTimer.Change(900, Timeout.Infinite); // Приём пакета откладывает повтор ожидающего подтверждения.
                 }
               }
               break;
@@ -326,7 +331,7 @@ namespace X13.MQTT {
       public byte cnt;
     }
   }
-  /// <summary>Quality of service levels</summary>
+  /// <summary>Значения QoS в модели пакетов.</summary>
   public enum QoS : byte {
     AtMostOnce = 0,
     AtLeastOnce = 1,

@@ -31,6 +31,10 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(Assignment node) {
+      var aoc = node.Children[0] as AssignmentOperatorCache;
+      if(aoc != null) {   // this.X += v: тип поля - тип выражения this.X + v
+        DeclareUpdatedField(node, aoc.Source as Property, node.Children[1] as Expression);
+      }
       node.Children[1].Visit(this);
       node.Children[0].Visit(this);
       return this;
@@ -40,6 +44,7 @@ namespace X13.DevicePLC {
         node.Arguments[i].Visit(this);
       }
       node.Children[0].Visit(this);
+      _compiler.DeferCall(node);
       return this;
     }
     protected override EP_VP1 Visit(ClassDefinition node) {
@@ -52,8 +57,8 @@ namespace X13.DevicePLC {
       //  m.fName=m.fName.Remove(idx, 12);
       //}
       //mc.scope.memory.AddRange(ctor.scope.memory.Where(z => IsProperty(z.type)));
-      mc.scope.AllocatFields();
-      
+      // поля размечает EP_Compiler.Parse после VP1: они появляются и в методах, и снаружи
+
       foreach(var fv in node.Members.Where(z => z.Value is FunctionDefinition && z.Name is Constant)) {
         var fm = mc.scope.GetProperty((fv.Name as Constant).Value.ToString(), EP_Type.FUNCTION);
         DefineFunction(fv.Value as FunctionDefinition, fm, mc.scope.memory);
@@ -65,6 +70,7 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP1 Visit(Decrement node) {
+      DeclareUpdatedField(node, node.Children[0] as Property, null);
       node.Children[0].Visit(this);
       return this;
     }
@@ -118,6 +124,7 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(Increment node) {
+      DeclareUpdatedField(node, node.Children[0] as Property, null);
       node.Children[0].Visit(this);
       return this;
     }
@@ -179,7 +186,8 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(Comma node) {
-      return Visit(node as Expression);
+      foreach(var child in node.Children) child.Visit(this);
+      return this;
     }
     protected override EP_VP1 Visit(BitwiseNegation node) {
       node.Children[0].Visit(this);
@@ -231,20 +239,7 @@ namespace X13.DevicePLC {
       EP_Compiler.Scope sc;
       Call ca;
 
-      if((f = node.Source as Variable) != null && (m = _compiler.GetMerker(f.Descriptor)).type == EP_Type.REFERENCE) {
-        sc = m.scope;
-      } else if(node.Source is This) {
-        sc = _compiler.cur;
-        while(sc.fm.type!=EP_Type.CLASS) {
-          sc = sc._parent;
-          if(sc==null) {
-            sc = _compiler.cur;
-            break;
-          }
-        }
-      } else {
-        throw new NotSupportedException(node.Source.ToString() + " as object");
-      }
+      sc = FieldScope(node, node.Source);
       if((c = node.FieldName as Constant) == null || c.Value == null || c.Value.ValueType != JSValueType.String) {
         throw new NotSupportedException(node.Source.ToString() + "." + node.FieldName.ToString() + " as FieldName");
       }
@@ -270,26 +265,35 @@ namespace X13.DevicePLC {
         case "Int32":
           t = EP_Type.PropS4;
           break;
+        case "Float":
+          t = EP_Type.PropF4;
+          break;
         default:
           t = EP_Type.NONE;
           break;
         }
         if(t == EP_Type.NONE && ca.CallMode == CallMode.Construct) {
-          throw new NotSupportedException("enclosed constructor"+ node.ToString());
-        } else {
-          if(t == EP_Type.NONE) {
-            t = EP_Type.PropS4;
+          if(_compiler.IsPinCtor(ca)) {
+            throw new NotSupportedException(_compiler.Where(node) + node.ToString() + ": Pin must be declared with var at the top level");
           }
-          sc.GetProperty(c.Value.ToString(), t);
+          throw new NotSupportedException("enclosed constructor"+ node.ToString());
+        } else if(t == EP_Type.NONE) {   // значение - вызов функции: тип поля выведет InferTypes
+          node.Value.Visit(this);
+          _compiler.DeferType(sc.GetProperty(c.Value.ToString(), EP_Type.PropS4), node.Value as Expression);
+        } else {
+          sc.GetProperty(c.Value.ToString(), t).explicitType = true;
         }
       } else if((c1 = node.Value as Constant) != null && c1.Value != null && c1.Value.ValueType == JSValueType.Boolean) {
         sc.GetProperty(c.Value.ToString(), EP_Type.PropB1);
+      } else if(EP_Compiler.IsFloatConst(node.Value as Constant)) {
+        sc.GetProperty(c.Value.ToString(), EP_Type.PropF4);
       } else if((fd = node.Value as FunctionDefinition) != null) {
         m=sc.GetProperty(c.Value.ToString(), EP_Type.FUNCTION);
         DefineFunction(fd, m, sc.memory);
       } else {
         node.Value.Visit(this);
-        sc.GetProperty(c.Value.ToString(), EP_Type.PropS4);
+        // тип выведет InferTypes: this.M = this.M * 0.75 + B * 0.25 иначе стало бы целым
+        _compiler.DeferType(sc.GetProperty(c.Value.ToString(), EP_Type.PropS4), node.Value as Expression);
       }
       return this;
     }
@@ -324,7 +328,7 @@ namespace X13.DevicePLC {
     protected override EP_VP1 Visit(Conditional node) {
       node.Children[0].Visit(this);
       node.Branches[0].Visit(this);
-      if (node.Children.Count() > 1) {
+      if(node.Branches.Count > 1) {
         node.Branches[1].Visit(this);
       }
       return this;
@@ -333,6 +337,7 @@ namespace X13.DevicePLC {
       return this;
     }
     protected override EP_VP1 Visit(ConvertToInteger node) {
+      node.Children[0].Visit(this);
       return this;
     }
     protected override EP_VP1 Visit(ConvertToNumber node) {
@@ -342,7 +347,8 @@ namespace X13.DevicePLC {
       return Visit(node as Expression);
     }
     protected override EP_VP1 Visit(ConvertToUnsignedInteger node) {
-      return Visit(node as Expression);
+      node.Children[0].Visit(this);
+      return this;
     }
     protected override EP_VP1 Visit(TypeOf node) {
       return Visit(node as Expression);
@@ -435,6 +441,13 @@ namespace X13.DevicePLC {
     }
     protected override EP_VP1 Visit(Return node) {
       if(node.Value != null) {
+        var fm = _compiler.cur.fm;
+        if(fm != null) {   // для EP_Compiler.InferTypes
+          if(fm.returns == null) {
+            fm.returns = new List<Expression>();
+          }
+          fm.returns.Add(node.Value);
+        }
         node.Value.Visit(this);
       }
       return this;
@@ -470,8 +483,13 @@ namespace X13.DevicePLC {
           continue;
         }
         if((a1 = node.Initializers[i] as Assignment) != null && (v = a1.Children[0] as Variable) != null) {
+          if(_compiler.IsPinCtor(a1.Children[1] as Expression)) {
+            _compiler.DefinePin(v.Descriptor, (Call)a1.Children[1]);   // let и var в функции DefinePin отвергнет
+            continue;
+          }
           if(v.Descriptor.IsLexicalScoped) {
-            _compiler.DefineMerker(v.Descriptor);  // Local
+            m = _compiler.DefineMerker(v.Descriptor);  // Local
+            _compiler.DeferType(m, a1.Children[1] as Expression);
             a1.Children[1].Visit(this);
             continue;
           } else {
@@ -498,6 +516,9 @@ namespace X13.DevicePLC {
                 break;
               case "Int32":
                 t = EP_Type.SINT32;
+                break;
+              case "Float":
+                t = EP_Type.FLOAT;
                 break;
               case "Uint8Array":
               case "Uint16Array":
@@ -551,7 +572,7 @@ namespace X13.DevicePLC {
                   i1._param = m;
                   i1._cn = v;
                   m.init = ca.Arguments[0];
-                  m.pOut = cnt;
+                  m.ElementCount = cnt;
                   continue;
                 } else {
                   throw new NotSupportedException("P1: " + ca.ToString());
@@ -568,14 +589,23 @@ namespace X13.DevicePLC {
                   m.scope = m1.scope;
                 }
                 m.type = EP_Type.REFERENCE;
+                foreach(var arg in ca.Arguments) {
+                  arg.Visit(this);
+                }
+                _compiler.DeferCall(ca);   // аргументы задают тип параметров конструктора
                 continue;
               } else {
                 m = _compiler.DefineMerker(v.Descriptor, t);
+                if(t == EP_Type.NONE) {   // var b = f(x): тип - тип результата вызова
+                  _compiler.DeferType(m, ca);
+                }
               }
             } else if((c = a1.Children[1] as Constant) != null && c.Value != null && c.Value.ValueType == JSValueType.Boolean) {
               m = _compiler.DefineMerker(v.Descriptor, EP_Type.BOOL);
             } else {
+              // var b = 1.5, var b = Math.round(a * 10) / 10: Md, пока InferTypes не найдёт float
               m = _compiler.DefineMerker(v.Descriptor, EP_Type.SINT32);
+              _compiler.DeferType(m, a1.Children[1] as Expression);
             }
           }
         }
@@ -605,15 +635,52 @@ namespace X13.DevicePLC {
         }
         var m = _compiler.DefineMerker(node.Parameters[i], EP_Type.PARAMETER);
         m.Addr = (uint)i + 1;
+        _compiler.DeferType(m, node.Parameters[i].Initializer);   // function f(a = Float(0))
       }
       node.Body.Visit(this);
-      if(parentMemory==null) {
-        fm.scope.AllocatFields();
-      }
       _compiler.ScopePop();
     }
     private static bool IsProperty(EP_Type type) {
-      return type == EP_Type.PropB1 || type == EP_Type.PropS1 || type == EP_Type.PropS2 || type == EP_Type.PropS4 || type == EP_Type.PropU1 || type == EP_Type.PropU2;
+      return type == EP_Type.PropB1 || type == EP_Type.PropS1 || type == EP_Type.PropS2 || type == EP_Type.PropS4 || type == EP_Type.PropU1 || type == EP_Type.PropU2 || type == EP_Type.PropF4;
+    }
+    /// <summary>Область полей, куда пишет node: экземпляр obj (REFERENCE) или this ближайшего класса.</summary>
+    private EP_Compiler.Scope FieldScope(CodeNode node, CodeNode source) {
+      Variable f;
+      EP_Compiler.Merker m;
+      EP_Compiler.Scope sc;
+      if((f = source as Variable) != null && (m = _compiler.GetMerker(f.Descriptor)) != null && m.type == EP_Type.REFERENCE) {
+        if(m.pin != null) {   // иначе новое поле попало бы в PinScope, общую для всех экземпляров
+          throw new NotSupportedException(_compiler.Where(node) + node.ToString() + ": Pin output is set by Tick only");
+        }
+        return m.scope;
+      }
+      if(source is This) {
+        sc = _compiler.cur;
+        while(sc.fm.type!=EP_Type.CLASS) {
+          sc = sc._parent;
+          if(sc==null) {
+            sc = _compiler.cur;
+            break;
+          }
+        }
+        return sc;
+      }
+      throw new NotSupportedException(source.ToString() + " as object");
+    }
+    /// <summary>Поле, которое пишет this.X += v, this.X++ или --obj.X, объявляется, как при this.X = v.</summary>
+    /// <remarks>NiL разбирает их не в SetProperty, а в Assignment или Increment над Property. Поле, которое
+    /// только накапливается, прежде не размечалось, и VP2 падал "Field name in this.X". Уже объявленное поле
+    /// свой тип сохраняет; value - выражение, по которому InferTypes сделает поле float.</remarks>
+    private void DeclareUpdatedField(CodeNode node, Property p, Expression value) {
+      Constant c;
+      if(p == null) {
+        return;
+      }
+      var sc = FieldScope(node, p.Source);
+      if((c = p.FieldName as Constant) == null || c.Value == null || c.Value.ValueType != JSValueType.String) {
+        throw new NotSupportedException(p.Source.ToString() + "." + p.FieldName.ToString() + " as FieldName");
+      }
+      _compiler.DeferType(sc.GetProperty(c.Value.ToString(), EP_Type.PropS4), value);
     }
 
   }

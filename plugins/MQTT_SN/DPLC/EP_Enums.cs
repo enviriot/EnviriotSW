@@ -31,6 +31,19 @@ namespace X13.DevicePLC {
     DEC,
     NEG,
 
+    // Float-команды (float - 32 бита IEEE-754 в той же ячейке стека, что и int).
+    // Исходников прошивки здесь нет, поэтому допущения компилятора: все команды однобайтовые,
+    // порядок операндов как у целых (a b FSUB -> a-b, a b FCGT -> a>b), сравнения и FIS*/FCZE
+    // кладут 0/1, FROUND/FTRUNC дают float.
+    FADD = 0x18,
+    FSUB,
+    FMUL,
+    FDIV,
+    FNEG,
+    FABS,
+    FMIN,
+    FMAX,
+
     CEQ = 0x20,
     CNE,
     CGT,
@@ -38,6 +51,24 @@ namespace X13.DevicePLC {
     CLT,
     CLE,
     CZE,
+
+    FCEQ = 0x28,
+    FCNE,
+    FCGT,
+    FCGE,
+    FCLT,
+    FCLE,
+    FCZE,
+    FISFINITE,
+
+    S32TOF = 0x30,
+    U32TOF,
+    FTOS32,
+    FTOU32,
+    FROUND,
+    FTRUNC,
+    FISNAN,
+    FISINF,
 
     LDI_0 = 0x38,
     LDI_S1,
@@ -198,6 +229,7 @@ namespace X13.DevicePLC {
     UINT16,
     SINT16,
     SINT32,
+    FLOAT,
     U8_CARR,
     I8_CARR,
     U16_CARR,
@@ -209,6 +241,7 @@ namespace X13.DevicePLC {
     PropU2,
     PropS2,
     PropS4,
+    PropF4,
     REFERENCE,
     INPUT,
     OUTPUT,
@@ -217,5 +250,19 @@ namespace X13.DevicePLC {
     API,
     FUNCTION,
     CLASS,
+    CONST,      // константа времени компиляции, значение - в Addr; в память не попадает
+  }
+  /// <summary>Тип значения на стеке VM: выбирает целую или float-команду и нужное приведение.</summary>
+  internal enum EP_ValType {
+    Int,
+    UInt,    // только результат UInt32(x) и >>>: отличается от Int лишь приведением к float
+    Float,
+  }
+  /// <summary>Узел, для которого компилируется программа.</summary>
+  /// <remarks>Байткод и протокол загрузки у них общие, а набор API-функций разный: на EspNode пины и порты
+  /// настраивает сама программа (ConfigPin), есть вторая шина TWI и нет UartInit.</remarks>
+  internal enum EP_Target {
+    X13,        // объект управления pa0
+    EspNode,    // pa1
   }
 }

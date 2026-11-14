@@ -24,6 +24,8 @@ namespace X13.Periphery {
     private const ushort LOG_I_ID = 0xFFE1;
     private const ushort LOG_W_ID = 0xFFE2;
     private const ushort LOG_E_ID = 0xFFE3;
+    private const ushort AVAILABLE_PINS = 0xFFD8;
+    private const ushort AVAILABLE_UARTS = 0xFFD9;
     private static readonly Random _rand;
     private static Func<string, JSC.JSValue> _createConv;
     private static byte[] _baEmty = new byte[0];
@@ -60,6 +62,8 @@ namespace X13.Periphery {
           } while(vo < 0 ? (v < -1 || (ret[ret.Count - 1] & 0x80) == 0) : (v > 0 || (ret[ret.Count - 1] & 0x80) != 0));
           return ret.ToArray();
         }
+      case DType.Float:   // IEEE-754, 4 байта little-endian - как float в VM
+        return BitConverter.GetBytes((float)(double)val);
       case DType.String: {
           string s = val.AsString(null);
           if(string.IsNullOrEmpty(s)) {
@@ -262,6 +266,7 @@ namespace X13.Periphery {
       return false;
     }
     public void Connect(MsConnect msg) {
+      _lastInPub = null;
       if(msg.CleanSession) {
         foreach(var s in _subsscriptions) {
           s.Dispose();
@@ -395,8 +400,9 @@ namespace X13.Periphery {
             ti = GetTopicInfo(tmp.TopicPath, false);
             if(ti != null) {
               Send(new MsRegAck(ti.TopicId, tmp.MessageId, MsReturnCode.Accepted));
-              if(((ti.dType & DType.TypeMask) == DType.Boolean || (ti.dType & DType.TypeMask) == DType.Integer) && !ti.topic.GetState().Defined) {
-                SetValue(ti, new byte[] { 0 }, false);
+              var tm = ti.dType & DType.TypeMask;
+              if((tm == DType.Boolean || tm == DType.Integer || tm == DType.Float) && !ti.topic.GetState().Defined) {
+                SetValue(ti, tm == DType.Float ? new byte[4] : new byte[] { 0 }, false);   // float - всегда 4 байта
               }
             } else {
               Send(new MsRegAck(0, tmp.MessageId, MsReturnCode.NotSupportes));
@@ -447,19 +453,22 @@ namespace X13.Periphery {
           if(ti == null && tmp.topicIdType != TopicIdType.Normal) {
             ti = GetTopicInfo(tmp.TopicId, tmp.topicIdType, false);
           }
+          bool availability = tmp.topicIdType == TopicIdType.PreDefined && (tmp.TopicId == AVAILABLE_PINS || tmp.TopicId == AVAILABLE_UARTS);
+          bool validPayload = !availability || tmp.Data != null && tmp.Data.Length == (tmp.TopicId == AVAILABLE_PINS ? 5 : 1);
+          if(!validPayload) Log.Warning("{0}: invalid availability report {1:X4}, expected {2} bytes", owner.path, tmp.TopicId, tmp.TopicId == AVAILABLE_PINS ? 5 : 1);
           if(tmp.qualityOfService == QoS.AtMostOnce || (tmp.qualityOfService == QoS.MinusOne && (tmp.topicIdType == TopicIdType.PreDefined || tmp.topicIdType == TopicIdType.ShortName))) {
             ResetTimer(0, msg);
           } else if(tmp.qualityOfService == QoS.AtLeastOnce) {
             SyncMsgId(tmp.MessageId, msg);
-            Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
+            Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null && validPayload ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
           } else if(tmp.qualityOfService == QoS.ExactlyOnce) {
             SyncMsgId(tmp.MessageId, msg);
             // QoS2 not supported, use QoS1
-            Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
+            Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null && validPayload ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
           } else {
             throw new NotSupportedException("QoS -1 not supported " + owner.path);
           }
-          if(ti != null 
+          if(ti != null && validPayload
             && (!tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId)) {  // else arready recieved
 
             _lastInPub = tmp;
@@ -482,23 +491,8 @@ namespace X13.Periphery {
                 _has_RTC = true;
               }
               break;
-            case DType.LOG: {
-                string str = string.Format("{0} msgId={2:X4}  msg={1}", owner.name, tmp.Data == null ? "null" : (BitConverter.ToString(tmp.Data) + "[" + Encoding.ASCII.GetString(tmp.Data.Select(z => (z < 0x20 || z > 0x7E) ? (byte)'.' : z).ToArray()) + "]"), tmp.MessageId);
-                switch(tmp.TopicId) {
-                case LOG_D_ID:
-                  Log.Debug("{0}", str);
-                  break;
-                case LOG_I_ID:
-                  Log.Info("{0}", str);
-                  break;
-                case LOG_W_ID:
-                  Log.Warning("{0}", str);
-                  break;
-                case LOG_E_ID:
-                  Log.Error("{0}", str);
-                  break;
-                }
-              }
+            case DType.LOG:
+              LogRecord(owner.name, tmp);
               break;
             case DType.TWI:
             case DType.PLC: {
@@ -625,21 +619,7 @@ namespace X13.Periphery {
               } else if(fm.msg.MsgTyp == MsMessageType.PUBLISH && (fm.msg as MsPublish).qualityOfService == QoS.MinusOne) {
                 var tmp = fm.msg as MsPublish;
                 if(tmp.topicIdType == TopicIdType.PreDefined && tmp.TopicId >= LOG_D_ID && tmp.TopicId <= LOG_E_ID) {
-                  string str = string.Format("{0}: msgId={2:X4} msg={1}", BitConverter.ToString(this.addr), tmp.Data == null ? "null" : (BitConverter.ToString(tmp.Data) + "[" + Encoding.ASCII.GetString(tmp.Data.Select(z => (z < 0x20 || z > 0x7E) ? (byte)'.' : z).ToArray()) + "]"), tmp.MessageId);
-                  switch(tmp.TopicId) {
-                  case LOG_D_ID:
-                    Log.Debug(str);
-                    break;
-                  case LOG_I_ID:
-                    Log.Info(str);
-                    break;
-                  case LOG_W_ID:
-                    Log.Warning(str);
-                    break;
-                  case LOG_E_ID:
-                    Log.Error(str);
-                    break;
-                  }
+                  LogRecord(BitConverter.ToString(this.addr), tmp);
                 }
               } else {
                 if(_pl.verbose) {
@@ -761,7 +741,7 @@ namespace X13.Periphery {
             } else {
               return null;
             }
-          } else if((tag = siv.AsString(null)) == "---") {
+          } else if((tag = siv.AsString(null)) == "---" || X13.LogramPLC.LP_Tree.IsUnboundMerker(tag)) {
             return null;
           }
         }
@@ -789,10 +769,11 @@ namespace X13.Periphery {
           _topics.Add(rez);
         }
         var extMask = rez.dType & DType.ExtensionType;
+        var plc = DevicePLC.TargetOf(rez.tag);
         if(extMask == DType.TWI && rez.tag.StartsWith("Ta")) {
           rez.extension = new TWI(rez.topic, rez.PublishWithPayload);
-        } else if(extMask == DType.PLC && rez.tag == "pa0") {
-          var p = new DevicePLC(rez.topic, rez.PublishWithPayload);
+        } else if(extMask == DType.PLC && plc != null) {
+          var p = new DevicePLC(rez.topic, rez.PublishWithPayload, plc.Value);
           rez.extension = p;
           _pl._plcs.Add(p);
         }
@@ -862,15 +843,30 @@ namespace X13.Periphery {
           if(tag.StartsWith("Ta")) {
             cur.SetField("type", "TWI", owner);
             cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
-          } else if(tag == "pa0") {
-            cur.SetField("type", "Ext/DevicePLC", owner);
-            cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Internal);
+          }
+        }
+        // Не только новому топику: pa1, зарегистрированный узлом до поддержки EspNode, остался простым
+        // массивом байт - без типа у него нет ни редактора PLC, ни src. Так же и pa1 с прежним типом
+        // Ext/DevicePLC получает свой: по нему его узнают MQTT_SN и WebUI, у него и меню Add блоков LPLC.
+        var plc = DevicePLC.TargetOf(tag);
+        string plcType = plc == X13.DevicePLC.EP_Target.EspNode ? X13.LogramPLC.LP_Schema.PLC_TYPE : "Ext/DevicePLC";
+        if(plc != null && cur.GetField("type").AsString(null) != plcType) {
+          cur.SetField("type", plcType, owner);
+          cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Internal);
+          if(plc == X13.DevicePLC.EP_Target.X13) {   // у pa1 программа - блоки LPLC, рукописного src нет
+            bool fresh = cur.Get("src", false, owner) == null;
             var src = cur.Get("src", true, owner);
             src.SetField("editor", "JS", owner);
             src.SetField("MQTT-SN.tag", "---", owner);
             src.SetAttribute(Topic.Attribute.Required | Topic.Attribute.DB | Topic.Attribute.Internal);
-            src.SetState("", owner);
+            if(fresh) {
+              src.SetState("", owner);
+            }
           }
+        }
+        // Меню Add у pa1 теперь даёт тип; собственное, записанное прежней версией, его бы перекрыло.
+        if(plc == X13.DevicePLC.EP_Target.EspNode && cur.GetField("Children").Defined) {
+          cur.SetField("Children", JSC.JSValue.Null, owner);
         }
       }
       ti = GetTopicInfo(cur, sendRegister, tag);
@@ -944,7 +940,8 @@ namespace X13.Periphery {
         UpdateConverters(ti);
         UpdateSuppressedInputs();
       }
-      if(ti == null && (p.Kind == EventKind.StateChanged || p.Kind == EventKind.Snapshot)) {
+      // FieldChanged без TopicInfo - тег стал полным: переменная LPLC получила меркер компиляцией.
+      if(ti == null && (p.Kind == EventKind.StateChanged || p.Kind == EventKind.Snapshot || p.Kind == EventKind.FieldChanged)) {
         ti = GetTopicInfo(p.Source, true);
       }
       if(ti == null || ti.TopicId >= 0xFFC0 || !ti.registred) {
@@ -985,6 +982,16 @@ namespace X13.Periphery {
         if(!ti.topic.path.StartsWith(owner.path)) {
           return;     // not allowed publish
         }
+        if(ti.it == TopicIdType.PreDefined && (ti.TopicId == AVAILABLE_PINS || ti.TopicId == AVAILABLE_UARTS)) {
+          if(msgData == null || msgData.Length != (ti.TopicId == AVAILABLE_PINS ? 5 : 1)) return;
+          string field = ti.tag.Substring(1);
+          JSC.JSValue report = ti.TopicId == AVAILABLE_PINS ? (JSC.JSValue)new ByteArray(msgData.ToArray()) : (JSC.JSValue)(int)msgData[0];
+          ti.topic.SetField(field, report, owner);
+          string descriptor = "mi.MQTT-SN.mi." + field.Substring("MQTT-SN.".Length);
+          ti.topic.SetField(descriptor + ".attr", 2, owner);
+          ti.topic.SetField(descriptor + ".editor", ti.TopicId == AVAILABLE_PINS ? "ByteArray" : "Integer", owner);
+          return;
+        }
         JSC.JSValue val;
         switch(ti.dType & DType.TypeMask) {
         case DType.Boolean:
@@ -998,6 +1005,15 @@ namespace X13.Periphery {
             }
             val = new JSL.Number(rv);
           }
+          break;
+        case DType.Float:
+          if(msgData.Length != 4) {
+            if(_pl.verbose) {
+              Log.Warning("{0} - float expects 4 bytes, got {1}", ti.topic.path, BitConverter.ToString(msgData));
+            }
+            return;
+          }
+          val = new JSL.Number(BitConverter.ToSingle(msgData, 0));
           break;
         case DType.String:
           val = new JSL.String(Encoding.Default.GetString(msgData));
@@ -1147,6 +1163,32 @@ namespace X13.Periphery {
         _suppressedInputs = si.ToArray();
         Send(new MsPublish(0xFF09, _suppressedInputs)); //".MQTT-SN.SupressInputs"
       }
+    }
+
+    /// <summary>Запись журнала узла (.Log.Debug..Log.Error) - в журнал сервера с тем же уровнем.</summary>
+    /// <remarks>Текст - аргумент, а не формат Log: фигурная скобка из PrintF иначе превратила бы запись
+    /// в "Bad format".</remarks>
+    private static void LogRecord(string source, MsPublish msg) {
+      string text = LogText(msg.Data);
+      switch(msg.TopicId) {
+      case LOG_D_ID:
+        Log.Debug("{0} msgId={1:X4} msg={2}", source, msg.MessageId, text);
+        break;
+      case LOG_I_ID:
+        Log.Info("{0} msgId={1:X4} msg={2}", source, msg.MessageId, text);
+        break;
+      case LOG_W_ID:
+        Log.Warning("{0} msgId={1:X4} msg={2}", source, msg.MessageId, text);
+        break;
+      case LOG_E_ID:
+        Log.Error("{0} msgId={1:X4} msg={2}", source, msg.MessageId, text);
+        break;
+      }
+    }
+    /// <summary>Текст записи журнала узла; непечатаемые байты заменяются точкой.</summary>
+    /// <remarks>Без HEX-дампа: записи - ASCII-текст PrintF/SendByte, и дамп только удваивал строку.</remarks>
+    internal static string LogText(byte[] data) {
+      return data == null ? "null" : Encoding.ASCII.GetString(data.Select(z => (z < 0x20 || z > 0x7E) ? (byte)'.' : z).ToArray());
     }
 
     private int BCD2int(int c) {
@@ -1359,6 +1401,7 @@ namespace X13.Periphery {
       Integer = 2,
       String = 3,
       ByteArray = 4,
+      Float = 5,
       TypeMask = 0xFF,
       RTC = 0x100,
       LOG = 0x200,
@@ -1393,6 +1436,7 @@ namespace X13.Periphery {
       new Tuple<string, DType>("Md", DType.Integer),   //int32
       new Tuple<string, DType>("MD", DType.Integer),   //uint32
       new Tuple<string, DType>("Mq", DType.Integer),   //int64
+      new Tuple<string, DType>("Mf", DType.Float),     //float, адресуется словами как Md
 
       new Tuple<string, DType>("Ms", DType.String),
 
@@ -1410,6 +1454,7 @@ namespace X13.Periphery {
       new Tuple<string, DType>("Xd", DType.Integer),   //int32
       new Tuple<string, DType>("XD", DType.Integer),   //uint32
       new Tuple<string, DType>("Xq", DType.Integer),   //int64
+      new Tuple<string, DType>("Xf", DType.Float),     //float
       new Tuple<string, DType>("Xs", DType.String),
       new Tuple<string, DType>("Xa", DType.ByteArray),
 
@@ -1443,6 +1488,8 @@ namespace X13.Periphery {
       new Tuple<ushort, string, DType>(0xFFC4, ".MQTT-SN.phy4_addr",      DType.ByteArray),
       new Tuple<ushort, string, DType>(0xFFC8, "_RSSI",                   DType.Integer),
 
+      new Tuple<ushort, string, DType>(AVAILABLE_PINS, "." + X13.Plc.PlcCapabilities.PinsField, DType.ByteArray),
+      new Tuple<ushort, string, DType>(AVAILABLE_UARTS, "." + X13.Plc.PlcCapabilities.UartsField, DType.Integer),
       new Tuple<ushort, string, DType>(LOG_D_ID, ".Log.Debug",            DType.ByteArray | DType.LOG),   // 0xFFE0
       new Tuple<ushort, string, DType>(LOG_I_ID, ".Log.Info",             DType.ByteArray | DType.LOG),   // 0xFFE1
       new Tuple<ushort, string, DType>(LOG_W_ID, ".Log.Warning",          DType.ByteArray | DType.LOG),   // 0xFFE2

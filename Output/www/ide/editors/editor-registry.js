@@ -20,8 +20,6 @@ const EDITOR_TAGS = Object.freeze({
   JS: 'x13-js-editor',
   Version: 'x13-version-editor',
   MsStatus: 'x13-ms-status-editor',
-  PortStatus: 'x13-port-status-editor',
-  EsStatus: 'x13-es-status-editor',
   DevicePLC: 'x13-device-plc-editor',
   Enum: 'x13-enum-editor',
   Editor: 'x13-editor-selector',

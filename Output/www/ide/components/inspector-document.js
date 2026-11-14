@@ -8,6 +8,7 @@ import './inspector-children.js';
 // through the Workspace context menu, which is built from the field rather than from this row.
 const ALT_VIEW_BUTTONS = {
   logram: { label: 'Logram', mode: 'logram' },
+  lplc: { label: 'LogramPLC', mode: 'lplc' },
   chart: { label: 'Chart', mode: 'chart' },
 };
 

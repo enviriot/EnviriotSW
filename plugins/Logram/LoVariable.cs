@@ -10,9 +10,8 @@ using System.Threading;
 
 namespace X13.Logram {
   /// <summary>Переменная схемы: значение, его источник и список тех, кому передавать изменение.</summary>
-  /// <remarks>Источником может быть выход блока или привязка к чужому топику.
-  /// Переменная, питаемая другой переменной, ничего не хранит и теряет атрибут DB;
-  /// исключение - кольцо, где значение живёт в самом кольце и пересчитать его снаружи нечем.</remarks>
+  /// <remarks>Источником может быть блок или другая переменная.
+  /// Связи подготавливаются в Tick1; в Tick2 значение передаётся потребителям и ставится в очередь Repository.</remarks>
   internal class LoVariable : ILoItem {
     private LogramPl _pl;
     private Topic _owner;
@@ -67,7 +66,7 @@ namespace X13.Logram {
       }
     }
     public JSC.JSValue GetValue() {
-      return _value??_value_new;  // for 1st Call
+      return _value??_value_new;  // До первого Tick2 текущее значение ещё не установлено.
     }
 
     #region ILoItem Members
@@ -111,21 +110,9 @@ namespace X13.Logram {
         if(_src!=null) {
           _layer = _src.Layer;
           Route = _src.Route;
-          // Only a variable fed by another VARIABLE loses its persistence: its value is
-          // recomputed from that source on every tick, so storing it just means writing a value
-          // that gets overwritten right after load. A block's output pin also has a source - the
-          // block itself, see LoBlock.GetPin - but nothing recomputes it from upstream, the block
-          // IS where the value comes from. Clearing it there made the DB flag unholdable on any
-          // output, which silently disabled a documented feature: Counter's own constructor in
-          // base.xst tests the very same bit ("if((attr&12)!=4) this.SetState(\"Q\", 0)") so a
-          // counter marked DB keeps its count across a restart.
-          // A RING of variables is the third case, and it is not a derivation either: dragging a
-          // topic onto a diagram deliberately binds both ways (LogramViewProvider.ExecuteAddVariable
-          // back-fills the dragged topic's own Logram.bind to point at the new variable), so the
-          // two ends are each other's source. Nothing outside the ring recomputes it - the ring is
-          // where the value lives - and clearing DB there does not merely stop writing: the next
-          // save DELETES the stored state (LiteDB_Pl.Save), so a user setting marked DB
-          // was losing its value on every single load.
+          // Производному значению отдельная запись DB не нужна. Выход блока и кольцо переменных
+          // могут содержать самостоятельное состояние: снятие DB удалило бы его сохранённую копию
+          // при очередной записи хранилища.
           if(_src is LoVariable && _owner.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB) && !SourceRingContainsSelf()) {
             _owner.ClearAttribute(Topic.Attribute.Saved);
           }
@@ -136,7 +123,7 @@ namespace X13.Logram {
               _prim = svo._owner;
             }
           }
-          if(Route!=null && ( bl = _links.OfType<LoBlock>().FirstOrDefault() )!=null && Route.Contains(bl)) {  // make loop
+          if(Route!=null && ( bl = _links.OfType<LoBlock>().FirstOrDefault() )!=null && Route.Contains(bl)) {  // Обратная связь через блок из маршрута.
             if(_layer!=0) {
               _layer = -_layer;
             }
@@ -151,7 +138,7 @@ namespace X13.Logram {
             Disposed = true;
           }
         }
-        if(_layer>=0) {  // if _layer < 0 -> loop
+        if(_layer>=0) {  // Обратная связь не продолжает пересчёт слоёв по этой ветви.
           for(int i = _links.Count-1; i>=0; i--) {
             if(_links[i]!=_src) {
               _pl.EnqueueIn(_links[i]);
@@ -173,13 +160,9 @@ namespace X13.Logram {
     }
     #endregion ILoItem Members
 
-    // True when following the source chain upwards comes back to this variable, i.e. this
-    // variable sits on a binding ring. Walks _src_new and NOT _src: Tick1 always does
-    // Interlocked.Exchange(ref _src, _src_new), so _src_new is the current-or-pending source of
-    // every item no matter which order LogramPl.Tick happened to call their Tick1 in - reading
-    // _src would make the answer depend on the order of the _TaskIn queue. `seen` is not an
-    // optimization but the termination condition: without it the walk spins forever on a ring
-    // that this variable is not itself part of.
+    // Ищем возврат к этой переменной по текущим или ожидающим применения источникам.
+    // Обход _src_new, а не _src, не зависит от порядка вызовов Tick1.
+    // seen завершает обход чужого кольца, в которое эта переменная не входит.
     private bool SourceRingContainsSelf() {
       var seen = new HashSet<LoVariable>();
       for(var v = _src_new as LoVariable; v != null && seen.Add(v); v = v._src_new as LoVariable) {

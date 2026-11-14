@@ -73,6 +73,7 @@ namespace X13.WebUI {
     public string Hint;
     public bool Enabled;
     public bool Willful;
+    public JSC.JSValue Args;
     // Renders as a checkmark in place of Icon (context-menu.js) - a toggle command's
     // current state (e.g. Logram pin "Trace"), not a submenu/selection indicator.
     public bool Checked;
@@ -241,6 +242,7 @@ namespace X13.WebUI {
       if(!string.IsNullOrEmpty(item.Hint)) dto["hint"] = item.Hint;
       if(!item.Enabled) dto["enabled"] = false;
       if(item.Willful) dto["willful"] = true;
+      if(item.Args != null) dto["args"] = item.Args;
       if(item.Checked) dto["checked"] = true;
       if(item.Children != null && item.Children.Count > 0) dto["children"] = SerializeMenuItems(item.Children);
       return dto;

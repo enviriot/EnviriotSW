@@ -45,6 +45,7 @@ namespace X13.WebUI {
         // node is always IsGroupHeader/object-typed and never itself committed.
         return ViewOpResult.Error("view_commit_not_supported", "Manifest root cannot be committed directly");
       }
+      if(PlcReportFields.RejectWrite(_rootTopic, fieldPath, value)) return ViewOpResult.Error("field_readonly", "PLC availability reports are read-only");
       _rootTopic.SetField(fieldPath, value, Prim);
       return ViewOpResult.Success();
     }
@@ -75,7 +76,7 @@ namespace X13.WebUI {
         Cmd = "delete",
         Text = "Delete",
         Icon = "/ide/icons/cm_delete.png",
-        Enabled = !string.IsNullOrEmpty(fieldPath) && !isRequired,
+        Enabled = !string.IsNullOrEmpty(fieldPath) && !isRequired && !PlcReportFields.RejectWrite(_rootTopic, fieldPath, JSC.JSValue.Null),
         Willful = false,
       });
       return ViewOpResult.Success();

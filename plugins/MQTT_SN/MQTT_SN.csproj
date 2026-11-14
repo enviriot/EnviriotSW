@@ -24,6 +24,13 @@
     <Compile Include="..\..\Server\Properties\VersionInfo.cs" Link="Properties\VersionInfo.cs" />
   </ItemGroup>
 
+  <!-- Block types of LPLC, imported by LP_Tree.ImportTypes the way PersistentStorage imports base.xst.
+       LogicalName pins the resource name to the namespace (LP_Tree.TYPES_RESOURCE): derived from the
+       folder it would be X13.Periphery.LPLC.LPLC.xst. -->
+  <ItemGroup>
+    <EmbeddedResource Include="LPLC\LPLC.xst" LogicalName="X13.LogramPLC.LPLC.xst" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\Server\Server.csproj" />
   </ItemGroup>

@@ -1,3 +1,7 @@
+// Корень дерева Workspace - и строка статуса подключения, и единственное место, откуда открывается
+// каталог (TopicTreeController.OpenCatalog: catalog_root_required).
+export const WORKSPACE_ROOT_VID = 'workspace#/';
+
 export function getView(vid) {
   return partsOf(vid)[0] || '';
 }

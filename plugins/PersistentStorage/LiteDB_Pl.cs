@@ -14,14 +14,9 @@ using System.Runtime.CompilerServices;
 using System.Security.Policy;
 
 namespace X13.PersistentStorage {
-  /// <summary>Stores the repository state - manifests, states and the log - in persist.ldb.</summary>
-  /// <remarks>Was two classes until now: an abstract base plus an eighteen-line LiteDB_Pl carrying
-  /// the MEF export. The split existed for the Firebird and MySQL backends, which implemented five
-  /// abstract archive methods; the archive became the separate Archivist plugin and those two
-  /// backends were deleted, leaving a base class with no abstract members and an heir that added
-  /// nothing. Nothing outside referenced either name.
-  /// <para>The archive is gone from here entirely - ArchStore, ArchRollup and ArchRetention live in
-  /// Archivist now, and the thinning does not live anywhere.</para></remarks>
+  /// <summary>Сохраняет манифесты и состояния в persist.ldb и восстанавливает дерево при запуске.</summary>
+  /// <remarks>Историю значений обслуживает отдельный плагин Archivist.
+  /// Здесь хранятся последние сохраняемые состояния, а не последовательность их изменений.</remarks>
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 2)]
   [System.ComponentModel.Composition.ExportMetadata("name", "LiteDB")]
@@ -32,11 +27,9 @@ namespace X13.PersistentStorage {
     private readonly System.Collections.Concurrent.ConcurrentQueue<TopicEvent> _q;
     private Thread _tr;
     private volatile bool _terminate;
-    /// <summary>Чем загрузка базы закончилась отказом, для передачи в Start().</summary>
-    /// <remarks>Загрузка идёт в рабочем потоке, а отвечать за отказ плагина должен Start():
-    /// исключение оттуда - единственный способ сообщить хосту, что плагин не поднялся. Записывается
-    /// до _loaded.Set() и читается после _loaded.WaitOne(), так что порядок задан самим ожиданием;
-    /// volatile здесь ради читателя, а не ради корректности.</remarks>
+    /// <summary>Ошибка загрузки базы, передаваемая из рабочего потока в Start().</summary>
+    /// <remarks>Записывается до _loaded.Set() и читается после _loaded.WaitOne().
+    /// Start() сообщает хосту об отказе плагина через исключение.</remarks>
     private volatile Exception _startErr;
     /// <summary>Есть работа в очереди, либо пора завершаться.</summary>
     private readonly AutoResetEvent _tick;
@@ -54,10 +47,8 @@ namespace X13.PersistentStorage {
         Directory.CreateDirectory(dir);
       }
       bool exist = File.Exists(DB_PATH);
-      // Seeded whether or not a database is here yet. It used to be seeded only alongside the
-      // startup backup, which runs only when one exists - so a server first started on an empty
-      // data directory never got the setting at all, and the nightly Backup() then resolved it to
-      // the four-letter string "undefined" and took persistent storage down with it.
+      // Настройка нужна и для новой базы: первое ночное копирование не должно зависеть
+      // от того, существовал ли файл при запуске.
       SeedBackupDir(dir);
       if (exist) {
         string bak_dir = BackupDir(dir);
@@ -67,13 +58,8 @@ namespace X13.PersistentStorage {
       }
       _base = new Dictionary<Topic, Stash>();
       _db = new LiteDatabase(new ConnectionString { Upgrade = true, Filename = DB_PATH }) { CheckpointSize = 50 };
-      exist = exist && _db.CollectionExists("history");
-      _history = _db.GetCollection<BsonDocument>("history");
-      if (!exist) {
-        _history.EnsureIndex("t");
-      }
-      Log.History = History;
-      Log.Write += Log_Write;
+      // Прежняя история удаляется только после стартовой копии; новые записи принадлежат Log.
+      _db.DropCollection("history");
     }
     public void Start() {
       _terminate = false;
@@ -83,21 +69,16 @@ namespace X13.PersistentStorage {
         Priority = ThreadPriority.BelowNormal
       };
       _tr.Start();
-      _loaded.WaitOne();  // wait load
+      _loaded.WaitOne();  // Ожидаем завершения попытки загрузки, затем проверяем ошибку.
       var err = _startErr;
       if(err != null) {
         throw new InvalidOperationException("PersistentStorage.Load(" + DB_PATH + ") failed", err);
       }
       _allSub = Topic.Subscribe(SubFunc);
-      // Рычага два, и помнить надо оба: UserVersion решает, читать ли base.xst вообще, а ver
-      // элемента внутри файла - применять ли именно его, потому что Xst.Prepare пропускает узел,
-      // у которого поле version не ниже ver. Забыл поднять число здесь - импорт не запустится;
-      // забыл поднять ver - запустится и молча ничего не изменит.
-      // TODO: при следующем изменении base.xst сделать гейтом отпечаток самого ресурса - CRC его
-      // байтов в этом же int, со сравнением != вместо <. Тогда правка файла сама включает импорт
-      // и рычаг остаётся один. Цена, которую это стоит назвать: один холостой проход импорта на
-      // первом старте существующих баз и после любой правки файла, а забытый ver отпечаток всё
-      // равно не ловит - это ловится только тестом.
+      // UserVersion разрешает импорт ресурса, а ver элемента отдельно ограничивает замену
+      // установленного поддерева в Xst.Prepare. Обновлять нужно оба уровня.
+      // TODO: заменить ручной порог UserVersion отпечатком ресурса. Это не отменит проверку ver
+      // и потребует повторного прохода импорта для существующих баз.
       if(_db.UserVersion < 4) {
         _db.UserVersion = 4;
         ImportDefault();
@@ -108,38 +89,19 @@ namespace X13.PersistentStorage {
         _tick.Set();
       }
     }
-    /// <summary>Teardown in the order the dependencies run, not the order they were created.</summary>
-    /// <remarks>Every step here has to happen before the next, and none of them used to happen at
-    /// all. The repository callback goes first: while it is attached, any change to any topic -
-    /// and Repo.Stop still exports the configuration after this - reaches SubFunc, which enqueues
-    /// and calls _tick.Set(). Disposing _tick while that was live is the ObjectDisposedException
-    /// the whole ordering exists to avoid. Log.Write and Log.History go next for the same reason
-    /// one step down: both reach _history, which belongs to the database about to be closed.
-    /// <para>The database is closed here at last. `//Interlocked.Exchange(ref _db, null)?.Dispose()`
-    /// had been commented out, so the file was never closed and the last writes reached disk only
-    /// through LiteDB's recovery on the next start. The cost is named rather than hidden: log
-    /// records produced after this point are no longer persisted, because there is nothing left
-    /// open to persist them into.</para></remarks>
+    /// <summary>Отключает входы плагина перед остановкой рабочего потока и закрытием базы.</summary>
+    /// <remarks>Сначала снимается подписка Repository. Ожидание рабочего потока
+    /// не является гарантией опустошения очереди событий.</remarks>
     public void Stop() {
       IDisposable allSub = _allSub;
       _allSub = null;
-      if(allSub != null) {
-        allSub.Dispose();
-      }
-      Log.Write -= Log_Write;
-      Log.History = null;
+      allSub?.Dispose();
 
       _terminate = true;
       _tick.Set();
       if(_tr != null && !_tr.Join(5000)) {
-        // Abandoned, not aborted. Thread.Abort lands at an arbitrary instruction, and for this
-        // thread that instruction is most likely inside LiteDB - mid transaction, mid page write -
-        // which is precisely how a file comes to need recovery. Not stopping in five seconds means
-        // it is stuck in a LiteDB call, and there is nothing there to cancel: the only other
-        // blocking point is _tick.WaitOne(15).
-        // The thread is IsBackground, so the process still exits. What must NOT happen is the
-        // cleanup below: disposing the database and the wait handle out from under a thread still
-        // using them turns a slow shutdown into an ObjectDisposedException, or worse.
+        // Не прерываем фоновый поток посреди операции LiteDB и не освобождаем используемые им
+        // ресурсы. При выходе ThreadM сам закроет базу; IsBackground не удерживает процесс.
         Log.Error("PersistentStorage worker did not stop within 5 s; leaving the database open - it will be recovered on the next start");
         return;
       }
@@ -159,9 +121,6 @@ namespace X13.PersistentStorage {
 
     public bool enabled {
       get {
-        // Is<bool>, NOT AsBool: this decides whether the config topic has to be CREATED and
-        // seeded, and a reader with a default cannot tell "not set yet" from "set to the
-        // default" - the topic would then never be created.
         if(!Owner.GetState().Is<bool>()) {
           Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           Owner.SetState(true);
@@ -176,10 +135,7 @@ namespace X13.PersistentStorage {
     private const string DB_PATH = "../data/persist.ldb";
 
     private LiteDatabase _db;
-    private ILiteCollection<BsonDocument> _objects, _states, _history;
-    // Deliberately not sorted: Topic.CompareTo orders by the mutable _path, and Move() rewrites
-    // _path in place, which would silently corrupt a comparison-ordered index. Topic does not
-    // override Equals/GetHashCode, so this keys on identity and survives a rename.
+    private ILiteCollection<BsonDocument> _objects, _states;
     private Dictionary<Topic, Stash> _base;
 
     private class Stash {
@@ -245,24 +201,14 @@ namespace X13.PersistentStorage {
           return new BsonValue((double)val);
         case JSC.JSValueType.Integer:
           return new BsonValue((int)val);
-        case JSC.JSValueType.String: {
-            string s = val.AsString(null);
-            if (s != null && s.StartsWith("¤TR")) {
-              var t = Topic.root.Get(s.Substring(3), false);
-              if (t != null) {
-                if (_base.TryGetValue(t, out Stash tu)) {
-                  return tu.bm["_id"];
-                }
-              }
-              throw new ArgumentException("TopicRefernce(" + s.Substring(3) + ") NOT FOUND");
-            }
-            return new BsonValue(s);
-          }
+        case JSC.JSValueType.String:
+          return new BsonValue(val.AsString(null));
         case JSC.JSValueType.Object:
           if (val.IsNull) {
             return BsonValue.Null;
           }
-          if (val is JSL.Array arr) {
+          var arr = val as JSL.Array ?? val.Value as JSL.Array;
+          if (arr != null) {
             var r = new BsonArray();
             foreach (var f in arr) {
               if (int.TryParse(f.Key, out int i)) {
@@ -272,7 +218,7 @@ namespace X13.PersistentStorage {
             }
             return r;
           }
-          // The dual representation, named once - see ByteArray.IsByteArray.
+          // Прямое и обёрнутое представления проверяет общий помощник ByteArray.IsByteArray.
           if(ByteArray.IsByteArray(val, out ByteArray ba)) {
             return new BsonValue(ba.GetBytes());
           } {
@@ -286,27 +232,11 @@ namespace X13.PersistentStorage {
           throw new NotImplementedException("js2Bs(" + val.ValueType.ToString() + ")");
       }
     }
-    private string Id2Topic(ObjectId id) {
-      var d = _objects.FindById(id);
-      BsonValue p;
-      if (d != null && (p = d["p"]) != null && p.IsString) {
-        return p.AsString;
-      }
-      return null;
-    }
     private JSC.JSValue Bs2Js(BsonValue val) {
       if (val == null) {
         return JSC.JSValue.Undefined;
       }
       switch (val.Type) { //-V3002
-        case BsonType.ObjectId: {
-            var p = Id2Topic(val.AsObjectId);
-            if (p != null) {
-              return new JSL.String("¤TR" + p);
-            } else {
-              throw new ArgumentException("Unknown ObjectId: " + val.AsObjectId.ToString());
-            }
-          }
         case BsonType.Array: {
             var arr = val.AsArray;
             var r = new JSL.Array(arr.Count);
@@ -346,13 +276,9 @@ namespace X13.PersistentStorage {
       throw new NotImplementedException("Bs2Js(" + val.Type.ToString() + ")");
     }
     private void SubFunc(TopicEvent p) {
-      // Snapshot and Ready say nothing new about the tree - they replay what is already stored -
-      // and a change this plugin made itself must not be written back. The three kinds this also
-      // used to test for (setState, setField, unsubscribe) were requests rather than outcomes and
-      // could never arrive here; the split makes that unwritable rather than merely useless.
-      if (p.Kind == EventKind.Snapshot || p.Kind == EventKind.Ready || p.Author == Owner) {
-        return;
-      }
+      // Snapshot и Ready относятся к подписке, а не к новому изменению дерева.
+      // Собственные изменения при восстановлении не нужно записывать обратно.
+      if (p.Kind == EventKind.Snapshot || p.Kind == EventKind.Ready || p.Author == Owner) return;
       _q.Enqueue(p);
     }
 
@@ -371,10 +297,8 @@ namespace X13.PersistentStorage {
       DateTime backupDT;
       backupDT = DateTime.Now.AddDays(1).Date.AddHours(3.25);
       while (!_terminate) {
-        // The guard covers the whole body, not just Save. It used to sit around Save alone, so a
-        // throw anywhere else - _db.BeginTrans() on a null _db, after a failed backup - ended the
-        // thread outright. The server survives that, which is the bad part: it keeps running with
-        // nothing being written, and the only sign is one line in the log.
+        // Обрабатываем также сбои вне Save, чтобы ошибка транзакции или обслуживания
+        // не завершала рабочий поток. Повторяется проход, не уже извлечённое событие.
         try {
           if (_tick.WaitOne(15)) {
             _db.BeginTrans();
@@ -400,11 +324,11 @@ namespace X13.PersistentStorage {
           }
         }
         catch (ThreadAbortException) {
-          throw;                                  // Stop() is taking the thread down on purpose
+          throw;                                  // Прерывание потока не превращаем в повтор прохода.
         }
         catch (Exception ex) {
           Log.Error("PersistentStorage.ThreadM - " + ex.ToString());
-          Thread.Sleep(1000);                     // do not spin on a fault that repeats every pass
+          Thread.Sleep(1000);                     // Пауза при сбое, повторяющемся в каждом проходе.
         }
       }
       var db = Interlocked.Exchange(ref _db, null);
@@ -434,18 +358,16 @@ namespace X13.PersistentStorage {
         List<string> oldT = new List<string>();
         List<ObjectId> oldId = new List<ObjectId>();
 
-        // Ordinal on the path itself, not whatever collation LiteDB compares BsonValues with:
-        // the load order has to be the tree order, and parents have to precede their children for
-        // the version check below to recognise a stale subtree by its prefix.
+        // Родители должны предшествовать детям для отсечения устаревших ветвей по префиксу.
         foreach (var obj in _objects.FindAll().OrderBy(z => z["p"].AsString, StringComparer.Ordinal)) {
           sTmp = obj["p"].AsString;
           if (oldT.Any(z => sTmp.StartsWith(z))) {
             oldId.Add(obj["_id"]);
-            continue;  // skip load, old version
+            continue;  // Потомок уже отвергнутой версии поддерева.
           }
           t = Topic.Declare(Topic.root, sTmp, Owner);
           a = new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null };
-          // check version
+          // Сравниваем сохранённую версию с уже установленной в дереве.
           {
             jTmp = t.GetField("version");
 
@@ -454,11 +376,11 @@ namespace X13.PersistentStorage {
               if ((sTmp = jTmp.AsString(null)) == null || !sTmp.StartsWith("¤VR") || !Version.TryParse(sTmp.Substring(3), out Version vDB) || vRepo > vDB) {
                 oldT.Add(t.path + "/");
                 oldId.Add(a.id);
-                continue; // skip load, old version
+                continue; // Сохранённая версия не должна заменять установленную.
               }
             }
           }
-          // check attribute
+          // Решение о восстановлении State принимается по сохранённому манифесту.
           JSC.JSValue attr;
           if (!a.jm.IsObject() || !(attr = a.jm["attr"]).IsNumber) {
             saved = false;
@@ -504,9 +426,7 @@ namespace X13.PersistentStorage {
       JSC.JSValue jTmp;
       bool saveM = false, saveS = false;
       if (!_base.TryGetValue(t, out a)) {
-        if (p.Kind == EventKind.Removed) {
-          return;
-        }
+        if (p.Kind == EventKind.Removed) return;
         var obj = _objects.FindOne(Query.EQ("p", t.path));
         a = obj != null ? new Stash { id = obj["_id"], bm = obj, jm = Bs2Js(obj["v"]), bs = _states.FindById(obj["_id"]), js = null } : new Stash { id = ObjectId.NewObjectId() };
         _base[t] = a;
@@ -516,8 +436,8 @@ namespace X13.PersistentStorage {
         _states.Delete(a.id);
         _objects.Delete(a.id);
         _base.Remove(t);
-      } else {   //create, changedField, changedState, move
-        // Manifest
+      } else {   // Создание, изменение манифеста или состояния, перемещение.
+        // Манифест.
         jTmp = t.GetField(null);
         if (!object.ReferenceEquals(jTmp, a.jm)) {
           if (a.bm == null) {
@@ -530,7 +450,7 @@ namespace X13.PersistentStorage {
           a.jm = jTmp;
           saveM = true;
         }
-        // State
+        // Состояние.
         if (t.CheckAttribute(Topic.Attribute.Saved, Topic.Attribute.DB)) {
           saveS = true;
         } else if (a.bs != null) {
@@ -565,27 +485,16 @@ namespace X13.PersistentStorage {
         }
       }
     }
-    /// <summary>Creates the backup-directory setting if it is not there yet.</summary>
-    /// <remarks>Config, Required and Readonly as before: the owner may retarget it, the tree keeps
-    /// it, and nothing else writes it.</remarks>
+    /// <summary>Создаёт настройку каталога резервных копий, если топика ещё нет.</summary>
     private void SeedBackupDir(string dir) {
       Topic bakT;
-      if (Owner.Exist("bak", out bakT)) {
-        return;
-      }
+      if (Owner.Exist("bak", out bakT)) return;
       bakT = Owner.Get("bak", true, Owner);
       bakT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
       bakT.SetState(dir);
     }
 
-    /// <summary>Where backups go, with the data directory as the fallback.</summary>
-    /// <remarks>AsString and not ToString(): on an undefined state ToString() returns the four
-    /// letters "undefined", which is a perfectly valid relative path as far as Windows is
-    /// concerned, so the failure surfaced only as a DirectoryNotFoundException at File.Copy - by
-    /// which point Backup had already closed the database. Same family as the As&lt;string&gt;()
-    /// defects cleared on 21.08; this site was missed because it does not go through As&lt;string&gt;().
-    /// <para>The directory is created here rather than assumed, so a setting pointing somewhere
-    /// that does not exist yet is not fatal either.</para></remarks>
+    /// <summary>Разрешает каталог копий, используя каталог данных при отсутствии корректной строки.</summary>
     private string BackupDir(string fallback) {
       var bak_dir = Owner.Get("bak", true, Owner).GetState().AsString(null);
       if (string.IsNullOrEmpty(bak_dir)) {
@@ -598,17 +507,9 @@ namespace X13.PersistentStorage {
       return bak_dir;
     }
 
-    /// <summary>Deletes the copy Rebuild leaves behind.</summary>
-    /// <remarks>LiteDB.Rebuild renames the old file to "&lt;name&gt;-backup.ldb" and never removes it;
-    /// a later rebuild finding that name taken writes "-backup-1", then "-backup-2". Nothing ever
-    /// collects them, and Backup() rebuilds once a night, so this is one orphan a day for as long as
-    /// the server runs - about 470 MB a year at the live persist.ldb size. Found by an overnight run,
-    /// not by reading, and the same defect had already been fixed in Archivist for the sample files.
-    /// <para>Distinct from the dated .bak this method creates on purpose: that one is the backup,
-    /// pruned by the retention pass below. This is the debris of rewriting the live file.</para>
-    /// <para>Deleted rather than kept: the rebuild has completed and the database is open again by
-    /// the time this runs, so what is left is a copy of a file already known to be good. Failing to
-    /// delete is not worth failing the backup over - the next pass will get it.</para></remarks>
+    /// <summary>Удаляет служебные копии файла, оставленные перестроением LiteDB.</summary>
+    /// <remarks>Вызывается после Rebuild. Файлы с суффиксами -backup отличаются от датированных .bak, которые сохраняются по правилам ротации. 
+    /// При IOException отдельная служебная копия может остаться до следующего вызова очистки.</remarks>
     private static void DropRebuildLeftovers() {
       string dir = Path.GetDirectoryName(Path.GetFullPath(DB_PATH));
       string stem = Path.GetFileNameWithoutExtension(DB_PATH);
@@ -627,26 +528,20 @@ namespace X13.PersistentStorage {
     }
 
     private void Backup() {
-      _history.DeleteMany(Query.LT("t", DateTime.Now.AddDays(-36)));
-      // Resolved BEFORE anything is closed. Everything between the close and the reopen runs under
-      // a database that does not exist, so the less that happens there the better - and a bad
-      // setting now fails while the store is still up and usable.
+      // Каталог разрешается до закрытия базы, чтобы ошибка настройки не оставила её закрытой.
       var bak_dir = BackupDir(Path.GetDirectoryName(DB_PATH));
       string fb = bak_dir + (new string(Path.DirectorySeparatorChar, 1)) + DateTime.Now.ToString("yyMMdd_HHmmss") + ".bak";
 
       var db = Interlocked.Exchange(ref _db, null);
       if (db != null) {
         db.Commit();
-        _history = null;
         _objects = null;
         _states = null;
         db.Checkpoint();
         db.Dispose();
       }
-      // The reopen is in a finally because it has to happen even when the copy throws. It did not
-      // use to: a failing copy left _db null for good, the next loop pass raised a
-      // NullReferenceException on _db.BeginTrans(), and that killed the storage thread - after
-      // which the server ran on with nothing being persisted at all, and said so only in the log.
+      // После попытки копирования повторно открываем базу даже при ошибке File.Copy.
+      // Этот finally не охватывает ошибки закрытия выше или самого повторного открытия.
       try {
         File.Copy(DB_PATH, fb);
         Log.Info("backup {0} created", fb);
@@ -657,12 +552,9 @@ namespace X13.PersistentStorage {
         DropRebuildLeftovers();
         _objects = _db.GetCollection<BsonDocument>("objects");
         _states = _db.GetCollection<BsonDocument>("states");
-        _history = _db.GetCollection<BsonDocument>("history");
       }
 
-      // Per file, not per pass. One undeletable backup - held open by a copy in progress, or by a
-      // virus scanner - used to abort the whole retention sweep silently, so everything older than
-      // it stayed forever and nothing said why.
+      // Отказ удаления одной копии не должен прерывать очистку остальных файлов.
       try {
         DateTime now = DateTime.Now, fdt;
         foreach (string f in Directory.GetFiles(bak_dir, "??????_??????.bak", SearchOption.TopDirectoryOnly)) {
@@ -683,36 +575,11 @@ namespace X13.PersistentStorage {
         }
       }
       catch (IOException ex) {
-        // Listing the directory failed, which is not the same as one file refusing to go.
+        // Ошибка перечисления каталога обрабатывается отдельно от отказа удаления файла.
         Log.Warning("backup retention could not list {0} - {1}", bak_dir, ex.Message);
       }
     }
     #endregion Persisten Storage Members
-
-    #region History
-    private void Log_Write(LogLevel ll, DateTime dt, string msg) {
-      if (_history != null && ll != LogLevel.Debug) {
-        var d = new BsonDocument {
-          ["_id"] = ObjectId.NewObjectId(),
-          ["t"] = new BsonValue(dt.ToUniversalTime()),
-          ["l"] = new BsonValue((int)ll),
-          ["m"] = new BsonValue(msg)
-        };
-        _history.Insert(d);
-      }
-    }
-    private IEnumerable<Log.LogRecord> History(DateTime dt, int cnt) {
-      var t = new BsonValue(dt);
-      return _history.Query().Where(z => z["t"] < t).OrderByDescending(z => z["t"]).Limit(cnt).ToEnumerable()
-        //Find(Query.And(Query.All("t", Query.Descending), Query.LT("t", t)), 0, cnt)
-        .Select(z => new Log.LogRecord {
-          dt = z["t"].AsDateTime,
-          ll = (LogLevel)z["l"].AsInt32,
-          format = z["m"].AsString,
-          args = null
-        });
-    }
-    #endregion History
 
   }
 }

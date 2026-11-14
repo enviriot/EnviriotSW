@@ -22,7 +22,6 @@ namespace X13.Periphery {
     private const string OWNER_PATH = "/$YS/MQTT-SN";
     private const int HEX_PREVIEW = 32;  // bytes of a frame that reach a log line
     private const Topic.Attribute CfgAttr = Topic.Attribute.Required | Topic.Attribute.Config;
-    private const Topic.Attribute DbAttr = Topic.Attribute.Required | Topic.Attribute.DB;
 #if DEBUG
     private const bool VerboseDefault = true;
 #else
@@ -35,7 +34,7 @@ namespace X13.Periphery {
     private bool _statistic;
 
     /// <summary>Flags belonging to DevicePLC, TWI and the gates, seeded here for all of them.</summary>
-    /// <remarks>Static because the topics are: /$YS/DevicePLC/verbose is one setting for every PLC
+    /// <remarks>Static because the topics are: /$YS/MQTT-SN/DPLC_verbose is one setting for every PLC
     /// device, not one per device, yet DevicePLC and TWI are constructed per device and were each
     /// seeding it in their own constructor - so the same topic was written as many times as there
     /// were devices, and with EnsureCfg that would have been one subscription per device with
@@ -56,9 +55,12 @@ namespace X13.Periphery {
     /// behalf. The registry is gone, so the prefix named nothing - and this was the only entry in
     /// PredefinedTopics that sat outside this plugin's own namespace. The WIRE is unchanged: that
     /// table pairs a ushort with a local field path, and only the string moved. Old trees are not
-    /// read; MQTT_SNPl.Init complains instead.</remarks>
+    /// read.</remarks>
     internal const string FLD_MODEL = "MQTT-SN.model";
     private SubRec _devSub;
+    /// <summary>Схема диаграмм pa1 для редактора: выходы Func и меню переменных, см. LP_Schema.</summary>
+    private X13.LogramPLC.LP_Schema.Watcher _lplcSchema;
+    private X13.LogramPLC.LP_Status.Watcher _lplcStatus;
     internal List<DevicePLC> _plcs;
 
     public MQTT_SNPl() {
@@ -81,6 +83,10 @@ namespace X13.Periphery {
       // Snapshot of what is already in the tree, which is what PersistentStorage (priority 2) has
       // put there by the time this plugin (priority 7) is reached.
       _devSub = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, FLD_MODEL, MqsDevSub);
+      // Not inside DevicePLC: it only exists once the node has registered pa1, while the diagram is
+      // edited offline too.
+      _lplcSchema = new X13.LogramPLC.LP_Schema.Watcher(Topic.root);
+      _lplcStatus = new X13.LogramPLC.LP_Status.Watcher(Topic.root);
       RPC.Register("MQTT_SN.RefreshPorts", RefreshPortsRpc);
       RPC.Register("MQTT_SN.RefreshNIC", RefreshNICRpc);
     }
@@ -94,33 +100,35 @@ namespace X13.Periphery {
     /// protocol defines, and anything else means "no radius", which is what both gates already
     /// did with the raw value.</para></remarks>
     public void Start() {
+      Configure();
+      // До шлюзов: устройство, подключившееся первым, уже должно найти типы своих блоков.
+      X13.LogramPLC.LP_Tree.ImportTypes();
+      _gates.Add(new MsGUdp(this));
+      MsGSerial.Init(this);
+    }
+
+    /// <summary>Настройки применяются до открытия UDP/UART; повторный вызов не дублирует подписки.</summary>
+    internal void Configure() {
+      if(_cfg != null) return;
       _cfg = new SubRec[] {
         JsExtLib.EnsureCfg(Owner, "verbose", CfgAttr, v => verbose = v, VerboseDefault),
         JsExtLib.EnsureCfg(Owner, "statistic", CfgAttr, v => _statistic = v, false),
         JsExtLib.EnsureCfg(Owner, "radius", CfgAttr, v => gwRadius = (byte)(v >= 1 && v <= 3 ? v : 0), 1),
-        JsExtLib.EnsureCfg(Topic.root.Get("/$YS/DevicePLC", true), "verbose", DbAttr, v => verbosePlc = v, VerboseDefault),
-        JsExtLib.EnsureCfg(Topic.root.Get("/$YS/TWI", true), "verbose", DbAttr, v => verboseTwi = v, VerboseDefault),
+        EnsureVerbose("DPLC_verbose", "/$YS/DevicePLC/verbose", v => verbosePlc = v),
+        EnsureVerbose("TWI_verbose", "/$YS/TWI/verbose", v => verboseTwi = v),
       };
-      _gates.Add(new MsGUdp(this));
-      MsGSerial.Init(this);
-      WarnAboutOldFields();
     }
 
-    /// <summary>Says so, loudly, when the tree still carries the pre-rename field name.</summary>
-    /// <remarks>Reading "cctor.MqsDev" as well would be a compatibility prop that never comes out
-    /// again; saying nothing would mean every device quietly failing to appear. So neither - the
-    /// count goes in the log once, at the only moment anyone is looking. In Start rather than Init
-    /// because the tree has to be loaded for the walk to see anything.</remarks>
-    private static void WarnAboutOldFields() {
-      int n = 0;
-      foreach(Topic t in Topic.root.all) {
-        if(t.GetField("cctor.MqsDev").Defined) {
-          n++;
-        }
+    /// <summary>Переносит прежний флаг, сохраняя значение; настроенный новый путь имеет приоритет.</summary>
+    private SubRec EnsureVerbose(string name, string oldPath, Action<bool> apply) {
+      var old = Topic.root.Get(oldPath, false);
+      bool fallback = old == null ? VerboseDefault : old.GetState().AsBool(VerboseDefault);
+      if(old != null) {
+        var folder = old.parent;
+        old.Remove(Owner);
+        if(!folder.children.Any() && !folder.GetState().Defined) folder.Remove(Owner);
       }
-      if(n > 0) {
-        Log.Error("{0} topics still carry cctor.MqsDev - those devices will NOT load until Output/bin_a/Migrate has been run", n);
-      }
+      return JsExtLib.EnsureCfg(Owner, name, CfgAttr, apply, fallback);
     }
 
     public void Tick() {
@@ -131,6 +139,7 @@ namespace X13.Periphery {
       for(i = _gates.Count - 1; i >= 0; i--) {
         _gates[i].Tick();
       }
+      _lplcStatus?.Tick();
     }
 
     public void Stop() {
@@ -138,6 +147,14 @@ namespace X13.Periphery {
       if(_devSub != null) {
         _devSub.Dispose();
         _devSub = null;
+      }
+      if(_lplcSchema != null) {
+        _lplcSchema.Dispose();
+        _lplcSchema = null;
+      }
+      if(_lplcStatus != null) {
+        _lplcStatus.Dispose();
+        _lplcStatus = null;
       }
       // Released here because EnsureCfg hands ownership to the caller. The hand-rolled
       // subscription this replaced was never released at all.
@@ -182,7 +199,12 @@ namespace X13.Periphery {
         d.Disconnect();
       }
     }
-    private void PlcBuildRpc(Topic t, JSC.JSValue arg) {
+    internal void PlcBuildRpc(Topic t, JSC.JSValue arg) {
+      if(X13.LogramPLC.LP_Schema.IsPa1(t)) {
+        string fingerprint;
+        new X13.LogramPLC.LP_Program(t, X13.DevicePLC.EP_Target.EspNode).Compile(true, out fingerprint);
+        return;
+      }
       var d = _plcs.FirstOrDefault(z => z.Path == t.path);
       if(d != null) {
         d.Build();

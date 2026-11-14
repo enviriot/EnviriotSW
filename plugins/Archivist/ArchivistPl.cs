@@ -11,10 +11,7 @@ using JSC = NiL.JS.Core;
 using JSL = NiL.JS.BaseLibrary;
 
 namespace X13.Archivist {
-  /// <summary>Records the history of topics that ask for it, and answers range queries over it.</summary>
-  /// <remarks>Split out of PersistentStorage: the two shared a plugin but almost no state - the
-  /// archive only ever borrowed the value converters. Priority 3 puts it after the repository (1)
-  /// and the state store (2), so the tree and the manifests are in place before the first sample.</remarks>
+  /// <summary>Организует запись, фоновое обслуживание и чтение истории топиков.</summary>
   [System.ComponentModel.Composition.Export(typeof(IPlugModul))]
   [System.ComponentModel.Composition.ExportMetadata("priority", 3)]
   [System.ComponentModel.Composition.ExportMetadata("name", "Archivist")]
@@ -26,7 +23,7 @@ namespace X13.Archivist {
     private readonly ConcurrentQueue<TopicEvent> _q;
     /// <summary>Есть работа в очереди, либо пора завершаться.</summary>
     private readonly AutoResetEvent _tick;
-    /// <summary>Хранилище открыто - первый сэмпл принимать можно.</summary>
+    /// <summary>Попытка открытия завершена; результат проверяется через _startErr.</summary>
     private readonly ManualResetEvent _loaded;
     private ArchStore _store;
     private Topic _owner;
@@ -34,27 +31,18 @@ namespace X13.Archivist {
     private Func<string[], DateTime, int, DateTime, JSL.Array> _aQuery;
     private Thread _tr;
     private volatile bool _terminate;
-    /// <summary>Чем открытие хранилища закончилось отказом, для передачи в Start().</summary>
-    /// <remarks>Открытие выполняется в рабочем потоке, а отвечать за отказ плагина должен Start():
-    /// исключение оттуда - единственный способ сообщить хосту, что плагин не поднялся. Записывается
-    /// до _loaded.Set() и читается после _loaded.WaitOne(), так что порядок задан самим ожиданием;
-    /// volatile здесь ради читателя, а не ради корректности.</remarks>
+    /// <summary>Ошибка открытия хранилища, передаваемая из рабочего потока в Start().</summary>
+    /// <remarks>Записывается до _loaded.Set() и читается после _loaded.WaitOne(). Start() сообщает хосту об отказе плагина через исключение.</remarks>
     private volatile Exception _startErr;
     private int _rrIdx;
     private DateTime _nextHotRebuild;
     private DateTime _nextRawRebuild;
-    /// <summary>Set /$YS/Archivist/verbose to have every query logged with its cost.</summary>
-    /// <remarks>Read through a subscription rather than on each query: AQuery runs on pool threads,
-    /// and walking the tree for a config flag on every request is exactly the sort of per-request
-    /// work this rework exists to remove.
-    /// <para>As&lt;bool&gt;() and not AsBool(false) - JS truthiness, the same choice the other plugins
-    /// make for their verbose flags, so a flag set to 1 from a script is not silently ignored.</para></remarks>
+    /// <summary>Флаг диагностики запросов из /$YS/Archivist/verbose.</summary>
     internal bool verbose;
     private SubRec _verboseSR;
 
     public ArchivistPl() : this(DEFAULT_DIR) {
     }
-    /// <summary>Directory is injectable so the store can be exercised outside a running server.</summary>
     internal ArchivistPl(string dir) {
       _dir = dir;
       _q = new ConcurrentQueue<TopicEvent>();
@@ -77,21 +65,16 @@ namespace X13.Archivist {
       _nextHotRebuild = DateTime.UtcNow.AddHours(1);
       _nextRawRebuild = NextNightly(DateTime.UtcNow);
       _tr.Start();
-      _loaded.WaitOne();   // the store is open before the first sample can arrive
+      _loaded.WaitOne();   // До подключения входов нужно дождаться открытия и проверить ошибку.
       var err = _startErr;
       if(err != null) {
-        // Обёртка, а не проброс оригинала: исключение поймано в другом потоке, повторный throw
-        // затёр бы его стек; путь к хранилищу в сообщении - первое, что нужно при разборе.
+        // Обёртка, а не проброс оригинала: исключение поймано в другом потоке, повторный throw затёр бы его стек.
         throw new InvalidOperationException("Archivist.Open(" + _dir + ") failed", err);
       }
       _verboseSR =JsExtLib.EnsureCfg(Owner, "verbose", Topic.Attribute.Required | Topic.Attribute.Config, v => verbose = v, false);
       _allSub = Topic.Subscribe(SubFunc);
-      // Bound here rather than in the constructor: MEF does not order construction, but it does
-      // order Start by priority, so this reliably takes over from the state store.
-      // Kept in a field as well: Stop has to recognise its own delegate, and a method group
-      // written out a second time is a different object - equal by Delegate.Equals, but only
-      // because that compares target and method rather than references. Holding the one instance
-      // says what is meant without relying on that.
+      // Поставщик регистрируется после открытия хранилища, а не в конструкторе: хост упорядочивает Start по приоритету, но не создание экземпляров через MEF.
+      // Сохраняем именно этот экземпляр делегата, чтобы Stop распознал его по ссылке.
       _aQuery = AQuery;
       JsExtLib.AQuery = _aQuery;
     }
@@ -102,42 +85,31 @@ namespace X13.Archivist {
       }
     }
 
-    /// <summary>Both ways in are shut before the store they lead to is closed.</summary>
-    /// <remarks>Two entry points outlive this plugin unless they are taken down here, and they
-    /// arrive by different routes: SubFunc from the repository on the engine thread, AQuery from
-    /// whatever pool thread is serving a chart. Closing the store first would leave both pointing
-    /// at it - AQuery in particular reaches a store that has just become null.</remarks>
+    /// <summary>Отключает входы плагина перед остановкой потока и закрытием хранилища.</summary>
+    /// <remarks>SubFunc вызывается Repository на потоке движка, AQuery — на потоке запроса. Подписку и общего поставщика нужно снять до закрытия базы. 
+    /// Это не отменяет уже начатые запросы и не гарантирует опустошение очереди записи.</remarks>
     public void Stop() {
       IDisposable allSub = _allSub;
       _allSub = null;
-      if(allSub != null) {
-        allSub.Dispose();
-      }
-      // Only if it is still ours: another archive provider taking over would have replaced it,
-      // and clearing that would disable a store still running.
+      allSub?.Dispose();
+      // Сбрасываем только свой делегат: другой поставщик уже мог заменить его.
       if(_aQuery != null && ReferenceEquals(JsExtLib.AQuery, _aQuery)) {
         JsExtLib.AQuery = null;
       }
       _aQuery = null;
-      // EnsureCfg hands ownership of the subscription to the caller.
-      if(_verboseSR != null) {
-        _verboseSR.Dispose();
-        _verboseSR = null;
-      }
+      // Подпиской EnsureCfg владеет вызывающая сторона.
+      _verboseSR?.Dispose();
+      _verboseSR = null;
       _terminate = true;
       _tick.Set();
       if(_tr != null && !_tr.Join(5000)) {
-        // Abandoned rather than aborted, for the reason spelled out in LiteDB_Pl.Stop: the thread
-        // can only be stuck inside LiteDB, an abort there is what makes a file need recovery, and
-        // the store and the wait handle must not be disposed while it may still be using them.
-        // ThreadM closes the store itself on the way out if it ever gets there.
+        // Принудительное прерывание внутри LiteDB может повредить файл. 
+        // Пока поток работает, нельзя освобождать хранилище и объекты ожидания; при выходе ThreadM сам закроет базу.
         Log.Error("Archivist worker did not stop within 5 s; leaving the store open - it will be recovered on the next start");
         return;
       }
       var s = Interlocked.Exchange(ref _store, null);
-      if(s != null) {
-        s.Dispose();
-      }
+      s?.Dispose();
       _tick.Dispose();
       _loaded.Dispose();
     }
@@ -146,9 +118,6 @@ namespace X13.Archivist {
 
     public bool enabled {
       get {
-        // Is<bool>, NOT AsBool/AsString: this decides whether the config topic has to be CREATED
-        // and seeded. A reader with a default cannot tell "not set yet" from "set to the
-        // default", so the topic would never be created.
         if(!Owner.GetState().Is<bool>()) {
           Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           Owner.SetState(true);
@@ -160,12 +129,8 @@ namespace X13.Archivist {
 
     #endregion IPlugModul Members
 
-    /// <summary>Engine-thread filter: only the changes this plugin can ever store reach the queue.</summary>
-    /// <remarks>PersistentStorage decided this on its worker thread, but it had to visit every topic
-    /// anyway to save state. Here the test is the whole job, so it belongs where it keeps the queue
-    /// short. Arch.enable is read with As&lt;bool&gt;() - JS truthiness - on purpose, exactly as the
-    /// old code did: the field is user-editable, so enable set to 1 or to a non-empty string still
-    /// means yes. AsBool is strict and would silently turn those off.</remarks>
+    /// <summary>Отбирает изменения для очереди архива на потоке движка.</summary>
+    /// <remarks>В очередь передаётся событие со ссылкой на Topic, не снимок нового State. Числовое значение проверяется позже, в StoreOne.</remarks>
     private void SubFunc(TopicEvent p) {
       if(p.Kind != EventKind.StateChanged || p.Source == null || p.Author == Owner) {
         return;
@@ -202,42 +167,31 @@ namespace X13.Archivist {
         }
       }
       var s = _store;
-      if(s != null) {
-        s.Close();
-      }
+      s?.Close();
     }
 
     private void StoreOne(TopicEvent p) {
       var st = _store;
-      if(st == null || !st.IsOpen) {
-        return;
-      }
+      if(st == null || !st.IsOpen) return;
       double v = p.Source.GetState().AsDouble(double.NaN);
-      if(double.IsNaN(v) || double.IsInfinity(v)) {
-        return;                                     // nothing numeric to archive
-      }
+      if(double.IsNaN(v) || double.IsInfinity(v)) return;
       st.Append(st.Resolve(p.Source), v);
     }
 
-    /// <summary>One unit of background work per idle pass, round-robin over the topics.</summary>
-    /// <remarks>The pass fires whenever the queue is empty - up to sixty times a second - so the
-    /// unit has to be small. One folded hour is that unit.</remarks>
+    /// <summary>Выполняет шаг фонового обслуживания, обходя топики по очереди.</summary>
+    /// <remarks>Вызывается при истечении ожидания сигнала. Свёртка ограничена одним часом ряда за проход, чтобы обслуживание не задерживало запись надолго.</remarks>
     private void IdleTask() {
       var st = _store;
-      if(st == null || !st.IsOpen) {
-        return;
-      }
+      if(st == null || !st.IsOpen) return;
       var all = st.Topics;
-      if(all.Length == 0) {
-        return;
-      }
+      if(all.Length == 0) return;
       if(_rrIdx >= all.Length) {
         _rrIdx = 0;
         return;
       }
       var at = all[_rrIdx++];
       try {
-        // Folding first: a bucket has to exist before the raw underneath it may be swept away.
+        // Сначала пробуем свёртку; если непустой час не записан, выполняем шаг очистки.
         if(!ArchRollup.FoldHour(st, at)) {
           ArchRetention.Step(st, at);
         }
@@ -248,38 +202,23 @@ namespace X13.Archivist {
       Reclaim(st);
     }
 
-    /// <summary>Returns the space deletions leave behind, on a schedule per file.</summary>
-    /// <remarks>The ring-buffer file is rewritten hourly because its whole content turns over in
-    /// minutes; the history file daily, because there the churn is retention rather than lifecycle.
-    /// Both give up immediately if a query holds the gate - the old code rebuilt a 909 MB file while
-    /// pool threads were reading it.</remarks>
-    /// <summary>Bytes one stored sample occupies, measured twice on the live archive.</summary>
-    /// <remarks>415 793 152 bytes over 3 233 472 rows is 128.6, and a synthetic run of the same
-    /// document shape gave the same figure. It is used only to estimate what the file WOULD weigh
-    /// with nothing dead in it, so a few bytes either way change nothing.</remarks>
+    /// <summary>Оценка размера исходного отсчёта в байтах для решения о перестроении файла.</summary>
+    /// <remarks>Эмпирическая оценка живых данных, не точный размер записи в формате хранения.</remarks>
     internal const int DOC_BYTES = 129;
-    /// <summary>How much dead weight is tolerated before a rebuild is worth its cost.</summary>
+    /// <summary>Допустимое отношение размера файла к оценке объёма живых данных.</summary>
     internal const double SLACK = 1.5;
-    /// <summary>Below this a file has nothing worth reclaiming, whatever the ratio says.</summary>
+    /// <summary>Минимальный размер файла, при котором рассматривается перестроение.</summary>
     internal const long MIN_REBUILD_BYTES = 4 * 1024 * 1024;
 
-    /// <summary>Would rebuilding this file actually give anything back?</summary>
-    /// <remarks>LiteDB keeps a free-page list and reuses freed pages on the next insert, so a store
-    /// whose retention removes about as much as arrives settles at a size and stays there. Rebuilding
-    /// it then returns nothing and merely rewrites the whole file - twenty-four times a day for the
-    /// ring buffer under the old schedule. On the SD card of a Raspberry Pi that is pure wear.
-    /// <para>What a rebuild is actually for is a BULK deletion: the migration lands nineteen months
-    /// of history and retention then removes everything past each topic's keep, leaving a 416 MB
-    /// file holding a fraction of that. Comparing the file against what its live rows should weigh
-    /// distinguishes the two cases without asking the engine anything.</para></remarks>
+    /// <summary>Оценивает, достаточно ли лишнего места в файле для перестроения.</summary>
+    /// <remarks>LiteDB переиспользует свободные страницы, поэтому обычная очистка не требует переписывать файл. 
+    /// Сравнение с оценкой живых данных позволяет пропускать лишнюю работу и возвращать место после значительного удаления истории.</remarks>
     internal static bool WorthRebuilding(long fileBytes, long rows) {
       return fileBytes >= MIN_REBUILD_BYTES && fileBytes > rows * DOC_BYTES * SLACK;
     }
 
-    /// <summary>The next 03:45 local, in UTC.</summary>
-    /// <remarks>Anchored to the clock rather than to "a day after startup", which put a 416 MB
-    /// rewrite at whatever hour the server happened to be started - as likely the middle of the
-    /// evening as the middle of the night.</remarks>
+    /// <summary>Возвращает ближайшие будущие 03:45 по местному времени в представлении UTC.</summary>
+    /// <remarks>Ночная проверка привязана к часам, а не к суткам после запуска сервера.</remarks>
     internal static DateTime NextNightly(DateTime nowUtc) {
       DateTime local = nowUtc.ToLocalTime();
       DateTime at = local.Date.AddHours(3.75);
@@ -289,11 +228,12 @@ namespace X13.Archivist {
       return at.ToUniversalTime();
     }
 
+    /// <summary>Проверяет по расписанию необходимость перестроения файлов отсчётов.</summary>
+    /// <remarks>Для hot проверка назначается через час, для raw — на ближайшие 03:45.
+    /// Если исключительная блокировка занята, попытка откладывается до следующего прохода.</remarks>
     private void Reclaim(ArchStore st) {
       DateTime now = DateTime.UtcNow;
-      // The timers say when to LOOK; the estimate says whether to act. Checking costs a file stat
-      // and a count out of the collection header, so it stays on the schedule rather than running
-      // on every idle pass.
+      // Расписание задаёт время проверки, оценка — необходимость перестроения. Размер файла и число записей запрашиваем по расписанию, не в каждом свободном проходе.
       if(now >= _nextHotRebuild) {
         if(!WorthRebuilding(st.FileBytes(true), st.RawCount(true)) || st.TryRebuild(true)) {
           _nextHotRebuild = now.AddHours(1);
@@ -304,50 +244,37 @@ namespace X13.Archivist {
         }
       }
     }
-
     #region AQuery
 
-    /// <summary>Answers a range request. Runs on a pool thread, via JsExtLib.</summary>
-    /// <remarks>With verbose set, every request is logged with what it asked for, which rung of the
-    /// granularity ladder answered, how many rows that cost and how long it took. Off by default and
-    /// not merely for tidiness: graph.js issues a request every 50 ms while a chart is being panned,
-    /// multiplied by the number of charts on the page, so this is a diagnostic to switch on for a
-    /// while and switch off again, not a running commentary.</remarks>
+    /// <summary>Обрабатывает запрос истории от WebUI или серверного JavaScript.</summary>
+    /// <remarks>Выполняется на потоке вызывающей стороны, не в рабочем потоке записи.
+    /// При verbose журналирует параметры, выбранный уровень, объём чтения и длительность.
+    /// Исключение превращается в предупреждение и пустой массив: это не доказательство отсутствия истории.</remarks>
     private JSL.Array AQuery(string[] topics, DateTime begin, int count, DateTime end) {
       var sw = verbose ? System.Diagnostics.Stopwatch.StartNew() : null;
       try {
-        ArchQueryStat stat;
-        var rez = ArchQuery.Run(_store, topics, begin, count, end, out stat);
-        if(sw != null) {
+        var rez = ArchQuery.Run(_store, topics, begin, count, end, out ArchQueryStat stat);
+        if (sw != null) {
           sw.Stop();
           Log.Info("{0}", Describe(topics, begin, count, end, stat, (int)rez.length, sw.Elapsed.TotalMilliseconds));
         }
         return rez;
       }
       catch(Exception ex) {
-        Log.Warning("Archivist.AQuery([{0}], {1:yyMMdd'T'HHmmss}, {2}) - {3}",
-          string.Join(", ", topics ?? new string[0]), begin, count, ex.Message);
+        Log.Warning("Archivist.AQuery([{0}], {1:yyMMdd'T'HHmmss}, {2}) - {3}", string.Join(", ", topics ?? new string[0]), begin, count, ex.Message);
         return new JSL.Array();
       }
     }
-
-    /// <summary>One log line describing a query and what it cost.</summary>
-    /// <remarks>Separate from the call site so the format string can be exercised by a test. A
-    /// composite format is checked only when it runs, and this one runs only with verbose set - the
-    /// one setting nobody has on while the tests are green.
-    /// <para>The window is printed as the caller gave it, in local time: that is what the chart
-    /// asked for, and it is what has to be matched against a screenshot. The topic list comes last
-    /// because it is the part that runs long.</para></remarks>
-    internal static string Describe(string[] topics, DateTime begin, int count, DateTime end,
-                                    ArchQueryStat stat, int points, double ms) {
+    
+    /// <summary>Формирует строку журнала с параметрами и затратами запроса.</summary>
+    /// <remarks>Окно выводится в том виде, в котором его передал клиент, до выравнивания на сетку. 
+    /// Список топиков помещён в конец, чтобы длинные пути не скрывали показатели.
+    /// Форматирование отделено от запроса и не требует обращения к хранилищу.</remarks>
+    internal static string Describe(string[] topics, DateTime begin, int count, DateTime end, ArchQueryStat stat, int points, double ms) {
       var names = topics ?? new string[0];
-      return string.Format(
-        "Archivist.AQuery {0} topic(s) [{1:yyMMdd'T'HHmmss} .. {2:yyMMdd'T'HHmmss}] count={3}"
-        + " -> {4}, {5:n0} row(s), {6:n0} point(s), {7:n1} ms  [{8}]",
-        names.Length, begin, end == DateTime.MinValue ? begin : end, count,
-        stat.Level, stat.Rows, points, ms, string.Join(", ", names));
+      return string.Format("Archivist.AQuery {0} topic(s) [{1:yyMMdd'T'HHmmss} .. {2:yyMMdd'T'HHmmss}] count={3} -> {4}, {5:n0} row(s), {6:n0} point(s), {7:n1} ms  [{8}]",
+        names.Length, begin, end == DateTime.MinValue ? begin : end, count, stat.Level, stat.Rows, points, ms, string.Join(", ", names));
     }
-
     #endregion AQuery
   }
 }

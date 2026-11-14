@@ -217,8 +217,8 @@ namespace X13.WebUI {
       }
     }
 
-    // Tells the frontend this document's root is gone (evnt.del on RootVid - see app-shell.js
-    // #onDocumentRootDeleted) and stops this controller, mirroring Dispose().
+    // Tells the frontend this document's root is gone (evnt.del on RootVid - see
+    // document-session.js isOwnRoot) and stops this controller, mirroring Dispose().
     private void HandleRootRemoved() {
       string vid = RootVid;
       _send(ViewProtocolSerializer.Del(vid));

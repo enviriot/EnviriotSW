@@ -33,9 +33,9 @@ export class ViewApi {
     return this.client.request('req.close', { vid });
   }
 
-  log(before, count) {
+  log(beforeId, count) {
     const payload = { count };
-    if(before) payload.before = before;
+    if(beforeId) payload.beforeId = beforeId;
     return this.client.request('req.log', payload);
   }
 }

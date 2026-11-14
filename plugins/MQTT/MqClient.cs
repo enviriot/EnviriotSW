@@ -23,6 +23,7 @@ namespace X13.MQTT {
     private bool _waitPingResp;
     private Timer _tOut;
     private Status _status;
+    private readonly HashSet<MqSite> _subscriptions = new HashSet<MqSite>();
 
     public readonly List<MqSite> Sites;
     public readonly string Signature;
@@ -51,22 +52,31 @@ namespace X13.MQTT {
       Connect();
     }
     public void Subscribe(MqSite ms) {
-      if(status == Status.Connected) {
+      lock(Sites) {
+        if(status != Status.Connected || !_subscriptions.Add(ms)
+            || _subscriptions.Any(z => z != ms && string.Equals(z.remotePath, ms.remotePath, StringComparison.Ordinal))) {
+          return;
+        }
         var msg = new MqSubscribe();
         msg.Add(ms.remotePath, QoS.AtMostOnce);
         Send(msg);
       }
     }
     public void Unsubscribe(MqSite mqSite) {
-      if(Sites.Remove(mqSite) && status == Status.Connected) {
+      lock(Sites) {
+        if(!_subscriptions.Remove(mqSite) || status != Status.Connected
+            || _subscriptions.Any(z => string.Equals(z.remotePath, mqSite.remotePath, StringComparison.Ordinal))) {
+          return;
+        }
         var msg = new MqUnsubscribe();
         msg.Add(mqSite.remotePath);
         Send(msg);
       }
     }
     public void Dispose() {
-      _tOut.Change(Timeout.Infinite, Timeout.Infinite);
       Disconnect();
+      // DISCONNECT может переустановить таймер через Received; выключаем его после закрытия.
+      _tOut.Change(Timeout.Infinite, Timeout.Infinite);
     }
 
     private void Disconnect() {
@@ -78,7 +88,19 @@ namespace X13.MQTT {
         Thread.Sleep(0);
         s.Close();
       }
-      foreach(var site in Sites.ToArray()) {
+      NotifyDisconnected();
+    }
+
+    private MqSite[] SnapshotSites() {
+      lock(Sites) {
+        return Sites.ToArray();
+      }
+    }
+    private void NotifyDisconnected() {
+      lock(Sites) {
+        _subscriptions.Clear();
+      }
+      foreach(var site in SnapshotSites()) {
         site.Disconnected();
       }
     }
@@ -114,7 +136,7 @@ namespace X13.MQTT {
           }
         }
         this.Send(ConnInfo);
-        _tOut.Change(3000, KEEP_ALIVE);       // better often than never
+        _tOut.Change(3000, KEEP_ALIVE);       // Ожидаем CONNACK; дальнейшие проверки периодические.
       }
       catch(Exception ex) {
         var se = ex as SocketException;
@@ -140,7 +162,7 @@ namespace X13.MQTT {
             status = Status.Connected;
             _tOut.Change(KEEP_ALIVE, KEEP_ALIVE);
             Log.Info("Connected to {0}", Signature);
-            foreach(var site in Sites) {
+            foreach(var site in SnapshotSites()) {
               site.Connected();
             }
           } else {
@@ -151,6 +173,7 @@ namespace X13.MQTT {
         break;
       case MessageType.DISCONNECT:
         status = Status.Disconnected;
+        NotifyDisconnected();
         _tOut.Change(3000, KEEP_ALIVE);
         break;
       case MessageType.PINGRESP:
@@ -193,7 +216,7 @@ namespace X13.MQTT {
       } else if(path[0]!='/') {
         path="/"+path;
       }
-      foreach(var s in Sites.Where(z => path.StartsWith(z.remotePrefix))) {
+      foreach(var s in SnapshotSites().Where(z => path.StartsWith(z.remotePrefix))) {
         s.Publish(path, pm.Payload);
       }
     }

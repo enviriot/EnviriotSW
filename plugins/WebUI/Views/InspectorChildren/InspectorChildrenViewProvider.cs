@@ -77,8 +77,8 @@ namespace X13.WebUI {
       return controller.OpenCatalog(vid, view);
     }
 
-    // The document's own topic having a DevicePLC editor (Ext/DevicePLC, set via MsDevice.cs
-    // on its "pa0" child) means it also has a direct child topic literally named "src"
+    // The document's own topic having a DevicePLC editor (Ext/DevicePLC on "pa0", Ext/LogramPLC on
+    // "pa1", both set via MsDevice.cs) means it may also have a direct child topic literally named "src"
     // (MsDevice.cs sets that child's own manifest editor to "JS") holding its program source -
     // give that one row the multi-line/auto-growing JS editor (view-row.js's "value" view)
     // instead of the compact single-line default every other Children row gets, since PLC

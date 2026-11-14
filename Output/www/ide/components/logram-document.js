@@ -1,66 +1,42 @@
 import { LitElement, html, css, svg } from '../../lib/lit-all.min.js';
 import './context-menu.js';
 import './breadcrumb-bar.js';
+import '../editors/display-editors.js';
+import { CELL, MIN_LEFT_CELL, blockGeometry, variableGeometry, buildScene, canvasSize, wirePoints, wirePathD } from './logram-scene.js';
+import { hitTest, marqueeIntersections } from './logram-hit-test.js';
+import { LogramViewport } from './logram-viewport.js';
+import { formatConstructorValue, parseConstructorValue } from '../services/value-format.js';
 
 // The other view of the same topic, for the bar's switch button. A Logram document is only ever
 // opened on a Logram-typed topic, so the Inspector side always exists and the button is constant.
 const INSPECTOR_VIEW = { label: 'Inspector', mode: 'inspector' };
 
-const CELL = 18;
-// How far a block's drawn body reaches above its first pin row and below its last one:
-// a hair under the half-cell the layout actually reserves, so two blocks placed on
-// adjacent rows keep a 2px seam between them instead of their edges touching and
-// reading as one shape.
-const BLOCK_EDGE = CELL / 2 - 1;
-const MIN_SCALE = 0.5;
-const MAX_SCALE = 5;
-// Half a cell of white beyond the content on every side (#canvasSize). The SVG viewport
-// clips at the canvas edge, so without it a wire routed along the topmost row - or an
-// element's own border - draws with half its stroke outside and comes out visibly thinner
-// than the same line one cell further in.
-const CANVAS_PAD = CELL / 2;
-const MIN_CANVAS_CELLS = { w: 20, h: 14 };
-// The leftmost column a BLOCK may be placed in - column 0 is kept clear for wires. An
-// input pin sits ON its element's own left edge, so a wire reaching it has to occupy the
-// cell one to the left first, and the router calls x < 0 off-canvas
-// (LogramGraphController.IsBlocked): a block at column 0 gets no route in at all, only
-// the straight fallback line through whatever is in the way. The right edge gets the
-// same clearance from #canvasSize's spare column instead - there is no element to move
-// there, so the canvas simply grows. Vertically neither is needed: a wire approaches a
-// pin horizontally, and the rows above/below a pin are free canvas already.
-//
-// Variables are deliberately exempt and may sit flush against the edge: a variable is
-// how a diagram reaches a topic outside itself, its usual source is that binding rather
-// than a wire (nothing is drawn for a non-local source, see #renderWire), and the left
-// column is exactly where such an input belongs.
-const MIN_LEFT_CELL = 1;
-// Where the view comes to rest (#resetPan): the canvas's top-left corner sits this far in
-// from the panel's own corner. A pan offset and nothing more - the canvas itself carries no
-// margin, it is sized to its content.
-const VIEW_MARGIN_CELLS = 3;
-// How far a wire's drawn line stops short of a corner before curving through it (see
-// #wirePathD, which clamps it to half of the shorter adjacent run so adjacent curves can
-// never overlap). At half a CELL the clamp binds on every single-cell run, so a tight
-// zigzag draws as one continuous S-curve with no straight portion left between corners -
-// deliberate, but it is also the point of maximum divergence from the un-rounded polyline
-// that .wire-hit and #pointNearSegment still hit-test against.
-const WIRE_CORNER_RADIUS = CELL / 2;
+// The LPLC editor's own commands (LplcPaletteBuilder) - forwarded to the server as they are.
+const LPLC_RPC_COMMAND = /^(?:show-in:|hide-in:|show-out:|hide-out:)|^(?:unbind|hide)$/;
 
+// Документ Logram: Lit-рендеринг и команды. Где что стоит на экране - logram-scene.js, что под
+// курсором - logram-hit-test.js, масштаб и сдвиг холста - logram-viewport.js.
+//
+// view picks the server side: 'logram' (LogramViewProvider) or 'lplc' (LplcViewProvider, an ESP
+// node's LogramPLC program). Both send the same rows, so the scene is shared; what differs is the
+// commands - LPLC has no topic drop and no trace, but pin show/hide and named additions - and an
+// LPLC pin, which is a key of its block rather than a topic, navigates to that block.
 export class X13LogramDocument extends LitElement {
   static properties = {
+    view: {},
     path: {},
     rootName: {},
     api: { attribute: false },
     store: { attribute: false },
     rows: { attribute: false },
-    scale: { type: Number },
-    tx: { type: Number },
-    ty: { type: Number },
     selected: { attribute: false },
     dragState: { attribute: false },
     wireDraft: { attribute: false },
     marquee: { attribute: false },
     menuState: { attribute: false },
+    nameState: { attribute: false },
+    constantState: { attribute: false },
+    argumentState: { attribute: false },
   };
 
   static styles = css`
@@ -69,17 +45,20 @@ export class X13LogramDocument extends LitElement {
        breadcrumb bar joined it above - .zoom-controls belong to the canvas, not to the document,
        and would otherwise position against the bar as well and sit over it. Nothing else moved
        with them: every coordinate this component computes comes from getBoundingClientRect or
-       elementFromPoint (see #toSvgPoint), which are client coordinates and do not care which
-       ancestor establishes the containing block. */
+       elementFromPoint (see LogramViewport.screenToScene), which are client coordinates and do
+       not care which ancestor establishes the containing block. */
     .body { flex: 1 1 auto; min-height: 0; overflow: hidden; position: relative; }
+    .plc-controls { margin-top: 12px; }
     .surface { user-select: none; }
-    /* Base cursor is pointer (empty canvas, per #hitTest's own rules) - pan-in-progress
+    /* Base cursor is pointer (empty canvas, per hitTest's own rules) - pan-in-progress
        (ctrl+drag, see #onSurfacePointerDown) overrides to grabbing; the four hoverable
        hit-test targets (pin/wire/element) below all override back to default, since
        their actual behavior (select/menu/drag) isn't a simple "click here" affordance. */
     .viewport { background: #eef3f8; cursor: pointer; height: 100%; overflow: hidden; width: 100%; }
     .viewport.panning { cursor: grabbing; }
     .surface { transform-origin: 0 0; }
+    /* Constant labels can extend left of the routing grid without changing its coordinates. */
+    .surface.lplc { overflow: visible; }
     .zoom-controls { display: flex; flex-direction: column; gap: 4px; position: absolute; right: 8px; top: 8px; }
     .zoom-controls button {
       background: #fff;
@@ -92,42 +71,59 @@ export class X13LogramDocument extends LitElement {
       width: 26px;
     }
     .block-body { fill: #4682b4; }
+    .block-body.configuration-error { stroke: #dc2626; stroke-width: 2; }
     .block-body.selected, .variable-body.selected { fill: #ff6347; }
     .variable-body { fill: #4682b4; rx: 4; }
     .variable-label { fill: #fff; font-family: Consolas, monospace; font-size: 11px; pointer-events: none; }
     .pin-label { fill: #243447; font-family: Consolas, monospace; font-size: 10px; pointer-events: none; }
     .pin-trace { fill: #b45309; font-family: Consolas, monospace; font-size: 10px; font-weight: 700; pointer-events: none; }
+    .pin-constant { fill: #6b7280; font-family: Consolas, monospace; font-size: 10px; font-weight: 700; cursor: text; pointer-events: all; }
     .block-icon { pointer-events: none; }
+    .constructor-title, .constructor-argument { fill: #fff; font-family: Consolas, monospace; font-size: 10px; pointer-events: none; }
+    .constructor-argument rect { pointer-events: all; }
+    .constructor-argument.pin-error text { fill: #fee2e2; font-weight: 700; }
+    .constructor-title { font-weight: 700; }
+    .constructor-divider { stroke: #cbd5e1; stroke-dasharray: 3 2; pointer-events: none; }
     .pin-dot { pointer-events: none; }
     .pin-dot.selected { stroke: #ff6347; stroke-width: 2; }
+    .pin-error .pin-dot { fill: #dc2626; }
+    .pin-error .pin-label { fill: #b91c1c; font-weight: 700; }
     .wire { fill: none; pointer-events: none; stroke-width: 2; }
     .wire.selected { stroke: #ff6347 !important; stroke-width: 3; }
     /* wire-hit's own stroke-width (CELL, "a cell across") only approximates
-       #pointNearSegment's real per-segment rectangle test at corners (SVG stroke
+       pointNearSegment's real per-segment rectangle test at corners (SVG stroke
        joins/caps aren't a true capsule) - close enough for :hover cursor feedback;
-       #hitTest (used for the actual click/menu/drag logic) does the exact math. */
-    .pin-hit, .wire-hit, .element-hit, .block-body, .variable-body { cursor: default; }
-    .pin-hit, .element-hit { fill: transparent; }
+       hitTest (used for the actual click/menu/drag logic) does the exact math. */
+    .pin-hit, .wire-hit, .block-body, .variable-body { cursor: default; }
+    .pin-hit { fill: transparent; }
     .wire-hit { fill: none; stroke: transparent; stroke-width: 18; }
     .wire-draft { fill: none; pointer-events: none; stroke: #2563eb; stroke-dasharray: 4 3; stroke-width: 2; }
     .marquee { fill: rgba(37, 99, 235, 0.1); pointer-events: none; stroke: #2563eb; stroke-dasharray: 4 3; }
     .grid-bg { fill: #fff; stroke: #cfd8e3; }
     .grid-dots { pointer-events: none; }
+    .name-input { border: 1px solid #2563eb; font-family: Consolas, monospace; font-size: 12px; padding: 2px 4px; position: fixed; z-index: 10; }
+    .constant-input { box-sizing: border-box; border: 1px solid #9ca3af; color: #6b7280; font-family: Consolas, monospace; padding: 2px 4px; position: fixed; z-index: 10; text-align: right; transform: translateY(-50%); }
+    .constant-input:invalid { border-color: #dc2626; }
   `;
 
   constructor() {
     super();
+    this.view = 'logram';
     this.path = '/';
     this.rootName = '';
     this.rows = [];
-    this.scale = 2.5;
-    this.#resetPan();
+    this.#viewport = new LogramViewport(this);
+    this.#scene = buildScene(this.rows);
     this.selected = null;
     this.dragState = null;
     this.wireDraft = null;
     this.marquee = null;
     this.menuState = null;
+    this.nameState = null;
+    this.constantState = null;
+    this.argumentState = null;
     this.unsubscribe = null;
+    this.builtRoot = null;
     this.onKeyDown = (e) => this.#handleKeyDown(e);
   }
 
@@ -136,47 +132,71 @@ export class X13LogramDocument extends LitElement {
     window.addEventListener('keydown', this.onKeyDown);
   }
 
+  // Сцена строится один раз на изменение строк. Hit-test между приходом строк и перерисовкой
+  // отвечает по прежней сцене - той, что пока и нарисована.
+  willUpdate(changed) {
+    if(changed.has('rows')) {
+      this.#scene = buildScene(this.rows);
+      if(this.constantState && !this.rows.some((row) => row.vid === this.constantState.vid && row.constantEditable)) this.constantState = null;
+      if(this.argumentState && !this.rows.some(row => row.vid === this.argumentState.blockVid && row.constructorRows?.some(a => a.name === this.argumentState.name && a.editable))) this.argumentState = null;
+    }
+    if(changed.has('view') && this.view !== 'lplc') this.constantState = null;
+    if(changed.has('view') && this.view !== 'lplc') this.argumentState = null;
+  }
+
   updated(changed) {
     if(changed.has('store')) this.#subscribeStore();
+    if(changed.has('rows') || changed.has('view') || changed.has('api') || changed.has('store')) this.#buildOpenedProgram();
+    if(changed.has('nameState') && this.nameState) this.renderRoot.querySelector('.name-input')?.focus();
+    if(changed.has('argumentState') && this.argumentState && !changed.get('argumentState')) this.renderRoot.querySelector('.argument-input')?.focus();
+    if(changed.has('constantState') && this.constantState && changed.get('constantState')?.vid !== this.constantState.vid) {
+      const input = this.renderRoot.querySelector('.constant-input');
+      input?.focus();
+      input?.select();
+    }
   }
 
   disconnectedCallback() {
     window.removeEventListener('keydown', this.onKeyDown);
+    this.constantState = null;
+    this.argumentState = null;
+    this.builtRoot = null;
     this.unsubscribe?.();
     this.unsubscribe = null;
     super.disconnectedCallback();
   }
 
   render() {
-    let elements = this.rows.filter((row) => row.editor === 'LogramBlock' || row.editor === 'LogramVariable');
+    const { pinsByParent, rowsByVid } = this.#scene;
+    const plc = this.view === 'lplc' ? this.rows.find((row) => row.editor === 'LogramCanvas') : null;
+    let elements = this.#scene.elements;
     if(this.dragState) {
       // Live preview during a drag: override every dragged row's position by the same
       // (unsnapped) in-progress delta, without touching the store - the actual commit
       // only happens once per row, on pointerup. A shared dx/dy (not per-row absolute
       // coords) keeps a multi-selection's relative layout intact regardless of which
-      // element in the set was actually grabbed. #canvasSize sees this too, so the
+      // element in the set was actually grabbed. canvasSize sees this too, so the
       // surface grows live as a block is dragged past its current edge, instead of
       // only on the next commit (as the server-persisted-size approach this replaced
       // could only ever manage).
       const { vids, dx, dy } = this.dragState;
       elements = elements.map((el) => vids.has(el.vid) ? { ...el, x: (el.x || 0) + dx, y: (el.y || 0) + dy } : el);
     }
-    const { x: boxX, y: boxY, width, height } = this.#canvasSize(elements);
-    const { pinsByParent, rowsByVid } = this.#sceneRows();
+    const { x: boxX, y: boxY, width, height } = canvasSize(elements);
 
     return html`
-      <x13-breadcrumb-bar .path=${this.path} .rootName=${this.rootName} .currentMode=${'logram'}
+      <x13-breadcrumb-bar .path=${this.path} .rootName=${this.rootName} .currentMode=${this.view}
         .altView=${INSPECTOR_VIEW}></x13-breadcrumb-bar>
       <div class="body">
-        <div class="viewport" @pointerdown=${this.#onSurfacePointerDown} @wheel=${this.#onWheel} @contextmenu=${this.#onSurfaceContextMenu}
+        <div class="viewport" @pointerdown=${this.#onSurfacePointerDown} @wheel=${(e) => this.#viewport.onWheel(e)} @contextmenu=${this.#onSurfaceContextMenu}
           @dragover=${this.#onSurfaceDragOver} @drop=${this.#onSurfaceDrop}>
           <!-- The viewBox origin is negative by CANVAS_PAD, and that is the whole of how the
                white field gets its half-cell on the top and left: content keeps drawing at its
                own cell coordinates and nothing inside has to know. Width/height match the
                viewBox, so the SVG's own scale stays 1 and .surface's CSS transform is still the
                only zoom in play. -->
-          <svg class="surface" width=${width} height=${height} viewBox="${boxX} ${boxY} ${width} ${height}"
-            style="transform:translate(${this.tx}px,${this.ty}px) scale(${this.scale})">
+          <svg class="surface ${this.view === 'lplc' ? 'lplc' : ''}" width=${width} height=${height} viewBox="${boxX} ${boxY} ${width} ${height}"
+            style="transform:${this.#viewport.transform}">
             <defs>
               <!-- x/y=-CELL/2 shifts where each tile repeat lands, without moving the mark
                    within its own tile (still centered at local CELL/2, so nothing here
@@ -196,115 +216,128 @@ export class X13LogramDocument extends LitElement {
           </svg>
         </div>
         <div class="zoom-controls">
-          <button @click=${() => this.#zoomBy(1.2)} title="Zoom in">+</button>
-          <button @click=${() => this.#zoomBy(1 / 1.2)} title="Zoom out">-</button>
-          <button @click=${this.#resetView} title="Reset view">⟲</button>
+          <button @click=${() => this.#viewport.zoomBy(1.2)} title="Zoom in">+</button>
+          <button @click=${() => this.#viewport.zoomBy(1 / 1.2)} title="Zoom out">-</button>
+          <button @click=${() => this.#viewport.reset()} title="Reset view">⟲</button>
+          ${plc ? this.#renderPlcActions(plc) : html``}
         </div>
       </div>
       ${this.menuState ? html`
         <x13-context-menu .items=${this.menuState.items} .x=${this.menuState.x} .y=${this.menuState.y}
-          @menu-command=${this.#onMenuCommand} @menu-close=${this.#closeMenu}></x13-context-menu>` : html``}`;
+          @menu-command=${this.#onMenuCommand} @menu-close=${this.#closeMenu}></x13-context-menu>` : html``}
+      ${this.nameState ? html`
+        <input class="name-input" style="left:${this.nameState.x}px;top:${this.nameState.y}px" placeholder=${this.nameState.placeholder}
+          @keydown=${this.#onNameKeyDown} @blur=${this.#cancelName}>` : html``}
+      ${this.argumentState ? html`
+        <input class="argument-input name-input" aria-label="Constructor argument" style="left:${this.argumentState.x}px;top:${this.argumentState.y}px"
+          .value=${this.argumentState.text} title=${this.argumentState.preview || ''}
+          @pointerdown=${e => e.stopPropagation()} @input=${this.#onArgumentInput}
+          @keydown=${this.#onArgumentKeyDown} @blur=${() => { this.argumentState = null; }}>` : html``}
+      ${this.constantState ? html`
+        <input class="constant-input" inputmode="decimal" aria-label="Input constant" title="Enter to save; Escape to cancel"
+          style="left:${this.constantState.x}px;top:${this.constantState.y}px;width:${this.constantState.width}px;font-size:${this.constantState.fontSize}px"
+          .value=${this.constantState.value} .readOnly=${this.constantState.saving}
+          @input=${(e) => e.currentTarget.setCustomValidity('')}
+          @keydown=${this.#onConstantKeyDown} @blur=${this.#onConstantBlur}>` : html``}`;
   }
 
-  // The box the surface draws: the elements' own bounding box (x/y/width/height all in grid
-  // cells, same units render() uses to draw them - see #renderBlock's comment on why they
-  // stay in cells), floored at MIN_CANVAS_CELLS so a new/empty diagram isn't a sliver, plus
-  // CANVAS_PAD of white on every side, and one spare CELL past the rightmost element. That
-  // `+ 1` is wire room, not decoration: a block's width already reaches its output pins
-  // (baked into WidthCells server-side, see LogramGraphController.BuildLayout), so a wire
-  // leaving the rightmost block's output has to step into the column beyond it, and without
-  // that column the step is off-canvas and the route fails. MIN_LEFT_CELL keeps the mirror
-  // column free on the left. Nothing is added on the top or bottom (see MIN_LEFT_CELL) and
-  // no spare margin beyond that: this runs on every render, mid-drag included (see render()),
-  // so the canvas simply follows a block dragged or dropped past its current edge instead of
-  // keeping room in reserve for one. The server bounds its wire search by the same box
-  // (LogramGraphController.ResolveWires, which adds the same one column) - a route outside it
-  // would be clipped by the SVG viewport rather than drawn.
-  #canvasSize(elements) {
-    let rightCells = 0, bottomCells = 0;
-    for(const el of elements) {
-      const w = el.width || 2;
-      const h = el.height || 2;
-      rightCells = Math.max(rightCells, (el.x || 0) + w);
-      bottomCells = Math.max(bottomCells, (el.y || 0) + h);
+  #renderPlcActions(plc) {
+    return html`
+      <x13-device-plc-editor class="plc-controls" view="value" .compact=${true} .modified=${plc.plcModified}
+        .state=${plc.value} .rpc=${(cmd) => this.#runPlcAction(plc.vid, cmd)}></x13-device-plc-editor>`;
+  }
+
+  #buildOpenedProgram() {
+    const root = this.view === 'lplc' ? this.rows.find((row) => row.editor === 'LogramCanvas')?.vid : null;
+    if(!root) {
+      this.builtRoot = null;
+      return;
     }
-    const widthCells = Math.max(MIN_CANVAS_CELLS.w, rightCells + 1);
-    const heightCells = Math.max(MIN_CANVAS_CELLS.h, bottomCells);
-    return { x: -CANVAS_PAD, y: -CANVAS_PAD, width: widthCells * CELL + 2 * CANVAS_PAD, height: heightCells * CELL + 2 * CANVAS_PAD };
+    if(!this.api || this.builtRoot === root) return;
+    this.builtRoot = root;
+    this.#runPlcAction(root, 'action:MQTT_SN.PLC.Build');
+  }
+
+  #runPlcAction(vid, cmd) {
+    if(!this.api) return;
+    return this.api.rpc(vid, cmd).catch((error) => console.warn('lplc action failed', cmd, vid, error));
   }
 
   #renderElement(el, pins, rowsByVid) {
     return el.editor === 'LogramBlock' ? this.#renderBlock(el, pins, rowsByVid) : this.#renderVariable(el, rowsByVid);
   }
 
-  // Groups pin rows by owning element vid and indexes every row by its own vid -
-  // shared between render() (drawing) and #hitTest (mouse) so both agree on exactly
-  // the same pin/element grouping, rather than two independent derivations drifting
-  // apart.
-  #sceneRows() {
-    const pinsByParent = new Map();
-    const rowsByVid = new Map();
-    for(const row of this.rows) {
-      rowsByVid.set(row.vid, row);
-      if(row.editor !== 'LogramPin') continue;
-      const parentVid = row.vid.slice(0, row.vid.lastIndexOf('/'));
-      if(!pinsByParent.has(parentVid)) pinsByParent.set(parentVid, []);
-      pinsByParent.get(parentVid).push(row);
-    }
-    return { pinsByParent, rowsByVid };
-  }
-
   // x/y/width/height come straight from the server in grid cells (LogramGraphController
   // serializes the exact same numbers it routed wires against) - deriving our own
   // estimate here would drift from that and wires would visibly miss the pins.
   //
-  // bodyTop is the pin-anchor box's own top - matches GetPinCell's Y+index (a
-  // block's first pin sits flush on its own top row, there's no header row
-  // reserved above it any more) and outputs at X+WidthCells - body/pins/outputs
-  // all have to move together with that anchor, or the routed wires (computed
-  // against GetPinCell) drift off the drawn pins again. `width` already reaches the
-  // output pins (the one-cell gap past the body is baked into WidthCells
-  // server-side now, see LogramGraphController.BuildLayout), so it doubles as the
-  // body's own drawn width - no separate `bodyWidth` any more.
+  // The pixels come from blockGeometry: anchorY is the first pin row (GetPinCell's
+  // Y+index - there is no header row reserved above it) and outputs sit at x1
+  // (X+WidthCells) - body/pins/outputs all move together with that anchor, or the
+  // routed wires (computed against GetPinCell) drift off the drawn pins again. x1
+  // already reaches the output pins (the one-cell gap past the body is baked into
+  // WidthCells server-side, see LogramGraphController.BuildLayout), so it doubles as
+  // the body's own right edge.
+  //
+  // The body is its own hit target - no separate transparent rect under it: the two
+  // used to be computed apart and disagreed (see blockGeometry).
   #renderBlock(el, pins, rowsByVid) {
-    const x = (el.x || 0) * CELL;
-    const bodyTop = (el.y || 0) * CELL;
-    const width = (el.width || 2) * CELL;
-    const height = (el.height || 2) * CELL;
-    // Drawn top is nudged BLOCK_EDGE above the pin-anchor box (bodyTop, which stays tied
-    // to the server layout so wires keep landing on the pin dots), and the drawn height
-    // gives up the missing pixel at each end - so the body ends BLOCK_EDGE past its last
-    // pin row too, symmetric. Purely a visual trim on top of the server layout, which
-    // stays untouched.
-    const visualTop = bodyTop - BLOCK_EDGE;
-    const visualHeight = height - 2 * (CELL / 2 - BLOCK_EDGE);
+    const g = blockGeometry(el);
+    const width = g.x1 - g.x0;
     const wires = [];
     const pinNodes = pins.map((pin) => {
       const isInput = pin.pinDirection === 'in';
-      const px = isInput ? x : x + width;
-      const py = bodyTop + (pin.pinIndex || 0) * CELL;
+      const px = isInput ? g.x0 : g.x1;
+      const py = g.anchorY + (pin.pinIndex || 0) * CELL;
       if(pin.sourceVid) wires.push(this.#renderWire(pin, px, py, rowsByVid));
       const pinSelected = this.selected?.type === 'pin' && this.selected.vid === pin.vid;
       return svg`
-        <g @dblclick=${(e) => { e.stopPropagation(); this.#openInInspector(pin.vid); }}>
+        <g class=${pin.pinError ? 'pin-error' : ''} @dblclick=${(e) => { e.stopPropagation(); this.#openInInspector(pin.vid); }}>
+          ${pin.pinError ? svg`<title>${isInput ? 'Input' : 'Output'} "${pin.name}" is not in the block's pin catalog.</title>` : svg``}
           <rect class="pin-hit" data-vid=${pin.vid} data-side=${pin.pinDirection} x=${px - CELL / 2} y=${py - CELL / 2} width=${CELL} height=${CELL}></rect>
           <circle class="pin-dot ${pinSelected ? 'selected' : ''}" cx=${px} cy=${py} r="3" fill=${pin.sourceVid && !pin.sourceLocal ? '#9aa5b1' : (pin.color || '#9aa5b1')}></circle>
           <text class="pin-label" x=${isInput ? px + 6 : px - 6} y=${py + 3} text-anchor=${isInput ? 'start' : 'end'}>${pin.name}</text>
-          ${pin.trace ? svg`<text class="pin-trace" x=${isInput ? px - 6 : px + 6} y=${py - 8} text-anchor=${isInput ? 'end' : 'start'}>${pin.displayValue || ''}</text>` : svg``}
+          ${this.view === 'lplc' && isInput && pin.constantEditable ? svg`
+            <text class="pin-constant" x=${px - 6} y=${py} text-anchor="end" dominant-baseline="middle"
+              @pointerdown=${(e) => e.stopPropagation()} @dblclick=${(e) => this.#editConstant(e, pin)}>${pin.displayValue || '…'}<title>Double-click to edit the input constant</title></text>`
+            : pin.trace ? svg`<text class="pin-trace" x=${isInput ? px - 6 : px + 6} y=${py - 8} text-anchor=${isInput ? 'end' : 'start'}>${pin.displayValue || ''}</text>` : svg``}
         </g>`;
     });
     const isSelected = this.#isElementSelected(el.vid);
     return svg`
       <g @dblclick=${() => this.#openInInspector(el.vid)}>
-        <rect class="element-hit" x=${x} y=${bodyTop - height / 2} width=${width} height=${height}></rect>
         ${wires}
-        <rect class="block-body ${isSelected ? 'selected' : ''}" x=${x} y=${visualTop} width=${width} height=${visualHeight} rx="3">
-          <title>${el.name}</title>
+        <rect class="block-body ${isSelected ? 'selected' : ''} ${el.configurationError ? 'configuration-error' : ''}" x=${g.x0} y=${g.y0} width=${width} height=${g.y1 - g.y0} rx="3">
+          <title>${el.configurationError ? el.name + ': ' + el.configurationError : el.name}</title>
         </rect>
-        ${el.icon ? svg`<image class="block-icon" href=${el.icon} x=${x + width / 2 - 7} y=${visualTop} width="16" height="16"></image>` : svg``}
+        ${this.view === 'lplc' && el.constructorRows?.length ? this.#renderArguments(el, g, pins) : el.constructorArgs?.length ? svg`
+          <text class="constructor-title" x=${g.x0 + 6} y=${g.anchorY + 3}>${el.name} · constructor</text>
+          ${el.constructorArgs.map((label, index) => svg`
+            <text class="constructor-argument" x=${g.x0 + 6} y=${g.anchorY + (index + 1) * CELL + 3}>${label}</text>`)}
+          ${pins.length ? svg`<line class="constructor-divider" x1=${g.x0 + 3} x2=${g.x1 - 3}
+            y1=${g.anchorY + (el.constructorArgs.length + 0.5) * CELL} y2=${g.anchorY + (el.constructorArgs.length + 0.5) * CELL}></line>` : svg``}
+        ` : el.icon ? svg`<image class="block-icon" href=${el.icon} x=${g.x0 + width / 2 - 7} y=${g.y0} width="16" height="16"></image>` : svg``}
         ${pinNodes}
       </g>`;
   }
+
+  #renderArguments(el, g, pins) {
+    const last = Math.max(...el.constructorRows.map(a => a.position));
+    return svg`
+      ${el.icon ? svg`<image class="block-icon" href=${el.icon} x=${(g.x0 + g.x1) / 2 - 8} y=${g.anchorY - 8} width="16" height="16"></image>` : svg``}
+      ${el.constructorRows.map(argument => svg`
+        <g class=${argument.error ? 'constructor-argument pin-error' : 'constructor-argument'}
+          @dblclick=${e => { e.preventDefault(); e.stopPropagation(); }}
+          @contextmenu=${e => { e.preventDefault(); e.stopPropagation(); return this.#openContextMenu(e, el.vid + '/args.' + argument.name); }}>
+          <title>${argument.error || argument.label}</title>
+          <rect x=${g.x0 + 3} y=${g.anchorY + argument.position * CELL - CELL / 2} width=${g.x1 - g.x0 - 6} height=${CELL} fill="transparent"></rect>
+          <text x=${g.x0 + 6} y=${g.anchorY + argument.position * CELL + 3}>${argument.label}</text>
+          <text class="constructor-value" text-anchor="end" x=${g.x1 - 6} y=${g.anchorY + argument.position * CELL + 3}>${argument.text}</text>
+        </g>`)}
+      ${pins.length ? svg`<line class="constructor-divider" x1=${g.x0 + 3} x2=${g.x1 - 3}
+        y1=${g.anchorY + (last + 0.5) * CELL} y2=${g.anchorY + (last + 0.5) * CELL}></line>` : svg``}`;
+  }
+
 
   // A variable's pin anchors sit at exactly (x, y*CELL) / (x+width, y*CELL) - no
   // extra half-cell offset - to match GetVariableCell's routing anchors on the
@@ -319,113 +352,68 @@ export class X13LogramDocument extends LitElement {
   // as "this is what this variable now holds". Server side it is the same field on
   // the same kind of row - see LogramGraphController.SerializeElementRow.
   #renderVariable(el, rowsByVid) {
-    const x = (el.x || 0) * CELL;
-    const anchorY = (el.y || 0) * CELL;
-    const width = (el.width || 2) * CELL;
-    const bodyHeight = (el.height || 1) * CELL - 2 * (CELL / 2 - BLOCK_EDGE);
-    const bodyY = anchorY - bodyHeight / 2;
-    const wires = el.sourceVid ? [this.#renderWire(el, x, anchorY, rowsByVid)] : [];
+    const g = variableGeometry(el);
+    const wires = el.sourceVid ? [this.#renderWire(el, g.x0, g.anchorY, rowsByVid)] : [];
     const isSelected = this.#isElementSelected(el.vid);
     return svg`
       <g @dblclick=${() => this.#openInInspector(el.vid)}>
-        <rect class="element-hit" x=${x} y=${anchorY - CELL / 2} width=${width} height=${CELL}></rect>
         ${wires}
-        <rect class="variable-body ${isSelected ? 'selected' : ''}" x=${x} y=${bodyY} width=${width} height=${bodyHeight} rx="4"></rect>
-        <text class="variable-label" x=${x + 5} y=${bodyY + bodyHeight - 3}>${el.name}</text>
-        <rect class="pin-hit" data-vid=${el.vid} data-side="in" x=${x - CELL / 2} y=${anchorY - CELL / 2} width=${CELL} height=${CELL}></rect>
-        <circle class="pin-dot" cx=${x} cy=${anchorY} r="3" fill=${el.sourceVid && !el.sourceLocal ? '#9aa5b1' : (el.color || '#9aa5b1')}></circle>
-        <rect class="pin-hit" data-vid=${el.vid} data-side="out" x=${x + width - CELL / 2} y=${anchorY - CELL / 2} width=${CELL} height=${CELL}></rect>
-        <circle class="pin-dot" cx=${x + width} cy=${anchorY} r="3" fill=${el.color || '#9aa5b1'}></circle>
-        ${el.trace ? svg`<text class="pin-trace" x=${x + width + 6} y=${anchorY - 8} text-anchor="start">${el.displayValue || ''}</text>` : svg``}
+        <rect class="variable-body ${isSelected ? 'selected' : ''}" x=${g.x0} y=${g.y0} width=${g.x1 - g.x0} height=${g.y1 - g.y0} rx="4"></rect>
+        <text class="variable-label" x=${g.x0 + 5} y=${g.y1 - 3}>${el.name}</text>
+        <rect class="pin-hit" data-vid=${el.vid} data-side="in" x=${g.x0 - CELL / 2} y=${g.anchorY - CELL / 2} width=${CELL} height=${CELL}></rect>
+        <circle class="pin-dot" cx=${g.x0} cy=${g.anchorY} r="3" fill=${el.sourceVid && !el.sourceLocal ? '#9aa5b1' : (el.color || '#9aa5b1')}></circle>
+        <rect class="pin-hit" data-vid=${el.vid} data-side="out" x=${g.x1 - CELL / 2} y=${g.anchorY - CELL / 2} width=${CELL} height=${CELL}></rect>
+        <circle class="pin-dot" cx=${g.x1} cy=${g.anchorY} r="3" fill=${el.color || '#9aa5b1'}></circle>
+        ${el.trace ? svg`<text class="pin-trace" x=${g.x1 + 6} y=${g.anchorY - 8} text-anchor="start">${el.displayValue || ''}</text>` : svg``}
       </g>`;
   }
 
-  // sourcePath points are server-routed (LogramWireRouter.FindPath) waypoints in
-  // grid cells - FindPath's own native unit, same reason element x/y stay in cells
-  // (see #canvasSize's comment) - multiplied by CELL here, same as everywhere else a
-  // cell coordinate becomes a pixel one. sinkX/sinkY are already px (passed in from
-  // #renderBlock/#renderVariable) - only a fallback when a path hasn't arrived yet
-  // (e.g. this pin row landed before its wire's evnt.upd).
+  // Points come from wirePoints (logram-scene.js) - the same ones hit-testing walks.
   // Colored by the SOURCE's color (matching WPF, where a wire's Pen came from the
   // upstream/output pin's brush), not the sink's own - both source and sink rows
   // already carry a server-computed `color` (see LogramGraphController.ColorForValue),
   // same field the source's own dot uses, so this is never out of sync with it.
   #renderWire(row, sinkX, sinkY, rowsByVid) {
     if(!row.sourceLocal) return svg``;
-    const points = Array.isArray(row.sourcePath) && row.sourcePath.length > 0
-      ? row.sourcePath.map((p) => ({ x: (p.x || 0) * CELL, y: (p.y || 0) * CELL }))
-      : [{ x: sinkX, y: sinkY }, { x: sinkX, y: sinkY }];
-    // wire-hit stays straight-segmented - #hitTest/#pointNearSegment test against the
+    const points = wirePoints(row, sinkX, sinkY);
+    // wire-hit stays straight-segmented - hitTest/pointNearSegment test against the
     // exact same points, so rounding it too would only make the hit math approximate
-    // for no benefit (see the class's own comment above). Only the visible line (.wire)
+    // for no benefit (see the .wire-hit CSS comment above). Only the visible line (.wire)
     // gets the rounded treatment.
     const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
     const sourceRow = rowsByVid.get(row.sourceVid);
     const isSelected = this.selected?.type === 'wire' && this.selected.vid === row.vid;
     return svg`
       <path class="wire-hit" data-vid=${row.vid} d=${d}></path>
-      <path class="wire ${isSelected ? 'selected' : ''}" d=${this.#wirePathD(points)} stroke=${(sourceRow ? sourceRow.color : row.color) || '#9aa5b1'}></path>`;
-  }
-
-  // Rounds off each interior corner of an otherwise-straight polyline with a small
-  // quadratic curve instead of a sharp right angle - every corner here is a 90-degree
-  // grid turn (see LogramWireRouter), so "round it" just means stopping the straight
-  // run short of the corner by WIRE_CORNER_RADIUS and curving through the corner point
-  // to the same distance into the next run. The radius is clamped to half of whichever
-  // adjacent run is shorter, so two corners close together (a short zigzag) never
-  // overlap or overshoot past the run's own midpoint. Purely cosmetic - the underlying
-  // points, and hit-testing (#wirePathD is only used for the visible .wire path, never
-  // .wire-hit), are untouched.
-  #wirePathD(points) {
-    if(points.length <= 2) return points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-    let d = `M${points[0].x},${points[0].y}`;
-    for(let i = 1; i < points.length - 1; i++) {
-      const prev = points[i - 1], cur = points[i], next = points[i + 1];
-      const inLen = Math.hypot(cur.x - prev.x, cur.y - prev.y);
-      const outLen = Math.hypot(next.x - cur.x, next.y - cur.y);
-      // A repeated waypoint would divide by zero below, and a single NaN in `d` makes
-      // the browser drop the WHOLE path - the wire would vanish while .wire-hit (built
-      // from the raw points) stayed clickable. Degrade to a sharp corner instead.
-      if(inLen === 0 || outLen === 0) { d += ` L${cur.x},${cur.y}`; continue; }
-      const r = Math.min(WIRE_CORNER_RADIUS, inLen / 2, outLen / 2);
-      const inX = cur.x - (cur.x - prev.x) / inLen * r;
-      const inY = cur.y - (cur.y - prev.y) / inLen * r;
-      const outX = cur.x + (next.x - cur.x) / outLen * r;
-      const outY = cur.y + (next.y - cur.y) / outLen * r;
-      d += ` L${inX},${inY} Q${cur.x},${cur.y} ${outX},${outY}`;
-    }
-    const last = points[points.length - 1];
-    d += ` L${last.x},${last.y}`;
-    return d;
+      <path class="wire ${isSelected ? 'selected' : ''}" d=${wirePathD(points)} stroke=${(sourceRow ? sourceRow.color : row.color) || '#9aa5b1'}></path>`;
   }
 
   #subscribeStore() {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    this.builtRoot = null;
+    this.constantState = null;
     this.rows = [];
-    this.scale = 1;
-    this.#resetPan();
+    this.#viewport.reset();
     if(!this.store) return;
     this.unsubscribe = this.store.subscribe((rows) => {
       this.rows = rows;
     });
   }
 
-  // The view's resting position: the canvas's top-left corner, VIEW_MARGIN_CELLS in from
-  // the panel's own corner. Deliberately a corner and not the middle: the canvas has no
-  // server-side size, it's derived from the element rows - and those arrive *after* the
-  // LogramCanvas row that used to trigger centering, so "the middle" was computed against
-  // a still-empty MIN_CANVAS_CELLS canvas and put every diagram down and to the right, with
-  // no second attempt once the real rows landed. A corner needs no size at all, so nothing
-  // here has to wait for data.
-  #resetPan() {
-    this.tx = VIEW_MARGIN_CELLS * CELL;
-    this.ty = VIEW_MARGIN_CELLS * CELL;
+  #openInInspector(vid) {
+    const path = this.#topicPath(vid);
+    this.dispatchEvent(new CustomEvent('segment-command', { detail: { cmd: 'open', path }, bubbles: true, composed: true }));
   }
 
-  #openInInspector(vid) {
+  // The topic a row stands for. An LPLC pin (lplc#<block>/in.A, lplc#<block>/out.Q - see
+  // LplcModel.PinVid) is a key of its block's LPLC.in/LPLC.out, so it stands for the block.
+  #topicPath(vid) {
     const path = vid.slice(vid.indexOf('#') + 1);
-    this.dispatchEvent(new CustomEvent('segment-command', { detail: { cmd: 'open', path }, bubbles: true, composed: true }));
+    if(this.view !== 'lplc') return path;
+    const slash = path.lastIndexOf('/');
+    const last = path.slice(slash + 1);
+    return slash > 0 && (last.startsWith('in.') || last.startsWith('out.')) ? path.slice(0, slash) : path;
   }
 
   #selectWire(e, vid) {
@@ -451,7 +439,7 @@ export class X13LogramDocument extends LitElement {
         this.selected = null;
       }
       if(dragging) {
-        const p = this.#toSvgPoint(ev.clientX, ev.clientY);
+        const p = this.#viewport.screenToScene(ev.clientX, ev.clientY);
         this.wireDraft = { fromVid: vid, fromSide: side, originX, originY, x: p.x, y: p.y };
       }
     };
@@ -471,113 +459,16 @@ export class X13LogramDocument extends LitElement {
     window.addEventListener('pointerup', up, { once: true });
   }
 
-  // Client px -> content coordinates (cell coordinates * CELL - what element rows and wire
-  // waypoints are drawn in). The surface's box starts CANVAS_PAD outside the content, where
-  // its viewBox origin sits (see #canvasSize), so that pad comes back off here once instead
-  // of at each of the call sites downstream.
-  #toSvgPoint(clientX, clientY) {
-    const rect = this.renderRoot.querySelector('.surface').getBoundingClientRect();
-    const scale = this.scale || 1;
-    return { x: (clientX - rect.left) / scale - CANVAS_PAD, y: (clientY - rect.top) / scale - CANVAS_PAD };
-  }
-
   #pinAtPoint(clientX, clientY) {
     const el = this.renderRoot.elementFromPoint(clientX, clientY);
     if(!el || !el.classList?.contains('pin-hit')) return null;
     return { vid: el.dataset.vid, side: el.dataset.side };
   }
 
-  // Every pin anchor (in px), for both #hitTest and #wireSegments - mirrors the same
-  // px/py math #renderBlock/#renderVariable use to draw, so hit-testing never drifts
-  // from what's actually on screen. `wireRow` is the row whose sourcePath/sourceVid
-  // describes a wire ENDING at this anchor (a block pin's own row, or - only on a
-  // variable's "in" side, never "out", since both sides share one row - the
-  // variable's own row) - null where an anchor can't be a wire sink.
-  #pinAnchors(elements, pinsByParent) {
-    const pins = [];
-    for(const el of elements) {
-      const x = (el.x || 0) * CELL, y = (el.y || 0) * CELL;
-      const width = (el.width || 2) * CELL;
-      if(el.editor === 'LogramBlock') {
-        for(const row of pinsByParent.get(el.vid) || []) {
-          const isInput = row.pinDirection === 'in';
-          pins.push({ vid: row.vid, side: row.pinDirection, px: isInput ? x : x + width, py: y + (row.pinIndex || 0) * CELL, selectable: true, wireRow: row });
-        }
-      }
-      else {
-        pins.push({ vid: el.vid, side: 'in', px: x, py: y, selectable: false, wireRow: el });
-        pins.push({ vid: el.vid, side: 'out', px: x + width, py: y, selectable: false, wireRow: null });
-      }
-    }
-    return pins;
-  }
-
-  // One entry per drawn wire (not per segment - #hitTest walks a wire's own segments
-  // itself) - reuses the pin anchors' own px/py as the fallback single-segment
-  // endpoint, same as #renderWire does.
-  #wireSegments(pinAnchors) {
-    const wires = [];
-    for(const pin of pinAnchors) {
-      const row = pin.wireRow;
-      if(!row || !row.sourceVid || !row.sourceLocal) continue;
-      const points = Array.isArray(row.sourcePath) && row.sourcePath.length > 0
-        ? row.sourcePath.map((p) => ({ x: (p.x || 0) * CELL, y: (p.y || 0) * CELL }))
-        : [{ x: pin.px, y: pin.py }, { x: pin.px, y: pin.py }];
-      wires.push({ vid: row.vid, points });
-    }
-    return wires;
-  }
-
-  // The element's occupied footprint in px (x0/y0 .. x1/y1), centered on its own
-  // anchor row rather than starting at it - shifted up by half its own height, same
-  // as #renderBlock's visualTop/#renderVariable's bodyY already draw it (a block's
-  // sole pin, for the common 1-row case, ends up dead center of the box, not pinned
-  // to its top edge) - the raw un-shifted grid footprint is what
-  // LogramGraphController.IsBlocked uses server-side for wire-routing occupancy,
-  // which is a different concern from where the shape actually sits on screen.
-  #elementBounds(el) {
-    const x0 = (el.x || 0) * CELL;
-    const width = (el.width || 2) * CELL;
-    const height = (el.height || (el.editor === 'LogramVariable' ? 1 : 2)) * CELL;
-    const y0 = (el.y || 0) * CELL - height / 2;
-    return { x0, y0, x1: x0 + width, y1: y0 + height };
-  }
-
-  // Distance from `p` to segment a-b, projected onto the segment itself and clamped
-  // to its own ends (not extended past them with round/square caps) - "по длине
-  // сегмента и клетка поперёк": a CELL-wide rectangle exactly as long as the segment.
-  #pointNearSegment(p, a, b, halfWidth) {
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const lenSq = dx * dx + dy * dy;
-    if(lenSq === 0) return Math.hypot(p.x - a.x, p.y - a.y) <= halfWidth;
-    const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
-    if(t < 0 || t > 1) return false;
-    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)) <= halfWidth;
-  }
-
-  // The one hit-test shared by pointerdown (select/drag, #onSurfacePointerDown) and
-  // contextmenu (#onSurfaceContextMenu) - same priority for both, so a click and a
-  // right-click always agree on what's under the cursor: pin (its own CELL-square,
-  // "имеет приоритет над всеми") > wire (per segment, CELL wide) > block/variable
-  // (occupied footprint) > empty canvas (null).
-  #hitTest(clientX, clientY) {
-    const p = this.#toSvgPoint(clientX, clientY);
-    const elements = this.rows.filter((row) => row.editor === 'LogramBlock' || row.editor === 'LogramVariable');
-    const { pinsByParent } = this.#sceneRows();
-    const pins = this.#pinAnchors(elements, pinsByParent);
-    for(const pin of pins) {
-      if(Math.abs(p.x - pin.px) <= CELL / 2 && Math.abs(p.y - pin.py) <= CELL / 2) return { type: 'pin', pin };
-    }
-    for(const wire of this.#wireSegments(pins)) {
-      for(let i = 0; i < wire.points.length - 1; i++) {
-        if(this.#pointNearSegment(p, wire.points[i], wire.points[i + 1], CELL / 2)) return { type: 'wire', vid: wire.vid };
-      }
-    }
-    for(const el of elements) {
-      const b = this.#elementBounds(el);
-      if(p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1) return { type: 'element', el };
-    }
-    return null;
+  // What's under the pointer, by the one hit-test (logram-hit-test.js) that pointerdown
+  // (#onSurfacePointerDown) and contextmenu (#onSurfaceContextMenu) share.
+  #hitAt(clientX, clientY) {
+    return hitTest(this.#scene, this.#viewport.screenToScene(clientX, clientY));
   }
 
   // Compatibility = opposite polarity, same rule ES used (LogramView.cs's mouse-up:
@@ -596,6 +487,8 @@ export class X13LogramDocument extends LitElement {
   // own vid payload (view-row.js #onDragStart), so dragging arbitrary OS files/text
   // over the canvas doesn't show a false "you can drop here" cue.
   #onSurfaceDragOver(e) {
+    // LPLC variables are the device's own M registers, never bound to a dragged topic.
+    if(this.view !== 'logram') return;
     if(!e.dataTransfer.types.includes('application/x13-vid')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'link';
@@ -608,13 +501,14 @@ export class X13LogramDocument extends LitElement {
   // the dragged topic, positioned at the drop's own grid cell (same cell math as
   // #onSurfaceContextMenu's add-block flow).
   async #onSurfaceDrop(e) {
+    if(this.view !== 'logram') return;
     const sourceVid = e.dataTransfer.getData('application/x13-vid');
     if(!sourceVid) return;
     e.preventDefault();
     if(!this.api) return;
     const canvasVid = this.rows.find((row) => row.editor === 'LogramCanvas')?.vid;
     if(!canvasVid) return;
-    const p = this.#toSvgPoint(e.clientX, e.clientY);
+    const p = this.#viewport.screenToScene(e.clientX, e.clientY);
     // Floored at 0, not MIN_LEFT_CELL: this drop creates a variable, and those are exempt
     // (see the constant) - dropping a topic against the left edge is the normal way to put
     // a diagram's input where it reads as one.
@@ -628,7 +522,7 @@ export class X13LogramDocument extends LitElement {
     }
   }
 
-  // Single contextmenu entry point for the whole surface - #hitTest picks pin/wire/
+  // Single contextmenu entry point for the whole surface - hitTest picks pin/wire/
   // element/canvas by the same priority pointerdown uses, so right-click always
   // agrees with what a click would have selected/dragged. A wire hit gets no menu
   // yet (LogramPaletteBuilder has no wire-menu builder server-side) - right-clicking
@@ -644,13 +538,13 @@ export class X13LogramDocument extends LitElement {
   async #onSurfaceContextMenu(e) {
     e.preventDefault();
     if(!this.api) return;
-    const hit = this.#hitTest(e.clientX, e.clientY);
+    const hit = this.#hitAt(e.clientX, e.clientY);
     if(hit?.type === 'element') { await this.#openContextMenu(e, hit.el.vid); return; }
     if(hit?.type === 'pin') { await this.#openContextMenu(e, hit.pin.vid); return; }
     if(hit?.type === 'wire') return;
     const canvasVid = this.rows.find((row) => row.editor === 'LogramCanvas')?.vid;
     if(!canvasVid) return;
-    const p = this.#toSvgPoint(e.clientX, e.clientY);
+    const p = this.#viewport.screenToScene(e.clientX, e.clientY);
     const left = Math.max(MIN_LEFT_CELL, Math.floor(p.x / CELL));
     const top = Math.max(0, Math.round(p.y / CELL));
     try {
@@ -676,13 +570,38 @@ export class X13LogramDocument extends LitElement {
   }
 
   #onMenuCommand(e) {
-    const { cmd } = e.detail || {};
+    const { cmd, willful, item } = e.detail || {};
     const menuState = this.menuState;
     this.menuState = null;
     if(!cmd || !menuState?.vid || !this.api) return;
-    if(cmd.startsWith('add-block:')) {
-      this.api.rpc(menuState.vid, cmd, { top: menuState.top, left: menuState.left })
+    if(this.view === 'lplc' && cmd === 'set-arg') {
+      this.api.rpc(menuState.vid, cmd, item?.args).catch(error => console.warn('constructor edit failed', error));
+      return;
+    }
+    if(this.view === 'lplc' && cmd === 'edit-arg') {
+      const blockVid = menuState.vid.replace(/\/args\.[^/]+$/, '');
+      const name = item?.args?.name;
+      const argument = this.rows.find(r => r.vid === blockVid)?.constructorRows?.find(a => a.name === name);
+      if(!argument?.editable) return;
+      this.argumentState = { vid: menuState.vid, blockVid, name, x: menuState.x, y: menuState.y,
+        format: argument?.format, text: item?.args?.value == null ? '' : String(item.args.value) };
+      return;
+    }
+    // A willful LPLC entry (a variable, a Func output - see LplcPaletteBuilder) asks for its name
+    // first; Logram's menus keep sending theirs as they always have.
+    const ask = willful && this.view === 'lplc';
+    if(cmd.startsWith('add-block:') || (this.view === 'lplc' && (cmd.startsWith('add-var:') || cmd.startsWith('add-pin:') || cmd.startsWith('add-twi:') || cmd.startsWith('add-serial:')))) {
+      const args = { top: menuState.top, left: menuState.left };
+      if(ask) {
+        this.#askName(menuState, cmd, args, item);
+        return;
+      }
+      this.api.rpc(menuState.vid, cmd, args)
         .catch((error) => console.warn('logram req.rpc add-block failed', cmd, error));
+      return;
+    }
+    if(ask) {
+      this.#askName(menuState, cmd, {}, item);
       return;
     }
     // Pin context menu (LogramPaletteBuilder.BuildPinMenu) - Open/Show in Workspace
@@ -697,8 +616,125 @@ export class X13LogramDocument extends LitElement {
       this.#showInWorkspace(menuState.vid);
       return;
     }
-    if(cmd === 'delete' || cmd === 'trace' || cmd.startsWith('add:')) {
+    if(cmd === 'delete' || cmd === 'trace' || cmd.startsWith('add:') || (this.view === 'lplc' && LPLC_RPC_COMMAND.test(cmd))) {
       this.api.rpc(menuState.vid, cmd).catch((error) => console.warn('logram req.rpc failed', cmd, menuState.vid, error));
+    }
+  }
+
+  // An inline name field where the menu was. Enter sends the command with the name - empty leaves
+  // naming to the server (LplcViewProvider auto-names an addition); Escape or leaving it cancels.
+  #askName(menuState, cmd, args, item) {
+    this.constantState = null;
+    this.nameState = { vid: menuState.vid, cmd, args, x: menuState.x, y: menuState.y, placeholder: item?.text || 'Name' };
+  }
+
+  #onNameKeyDown(e) {
+    // The window's Delete/Backspace handler must not see typing: activeElement is retargeted to
+    // this host, so its INPUT check cannot tell.
+    e.stopPropagation();
+    if(e.key === 'Escape') {
+      this.#cancelName();
+      return;
+    }
+    if(e.key !== 'Enter') return;
+    const state = this.nameState;
+    this.nameState = null;
+    if(!state || !this.api) return;
+    const name = e.target.value.trim();
+    const args = name ? { ...state.args, name } : state.args;
+    this.api.rpc(state.vid, state.cmd, args).catch((error) => console.warn('logram req.rpc failed', state.cmd, state.vid, error));
+  }
+
+  #onArgumentInput(e) {
+    e.currentTarget.setCustomValidity('');
+    try {
+      const value = parseConstructorValue(e.currentTarget.value);
+      this.argumentState = { ...this.argumentState, text: e.currentTarget.value, preview: formatConstructorValue(value, this.argumentState.format).text };
+    } catch { this.argumentState = { ...this.argumentState, text: e.currentTarget.value, preview: '' }; }
+  }
+
+  async #onArgumentKeyDown(e) {
+    e.stopPropagation();
+    if(e.key === 'Escape') { this.argumentState = null; return; }
+    if(e.key !== 'Enter' || !this.argumentState) return;
+    e.preventDefault();
+    const state = this.argumentState;
+    const input = e.currentTarget;
+    try {
+      const value = parseConstructorValue(input.value);
+      await this.api.rpc(state.vid, 'set-arg', { name: state.name, value });
+      if(this.argumentState === state) this.argumentState = null;
+    } catch(error) {
+      input.setCustomValidity(String(error?.message || error));
+      input.reportValidity();
+    }
+  }
+
+  #cancelName() {
+    this.nameState = null;
+  }
+
+  #editConstant(e, pin) {
+    e.preventDefault();
+    e.stopPropagation();
+    if(this.view !== 'lplc' || pin.pinDirection !== 'in' || !pin.constantEditable || !this.api) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const fontSize = 10 * this.#viewport.scale;
+    const width = Math.max(90, rect.width + fontSize * 2);
+    this.menuState = null;
+    this.nameState = null;
+    this.constantState = { vid: pin.vid, value: pin.displayValue || '', x: Math.max(4, rect.right - width), y: rect.top + rect.height / 2, width, fontSize, saving: false };
+  }
+
+  #onConstantKeyDown(e) {
+    e.stopPropagation();
+    if(e.key === 'Escape') {
+      e.preventDefault();
+      this.constantState = null;
+    }
+    else if(e.key === 'Enter') {
+      e.preventDefault();
+      return this.#commitConstant(e.currentTarget, false);
+    }
+  }
+
+  #onConstantBlur(e) {
+    return this.#commitConstant(e.currentTarget, true);
+  }
+
+  async #commitConstant(input, cancelInvalid) {
+    const state = this.constantState;
+    if(!state || state.saving || !this.api) return;
+    if(!this.rows.some((row) => row.vid === state.vid && row.constantEditable)) {
+      this.constantState = null;
+      return;
+    }
+    const text = input.value.trim();
+    if(text === state.value.trim()) {
+      this.constantState = null;
+      return;
+    }
+    const value = Number(text);
+    if(!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text) || !Number.isFinite(value)) {
+      if(cancelInvalid) this.constantState = null;
+      else {
+        input.setCustomValidity('Enter a finite integer or floating-point number.');
+        input.reportValidity();
+      }
+      return;
+    }
+    const pending = { ...state, saving: true };
+    this.constantState = pending;
+    try {
+      await this.api.commit(state.vid, value);
+      if(this.constantState === pending) this.constantState = null;
+    }
+    catch(error) {
+      if(this.constantState !== pending) return;
+      this.constantState = { ...pending, saving: false };
+      await this.updateComplete;
+      input.setCustomValidity(error?.message || 'Unable to save the input constant.');
+      input.reportValidity();
     }
   }
 
@@ -707,7 +743,7 @@ export class X13LogramDocument extends LitElement {
   // different cmd - app-shell.js#onSegmentCommand routes 'show-in-workspace' to the
   // Workspace tree instead of navigating the Inspector.
   #showInWorkspace(vid) {
-    const path = vid.slice(vid.indexOf('#') + 1);
+    const path = this.#topicPath(vid);
     this.dispatchEvent(new CustomEvent('segment-command', { detail: { cmd: 'show-in-workspace', path }, bubbles: true, composed: true }));
   }
 
@@ -725,7 +761,7 @@ export class X13LogramDocument extends LitElement {
 
   // Ctrl+click on a block/variable (LogramView's usual multi-select gesture) adds/
   // removes just that one vid from the current element selection, leaving any pin/
-  // wire selection alone (ctrl+click only ever targets #hitTest's 'element' branch,
+  // wire selection alone (ctrl+click only ever targets hitTest's 'element' branch,
   // see #onSurfacePointerDown) - selecting down to zero collapses back to `null`
   // rather than an empty-but-truthy selection object, so `this.selected` stays a
   // reliable falsy check everywhere else (#handleKeyDown, #isElementSelected).
@@ -736,7 +772,7 @@ export class X13LogramDocument extends LitElement {
   }
 
   // Single pointerdown entry point for the whole surface (attached once, on
-  // .viewport itself - not on any individual pin/wire/element shape) - #hitTest picks
+  // .viewport itself - not on any individual pin/wire/element shape) - hitTest picks
   // the target by the same priority the contextmenu handler uses, so a click always
   // agrees with what a right-click would have targeted. Ctrl only does something over
   // an element (toggle) or empty canvas (pan, regardless of what's under the cursor -
@@ -745,10 +781,10 @@ export class X13LogramDocument extends LitElement {
   // marquee select instead of panning.
   #onSurfacePointerDown(e) {
     if(e.button !== 0) return;
-    const hit = this.#hitTest(e.clientX, e.clientY);
+    const hit = this.#hitAt(e.clientX, e.clientY);
     if(e.ctrlKey) {
       if(hit?.type === 'element') { this.#toggleElementSelection(hit.el.vid); return; }
-      if(!hit) { this.#startPan(e); return; }
+      if(!hit) { this.#viewport.startPan(e); return; }
     }
     if(hit?.type === 'pin') { this.#onPinPointerDown(e, hit.pin.vid, hit.pin.side, hit.pin.px, hit.pin.py, hit.pin.selectable); return; }
     if(hit?.type === 'wire') { this.#selectWire(e, hit.vid); return; }
@@ -756,18 +792,16 @@ export class X13LogramDocument extends LitElement {
     this.#startMarqueeSelect(e);
   }
 
-  // Dragging a rubber-band over empty canvas selects every block/variable whose own
-  // occupied footprint (#elementBounds) intersects the box, replacing the current
-  // selection - a plain click (box never grows past its own zero-size starting point)
-  // degenerates into a point-in-rect test against every element, correctly finding
-  // none and clearing the selection, so no separate click-vs-drag threshold is needed
-  // here (unlike #onPinPointerDown's, which has to disambiguate a click from starting
-  // a wire).
+  // Dragging a rubber-band over empty canvas selects every block/variable the box
+  // touches (marqueeIntersections), replacing the current selection - a plain click
+  // finds none and clears the selection, so no separate click-vs-drag threshold is
+  // needed here (unlike #onPinPointerDown's, which has to disambiguate a click from
+  // starting a wire).
   #startMarqueeSelect(e) {
-    const start = this.#toSvgPoint(e.clientX, e.clientY);
+    const start = this.#viewport.screenToScene(e.clientX, e.clientY);
     this.marquee = { x0: start.x, y0: start.y, x1: start.x, y1: start.y };
     const move = (ev) => {
-      const p = this.#toSvgPoint(ev.clientX, ev.clientY);
+      const p = this.#viewport.screenToScene(ev.clientX, ev.clientY);
       this.marquee = { x0: Math.min(start.x, p.x), y0: Math.min(start.y, p.y), x1: Math.max(start.x, p.x), y1: Math.max(start.y, p.y) };
     };
     const up = () => {
@@ -775,12 +809,7 @@ export class X13LogramDocument extends LitElement {
       window.removeEventListener('pointerup', up);
       const box = this.marquee;
       this.marquee = null;
-      const elements = this.rows.filter((row) => row.editor === 'LogramBlock' || row.editor === 'LogramVariable');
-      const vids = new Set();
-      for(const el of elements) {
-        const b = this.#elementBounds(el);
-        if(b.x0 <= box.x1 && b.x1 >= box.x0 && b.y0 <= box.y1 && b.y1 >= box.y0) vids.add(el.vid);
-      }
+      const vids = marqueeIntersections(this.#scene, box);
       this.selected = vids.size > 0 ? { type: 'element', vids } : null;
     };
     window.addEventListener('pointermove', move);
@@ -806,7 +835,7 @@ export class X13LogramDocument extends LitElement {
     if(!this.api) return;
     const vids = [...this.selected.vids];
     const startClientX = e.clientX, startClientY = e.clientY;
-    const scale = this.scale || 1;
+    const scale = this.#viewport.scale || 1;
     this.dragState = { vids: new Set(vids), dx: 0, dy: 0 };
     const move = (ev) => {
       const dx = (ev.clientX - startClientX) / (CELL * scale);
@@ -843,7 +872,7 @@ export class X13LogramDocument extends LitElement {
   #handleKeyDown(e) {
     if(e.key !== 'Delete' && e.key !== 'Backspace') return;
     if(['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
-    if(!this.selected || !this.api) return;
+    if(this.nameState || this.constantState || !this.selected || !this.api) return;
     const { type } = this.selected;
     if(type === 'element') {
       const vids = [...this.selected.vids];
@@ -862,62 +891,8 @@ export class X13LogramDocument extends LitElement {
     }
   }
 
-  #startPan(e) {
-    if(e.button !== 0) return;
-    e.preventDefault();
-    const startX = e.clientX, startY = e.clientY;
-    const startTx = this.tx, startTy = this.ty;
-    const viewport = e.currentTarget;
-    viewport.classList.add('panning');
-    const move = (ev) => {
-      this.tx = startTx + (ev.clientX - startX);
-      this.ty = startTy + (ev.clientY - startY);
-    };
-    const up = () => {
-      viewport.classList.remove('panning');
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up, { once: true });
-  }
-
-  #onWheel(e) {
-    if(!e.ctrlKey) return;
-    e.preventDefault();
-    this.#zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY);
-  }
-
-  // Keeps the point under (clientX, clientY) fixed on screen while the scale changes
-  // - .surface's transform-origin is a plain 0,0 (see its own CSS rule), so without
-  // this the content would visibly drift out from under the cursor on every wheel-
-  // zoom tick instead of zooming "into" wherever the pointer is. Falls back to
-  // anchoring on the viewport's own center when no cursor position is given (the +/-
-  // buttons don't have one) - better than the old unanchored behavior, which drifted
-  // toward the surface's origin corner on every click.
-  #zoomBy(factor, clientX, clientY) {
-    const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, this.scale * factor));
-    if(newScale === this.scale) return;
-    let anchorX = clientX, anchorY = clientY;
-    if(anchorX == null || anchorY == null) {
-      const rect = this.renderRoot.querySelector('.viewport')?.getBoundingClientRect();
-      anchorX = rect ? rect.left + rect.width / 2 : 0;
-      anchorY = rect ? rect.top + rect.height / 2 : 0;
-    }
-    const p = this.#toSvgPoint(anchorX, anchorY);
-    // #toSvgPoint answers in content coordinates, but the anchor has to be measured from
-    // the surface box's own corner - and the viewBox puts that CANVAS_PAD outside the
-    // content, so the pad goes back on here. Without it every tick would drift by
-    // CANVAS_PAD * (newScale - scale) px, which is the very thing this method exists to avoid.
-    this.tx -= (p.x + CANVAS_PAD) * (newScale - this.scale);
-    this.ty -= (p.y + CANVAS_PAD) * (newScale - this.scale);
-    this.scale = newScale;
-  }
-
-  #resetView() {
-    this.scale = 1;
-    this.#resetPan();
-  }
+  #viewport;
+  #scene;
 }
 
 customElements.define('x13-logram-document', X13LogramDocument);

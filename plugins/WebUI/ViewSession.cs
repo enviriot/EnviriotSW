@@ -27,14 +27,13 @@ namespace X13.WebUI {
     private readonly InspectorStateViewProvider _inspectorState;
     private readonly InspectorManifestViewProvider _inspectorManifest;
     private readonly LogramViewProvider _logram;
+    private readonly LplcViewProvider _lplc;
     private readonly ChartViewProvider _chart;
     private readonly LogHandler _log;
     private readonly List<IViewProvider> _providers;
 
-    /// <param name="send">Transport sink. The bool suppresses the transport's verbose
-    /// tracing: that tracing goes through X13.Log.Debug, so tracing LogHandler's live
-    /// evnt.log push would fire X13.Log.Write again and push another evnt.log, forever.
-    /// The log stream cannot log itself.</param>
+    /// <param name="send">Транспорт; bool отключает его трассировку. Живой журнал нельзя
+    /// записывать обратно в себя, а ответ истории не должен порождать вложенные копии истории.</param>
     /// <param name="apiToken">Handed to the client in resp.hello; the HTTP export/import
     /// endpoints reject anything without it.</param>
     /// <param name="post">Queues work for the engine thread (WebUiHost.Post, drained by
@@ -47,9 +46,10 @@ namespace X13.WebUI {
     /// the topic is created on the engine thread after the constructor has returned, and it is
     /// renamed later still when the reverse DNS lookup lands. Omitted means writes carry no
     /// prim, which is what they did before and what tests still exercise.</param>
-    public ViewSession(Action<JSC.JSObject, bool> send, int sessionId = 0, string apiToken = null, Action<string, Action> post = null, Func<Topic> prim = null) {
+    public ViewSession(Action<JSC.JSObject, bool> send, int sessionId = 0, string apiToken = null, Action<string, Action> post = null,
+                       Func<Topic> prim = null, Func<string, int, IReadOnlyList<LogEntry>> logHistory = null) {
       _post = post ?? ((what, work) => work());
-      _send = m => send(m, false);
+      _send = m => send(m, m.AsString("type", null) == ViewMessageTypes.RespLog);
       Action<JSC.JSObject> sendQuiet = m => send(m, true);
       _sessionId = sessionId;
       _apiToken = apiToken;
@@ -61,8 +61,9 @@ namespace X13.WebUI {
       _inspectorState = new InspectorStateViewProvider(_send, _targets, Post, prim);
       _inspectorManifest = new InspectorManifestViewProvider(_send, _targets, Post, prim);
       _logram = new LogramViewProvider(_send, Post, prim);
+      _lplc = new LplcViewProvider(_send, Post, prim);
       _chart = new ChartViewProvider(_send, Post);
-      _log = new LogHandler(sendQuiet, Post);
+      _log = new LogHandler(sendQuiet, Post, null, logHistory);
       _providers = new List<IViewProvider>();
       _providers.Add(_workspace);
       _providers.Add(_catalog);
@@ -70,6 +71,7 @@ namespace X13.WebUI {
       _providers.Add(_inspectorState);
       _providers.Add(_inspectorManifest);
       _providers.Add(_logram);
+      _providers.Add(_lplc);
       _providers.Add(_chart);
 
       _handlers = new SortedList<string, Action<JSC.JSValue>>(StringComparer.Ordinal);
@@ -255,19 +257,24 @@ namespace X13.WebUI {
         _send(Error(request, "topic_not_found", "Topic not found: " + path));
         return;
       }
-      bool isLogram = string.Equals(topic.GetField("type").AsString(null), "Core/Logram", StringComparison.Ordinal);
-      string logramVid = "logram#" + path;
+      // A graph document when the topic is one, the Inspector otherwise. An LPLC program is known
+      // by its type (Ext/LogramPLC), never by its name.
+      string type = topic.GetField("type").AsString(null);
+      string graphView = string.Equals(type, "Core/Logram", StringComparison.Ordinal) ? "logram"
+        : string.Equals(type, LplcModel.ProgramType, StringComparison.Ordinal) ? LplcModel.ViewName
+        : null;
+      string graphVid = graphView + "#" + path;
 
       JSC.JSObject response = ResponseBase(request, ViewMessageTypes.RespOpen, true);
-      response["view"] = isLogram ? "logram" : "inspector";
-      response["vid"] = isLogram ? logramVid : path;
+      response["view"] = graphView ?? "inspector";
+      response["vid"] = graphView != null ? graphVid : path;
       response["title"] = topic.name ?? string.Empty;
       _send(response);
 
-      if(isLogram) {
-        ViewOpResult result = _logram.Open(logramVid, "logram");
+      if(graphView != null) {
+        ViewOpResult result = graphView == LplcModel.ViewName ? _lplc.Open(graphVid, graphView) : _logram.Open(graphVid, graphView);
         if(result == null || !result.Ok) {
-          X13.Log.Warning("WebUI WS#{0} auto-open({1}) - {2}", _sessionId, logramVid,
+          X13.Log.Warning("WebUI WS#{0} auto-open({1}) - {2}", _sessionId, graphVid,
             result == null ? "no result" : (result.ErrorMessage ?? result.ErrorCode ?? "failed"));
         }
         return;
@@ -320,11 +327,8 @@ namespace X13.WebUI {
       _send(response);
     }
 
-    // Answers from a callback rather than by returning, as HandleRpc's deferred path does: the LiteDB scan
-    // behind req.log runs on lane B, so resp.log is assembled once it comes back. Validation
-    // failures still answer inline, and BeginHistory guarantees exactly one call on the engine
-    // thread - the client has no timeout, so an unanswered req.log would hang its promise for
-    // the life of the page.
+    // Файловое чтение выполняется вне движкового потока; ответ живому сеансу
+    // собирается после завершения чтения, ошибки валидации возвращаются сразу.
     public void HandleLog(JSC.JSValue request) {
       _log.BeginHistory(request, result => {
         if(result == null || !result.Ok) {

@@ -10,12 +10,15 @@ using X13.Repository;
 
 namespace X13.MQTT {
   /// <summary>Одна связка топика с темой брокера: подписка в дереве и подписка у брокера.</summary>
-  /// <remarks>Dispose отправляет брокеру UNSUBSCRIBE, то есть пересоздание объекта видно снаружи, а не является внутренним делом плагина.</remarks>
+  /// <remarks>Флаги обмена обновляются подпиской на манифест.
+  /// Dispose снимает обе подписки Repository и удаляет привязку у клиента.</remarks>
   internal class MqSite : IDisposable {
+    private readonly object _sync = new object();
     private Uri _uri;
     private MQTTPl _pl;
-    private SubRec _sr;
+    private SubRec _sr, _cfgSr;
     private bool _subEn, _pubEn, _retainedEn;
+    private bool _subscribed, _ready, _disposed;
 
     public readonly Topic Owner;
     public readonly MqClient Client;
@@ -48,15 +51,19 @@ namespace X13.MQTT {
         }
         remotePrefix = remotePrefix + "/" + sl[i];
       }
-      Client.Sites.Add(this);
+      if((_mask & (SubRec.SubMask.Children | SubRec.SubMask.All)) == SubRec.SubMask.None) {
+        _mask |= SubRec.SubMask.Once;
+      }
+      _cfgSr = Owner.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Field, "MQTT", SettingsChanged);
+      lock(Client.Sites) {
+        Client.Sites.Add(this);
+      }
       if(Client.status == MqClient.Status.Connected) {
         this.Connected();
       }
       var act = this.Owner.GetField("Action");
       
-      // JsLib.IsObject, not ValueType==Object: the latter is TRUE for JSValue.Null (the null sits
-      // in Value, not in ValueType), so an Action entry that is literally null passed the guard
-      // and the z.Value["name"] below threw a TypeError, taking the whole registration with it.
+      // Пустой элемент Action не должен приводить к чтению свойства у null.
       if(act==null || !act.Any(z => z.Value.IsObject() && z.Value.AsString("name", null) == "MQTT.Reconnect")) {
         int i;
         JSL.Array act_n;
@@ -80,8 +87,6 @@ namespace X13.MQTT {
     private bool ReadFlag(string path, bool def) {
       bool rv;
       var v1 = this.Owner.GetField(path);
-      // Deliberately a raw ValueType test, NOT AsBool(def): the else branch SEEDS the field with
-      // the default, and a reader with a default cannot tell "not set" from "set to the default".
       if(v1.ValueType==JSC.JSValueType.Boolean) {
          rv = (bool)v1;
       } else {
@@ -90,59 +95,134 @@ namespace X13.MQTT {
       }
       return rv;
     }
-    public void Publish(string path, string payload) {
-      if(!_subEn) {
+    private void SettingsChanged(TopicEvent p, SubRec sr) {
+      lock(_sync) {
+        if(_disposed || !ReferenceEquals(sr, _cfgSr)) {
+          return;
+        }
+        if(p.Kind == EventKind.Removed) {
+          Dispose();
+        } else if(p.Kind == EventKind.Snapshot || p.Kind == EventKind.FieldChanged) {
+          RefreshSettings();
+        }
+      }
+    }
+    private void RefreshSettings() {
+      _subEn = ReadFlag("MQTT.subscribe", true);
+      _pubEn = ReadFlag("MQTT.publish", true);
+      _retainedEn = ReadFlag("MQTT.retained", false);
+      UpdateSubscriptions();
+    }
+    private void UpdateSubscriptions() {
+      if(Client.status != MqClient.Status.Connected) {
+        StopPublishing();
+        _subscribed = false;
         return;
       }
-      string lp = (path.Length > remotePrefix.Length) ? path.Substring(remotePrefix.Length + 1) : string.Empty;
-      try {
-        var o = JsLib.ParseJson(payload);
-        var t = Owner.Get(lp, true, Owner);
-        if(!t.CheckAttribute(Topic.Attribute.Internal)) {
-          t.SetState(o, Owner);
-        }
-      }
-      catch(Exception ex) {
-        if(_pl.verbose) {
-          Log.Warning("{0}{1} R {2} - {3}", Client, path, payload, ex.Message);
-        }
-      }
-    }
-    public void Connected() {
       if(_pubEn) {
-        _sr = Owner.Subscribe(_mask, Changed);
-      } else if(_subEn) {
+        if(_sr == null) {
+          _ready = false;
+          _sr = Owner.Subscribe(_mask, Changed);
+        }
+      } else {
+        StopPublishing();
+      }
+      if(!_subEn && _subscribed) {
+        Client.Unsubscribe(this);
+        _subscribed = false;
+      } else if(_subEn && !_subscribed && (!_pubEn || _ready)) {
         Client.Subscribe(this);
+        _subscribed = true;
       }
     }
-    public void Disconnected() {
-      var sr = Interlocked.Exchange(ref _sr, null);
+    private void StopPublishing() {
+      var sr = _sr;
+      _sr = null;
+      _ready = false;
       if(sr != null) {
         sr.Dispose();
       }
     }
+    public void Publish(string path, string payload) {
+      lock(_sync) {
+        if(_disposed || !_subEn) {
+          return;
+        }
+        string lp = (path.Length > remotePrefix.Length) ? path.Substring(remotePrefix.Length + 1) : string.Empty;
+        try {
+          var o = JsLib.ParseJson(payload);
+          var t = Owner.Get(lp, true, Owner);
+          if(!t.CheckAttribute(Topic.Attribute.Internal)) {
+            t.SetState(o, Owner);
+          }
+        }
+        catch(Exception ex) {
+          if(_pl.verbose) {
+            Log.Warning("{0}{1} R {2} - {3}", Client, path, payload, ex.Message);
+          }
+        }
+      }
+    }
+    public void Connected() {
+      lock(_sync) {
+        if(!_disposed) {
+          RefreshSettings();
+        }
+      }
+    }
+    public void Disconnected() {
+      lock(_sync) {
+        StopPublishing();
+        _subscribed = false;
+      }
+    }
 
     public void Dispose() {
-      Disconnected();
-      if(_subEn) {
-        Client.Unsubscribe(this);
+      lock(_sync) {
+        if(_disposed) {
+          return;
+        }
+        _disposed = true;
+        if(_cfgSr != null) {
+          _cfgSr.Dispose();
+          _cfgSr = null;
+        }
+        StopPublishing();
+        if(_subscribed) {
+          Client.Unsubscribe(this);
+          _subscribed = false;
+        }
+        lock(Client.Sites) {
+          Client.Sites.Remove(this);
+        }
       }
     }
 
     private void Changed(TopicEvent p, SubRec sr) {
-      if(Client == null || Client.status != MqClient.Status.Connected) {
-        Disconnected();
-        Log.Warning("{0}.Changed({1}) - Client OFFLINE", Owner.path, p.ToString());
-        return;
-      }
-      if((p.Kind == EventKind.Snapshot || ((p.Kind == EventKind.StateChanged || p.Kind == EventKind.Created) && p.Author != Owner)) && !p.Source.CheckAttribute(Topic.Attribute.Internal)) {
-        var rp = remotePrefix + p.Source.path.Substring(Owner.path.Length);
-        var payload = JsLib.Stringify(p.Source.GetState() ?? JSC.JSValue.Null);
-        if(!string.IsNullOrEmpty(rp) && payload != null) {
-          Client.Send(new MqPublish(rp, payload) { Retained = _retainedEn });
+      lock(_sync) {
+        if(_disposed || !ReferenceEquals(sr, _sr)) {
+          return;
         }
-      } else if(p.Kind == EventKind.Ready && _subEn) {
-        Client.Subscribe(this);
+        if(Client.status != MqClient.Status.Connected) {
+          Disconnected();
+          Log.Warning("{0}.Changed({1}) - Client OFFLINE", Owner.path, p.ToString());
+          return;
+        }
+        // Snapshot приходит раньше FieldChanged, но манифест этого тика уже применён.
+        RefreshSettings();
+        if(!ReferenceEquals(sr, _sr)) {
+          return;
+        }
+        if((p.Kind == EventKind.Snapshot || ((p.Kind == EventKind.StateChanged || p.Kind == EventKind.Created) && p.Author != Owner)) && !p.Source.CheckAttribute(Topic.Attribute.Internal)) {
+          var rp = remotePrefix + p.Source.path.Substring(Owner.path.Length);
+          var payload = JsLib.Stringify(p.Source.GetState() ?? JSC.JSValue.Null);
+          if(!string.IsNullOrEmpty(rp) && payload != null) {
+            Client.Send(new MqPublish(rp, payload) { Retained = _retainedEn });
+          }
+        } else if(p.Kind == EventKind.Ready) {
+          _ready = true;
+          UpdateSubscriptions();
+        }
       }
     }
   }

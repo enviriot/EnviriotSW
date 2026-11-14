@@ -350,7 +350,7 @@ namespace X13.WebUI {
 
     // Tells the frontend this controller's own root is gone (evnt.del on RootVid - the
     // frontend recognizes this as "the open Inspector document's own topic was deleted"
-    // and navigates away, see app-shell.js #onDocumentRootDeleted) and stops this
+    // and navigates away, see document-session.js isOwnRoot) and stops this
     // controller from doing anything further - mirrors Dispose(), reused directly since
     // there is nothing left to keep alive once the root itself no longer exists.
     private void HandleRootRemoved() {

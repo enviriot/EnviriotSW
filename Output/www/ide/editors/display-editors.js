@@ -1,5 +1,4 @@
 import { LitElement, html, css } from '../../lib/lit-all.min.js';
-import { formatDefault } from './editor-format.js';
 
 class X13DisplayEditor extends LitElement {
   static properties = {
@@ -96,24 +95,6 @@ export class X13MsStatusEditor extends X13DisplayEditor {
   }
 }
 
-export class X13PortStatusEditor extends X13DisplayEditor {
-  render() {
-    const status = portStatus(this.state);
-    return this.renderDisplay(html`
-      <span class="badge ${status.kind}"></span>
-      <span class="text">${status.label}</span>`);
-  }
-}
-
-export class X13EsStatusEditor extends X13DisplayEditor {
-  render() {
-    const status = esStatus(this.state);
-    return this.renderDisplay(html`
-      <span class="badge ${status.kind}"></span>
-      <span class="text">${status.label}</span>`);
-  }
-}
-
 const PLC_ACTIONS = [
   ['Build', 'action:MQTT_SN.PLC.Build'],
   ['Run', 'action:MQTT_SN.PLC.Run'],
@@ -122,8 +103,28 @@ const PLC_ACTIONS = [
 ];
 
 export class X13DevicePlcEditor extends X13DisplayEditor {
+  static properties = {
+    compact: { type: Boolean },
+    modified: { attribute: false },
+  };
+
+  static styles = [X13DisplayEditor.styles, css`
+    .compact, .compact-group { display: flex; flex-direction: column; gap: 4px; }
+    .compact { gap: 12px; }
+    .compact svg { height: 16px; width: 16px; }
+    .compact .plc-action, .plc-status {
+      align-items: center; box-sizing: border-box; display: flex; justify-content: center;
+      background: #fff; border: 1px solid #aebccd; border-radius: 3px; height: 26px; width: 26px; padding: 0;
+    }
+    .plc-status.ok, .plc-status.matches { color: #2f7d20; }
+    .plc-status.error { color: #b91c1c; }
+    .plc-status.modified { color: #b45309; }
+    .plc-status.unknown { color: #64748b; }
+  `];
+
   render() {
     const status = devicePlcStatus(this.state);
+    if(this.compact) return this.#renderCompact(status);
     const via = status.via ? html`<span class="via-muted">${status.via}</span>` : null;
     const actions = this.view === 'value' ? html`
       <span class="plc-actions">
@@ -137,11 +138,47 @@ export class X13DevicePlcEditor extends X13DisplayEditor {
       ${actions}`);
   }
 
+  #renderCompact(status) {
+    const kind = this.modified === true ? 'modified' : this.modified === false ? 'matches' : 'unknown';
+    const comparison = kind === 'modified' ? 'Diagram changed or invalid. Build to compare with the last acknowledged upload.'
+      : kind === 'matches' ? 'Matches the last program whose upload was acknowledged by the device.'
+      : 'Comparison unknown. Build to compare with the last acknowledged upload.';
+    const runtime = `PLC: ${status.label}${status.via ? ` (${status.via})` : ''}`;
+    return html`
+      <div class="compact">
+        <div class="compact-group" role="group" aria-label="PLC status">
+          <span class="plc-status ${status.kind}" role="status" title=${runtime} aria-label=${runtime}>${plcIcon(status.label)}</span>
+          <span class="plc-status ${kind}" role="status" title=${comparison} aria-label=${comparison}>${plcIcon(kind)}</span>
+        </div>
+        <div class="compact-group" role="group" aria-label="PLC actions">
+          ${PLC_ACTIONS.map(([label, cmd]) => html`
+            <button type="button" class="plc-action" title=${label === 'Run' ? 'Run: build, upload and start' : label}
+              aria-label=${label} @click=${(e) => this.#onAction(e, cmd)}>${plcIcon(label)}</button>`)}
+        </div>
+      </div>`;
+  }
+
   #onAction(e, cmd) {
     e.preventDefault();
     e.stopPropagation();
     this.rpc(cmd);
   }
+}
+
+function plcIcon(name) {
+  const paths = {
+    Build: 'M4 21 14 11 M12 3 9 6 18 15 21 12 Z M4 18 7 21',
+    Run: 'M4 16v5h12v-5 M10 16V3 M6 7l4-4 4 4 M18 4l4 4-4 4z',
+    Start: 'M7 4 20 12 7 20 Z',
+    Stop: 'M5 5H19V19H5Z',
+    run: 'M7 4 20 12 7 20 Z',
+    stop: 'M5 5H19V19H5Z',
+    matches: 'M4 12l5 5L20 6',
+    modified: 'M3 8h18 M3 16h18 M16 3 8 21',
+    unknown: 'M8 8a4 4 0 1 1 6 3.5c-2 1-2 2-2 3.5 M12 19v1',
+  };
+  return html`<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round"><path d=${paths[name] || paths.unknown}></path></svg>`;
 }
 
 function legacyPrefixedText(value, prefix) {
@@ -164,40 +201,6 @@ function msStatus(value) {
   return { kind: 'unknown', label: 'unknown', via: '' };
 }
 
-function portStatus(value) {
-  if(value && typeof value === 'object') {
-    if(typeof value.connected === 'boolean') return value.connected ? { kind: 'ok', label: 'connected' } : { kind: 'error', label: 'disconnected' };
-    if(typeof value.state === 'string') return portStatus(value.state);
-    if(typeof value.status === 'string') return portStatus(value.status);
-    if(typeof value.st === 'number') return portStatus(value.st);
-  }
-  if(typeof value === 'boolean') return value ? { kind: 'ok', label: 'connected' } : { kind: 'error', label: 'disconnected' };
-  if(typeof value === 'number') {
-    if(value === 1) return { kind: 'ok', label: 'connected' };
-    if(value === 0) return { kind: 'error', label: 'disconnected' };
-  }
-  if(typeof value === 'string') {
-    const text = value.trim();
-    const normalized = text.toLowerCase();
-    if(['connected', 'online', 'ready', 'open', 'true', '1'].includes(normalized)) return { kind: 'ok', label: text || 'connected' };
-    if(['disconnected', 'offline', 'closed', 'false', '0'].includes(normalized)) return { kind: 'error', label: text || 'disconnected' };
-    if(text) return { kind: 'info', label: text };
-  }
-  return { kind: 'unknown', label: formatDefault(value) || 'unknown' };
-}
-
-function esStatus(value) {
-  if(value && typeof value === 'object') {
-    const address = typeof value.Address === 'string' ? value.Address : '';
-    const dns = typeof value.Dns === 'string' ? value.Dns : '';
-    const port = typeof value.Port === 'number' ? String(Math.trunc(value.Port)) : '';
-    const host = dns || address;
-    if(host && port) return { kind: 'ok', label: `${host}:${port}` };
-    if(host) return { kind: 'ok', label: host };
-  }
-  return { kind: 'unknown', label: formatDefault(value) || 'unknown' };
-}
-
 function devicePlcStatus(value) {
   let st;
   let via = '';
@@ -214,6 +217,4 @@ function devicePlcStatus(value) {
 
 customElements.define('x13-version-editor', X13VersionEditor);
 customElements.define('x13-ms-status-editor', X13MsStatusEditor);
-customElements.define('x13-port-status-editor', X13PortStatusEditor);
-customElements.define('x13-es-status-editor', X13EsStatusEditor);
 customElements.define('x13-device-plc-editor', X13DevicePlcEditor);

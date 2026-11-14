@@ -12,8 +12,6 @@ using System.Threading;
 
 namespace X13.MQTT {
   /// <summary>Плагин MQTT: подключения к брокерам и связки топиков с их темами.</summary>
-  /// <remarks>Привязку забирает подпиской на поле MQTT.uri и перестраивает MqSite на каждое его изменение,не читая значения.
-  /// Поэтому повторная запись того же uri стоила бы живой подписки у брокера - и поэтому репозиторий не публикует запись, ничего не изменившую.</remarks>
   [Export(typeof(IPlugModul))]
   [ExportMetadata("priority", 8)]
   [ExportMetadata("name", "MQTT")]
@@ -46,23 +44,25 @@ namespace X13.MQTT {
         _subMq.Dispose();
         _subMq = null;
       }
-      // EnsureCfg hands ownership of the subscription to the caller.
+      // Подпиской EnsureCfg владеет вызывающая сторона.
       if(_verboserSR != null) {
         _verboserSR.Dispose();
         _verboserSR = null;
       }
+      foreach(var site in _sites.ToArray()) {
+        site.Dispose();
+      }
+      _sites.Clear();
       int i;
       for(i = _clients.Count - 1; i >= 0; i--) {
         _clients[i].Dispose();
       }
+      _clients.Clear();
     }
     public Topic Owner { get { return _owner ?? (_owner = Topic.root.Get(OWNER_PATH, true)); } }
 
     public bool enabled {
       get {
-        // Is<bool>, NOT AsBool: this decides whether the config topic has to be CREATED and
-        // seeded. A reader with a default cannot tell "not set yet" from "set to the default",
-        // so the topic would never be created.
         if(!Owner.GetState().Is<bool>()) {
           Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           Owner.SetState(true);
@@ -76,11 +76,8 @@ namespace X13.MQTT {
     public bool verbose;
 
     #region RPC
-    /// <summary>Restarts the client bound to this topic.</summary>
-    /// <remarks>The missing return is the point: it used to log that there was no binding and then
-    /// dereference the very variable it had just called null. A menu action on a topic without an
-    /// MQTT binding threw instead of saying so, and RPC.Call does not catch what a handler
-    /// throws - deliberately, because somebody is waiting for the answer.</remarks>
+    /// <summary>Передаёт запрос перезапуска клиента привязки в пул потоков.</summary>
+    /// <remarks>При отсутствии привязки пишет предупреждение и завершает обработку.</remarks>
     private void ReconnectRpc(Topic t, JSC.JSValue arg) {
       var s = _sites.FirstOrDefault(z => z.Owner == t);
       if(s == null) {

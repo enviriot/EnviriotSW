@@ -11,8 +11,8 @@ using X13.Repository;
 
 namespace X13.Logram {
   /// <summary>Блок схемы: скомпилированная функция Calculate и пины, через которые она получает и отдаёт значения.</summary>
-  /// <remarks>Пины - дочерние топики, и объекты для них создаются здесь же, в конструкторе. 
-  /// Тип блока разрешается полем type манифеста в /$YS/TYPES, откуда берётся исходник функции.</remarks>
+  /// <remarks>Пины связаны с дочерними топиками; чтение внешнего топика также создаёт входную зависимость.
+  /// Исходник класса берётся из State.src типового топика, указанного полем type манифеста.</remarks>
   internal class LoBlock : ILoItem {
     private LogramPl _pl;
     private Topic _owner, _typeT;
@@ -38,7 +38,7 @@ namespace X13.Logram {
     public void ManifestChanged() {
       JSC.JSValue jSrc;
       var jType = _owner.GetField("type");
-      Topic tt, types = Topic.root.Get("$YS/TYPES", false);  // null until PersistentStorage seeds it, and always null when that plugin is off
+      Topic tt, types = Topic.root.Get("$YS/TYPES", false);  // Каталог может отсутствовать; чтение не создаёт его.
       if (types != null && jType.Is<string>() && jType.Value != null && types.Exist(jType.Value as string, out tt)
         && _typeT != tt && (jSrc = tt.GetState().Field("src")).ValueType == JSC.JSValueType.String) {
         _typeT = tt;
@@ -58,7 +58,7 @@ namespace X13.Logram {
               f.prototype["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));
               f.prototype["SetState"] = X13.JsExtLib.Context.ProxyValue(new Action<string, JSC.JSValue>(SetState));
               f.prototype["GetField"] = X13.JsExtLib.Context.ProxyValue(new Func<string, string, JSC.JSValue>(GetField));
-              f.prototype["SetField"] = X13.JsExtLib.Context.ProxyValue(new Action<string, string, JSC.JSValue>(SetField));  // <topic>#<path>
+              f.prototype["SetField"] = X13.JsExtLib.Context.ProxyValue(new Action<string, string, JSC.JSValue>(SetField));  // Путь топика и имя поля передаются отдельно.
               f.prototype["path"] = _owner.path;
               _self = f.Construct(new JSC.Arguments());
               var cf = _self.GetProperty("Calculate");
