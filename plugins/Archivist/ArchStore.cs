@@ -907,14 +907,50 @@ namespace X13.Archivist {
       }
     }
 
+    /// <summary>Число исходных записей в raw- или hot-файле.</summary>
+    /// <remarks>Считается частями, см. CountRows: Count() по коллекции читал бы весь индекс _id одним запросом.</remarks>
     internal long RawCount(bool hot) {
       if(!IsOpen) return 0;
       _gate.EnterReadLock();
       try {
-        return (hot ? _hotA : _rawA).Count();
+        return CountRows(hot ? _hotA : _rawA);
       }
       finally {
         _gate.ExitReadLock();
+      }
+    }
+
+    /// <summary>Длина окна времени одного ряда, которое подсчёт строк читает одним запросом.</summary>
+    private const long COUNT_WINDOW = TimeSpan.TicksPerDay;
+
+    /// <summary>Считает все записи коллекции отсчётов отдельными запросами по суткам одного ряда.</summary>
+    /// <remarks>LiteDB держит страницы, прочитанные запросом, до его конца, а расширенный под них кэш не уменьшает,
+    /// пока база открыта (litedb-org/LiteDB#2813). Count() по всей коллекции читал весь индекс _id и оставлял кэш
+    /// размером с этот индекс: на рабочей системе это были сотни мегабайт. Окно в сутки одного ряда ограничивает
+    /// этот пик, и страницы прочитанных окон переиспользуются.
+    /// <para>Окно начинается с первого ключа после предыдущего, поэтому пропуски в истории не перебираются по суткам,
+    /// а записи рядов, отсутствующих в реестре, тоже учитываются.</para></remarks>
+    private static long CountRows(ILiteCollection<BsonDocument> col) {
+      long n = 0;
+      byte[] from = null;
+      while(true) {
+        var q = from == null ? col.Query() : col.Query().Where("$._id >= @0", new BsonValue(from));
+        var first = q.OrderBy("$._id").FirstOrDefault();
+        if(first == null) {
+          return n;
+        }
+        byte[] key = first["_id"].AsBinary;
+        int id = ArchTime.TopicOfSample(key);
+        long lo = ArchTime.TimeOfSample(key).Ticks;
+        long hi = lo > DateTime.MaxValue.Ticks - COUNT_WINDOW ? DateTime.MaxValue.Ticks : lo + COUNT_WINDOW - 1;
+        n += col.LongCount("$._id BETWEEN @0 AND @1", new BsonValue(key), new BsonValue(ArchTime.PackSample(id, hi)));
+        if(hi < DateTime.MaxValue.Ticks) {
+          from = ArchTime.PackSample(id, hi + 1);
+        } else if(id < int.MaxValue) {
+          from = ArchTime.TopicFloor(id + 1);
+        } else {
+          return n;
+        }
       }
     }
 
@@ -935,12 +971,13 @@ namespace X13.Archivist {
     #region sizing
 
     /// <summary>Суммарное число исходных записей в raw- и hot-файлах.</summary>
-    /// <remarks>Счётчики относятся ко всему хранилищу и не оценивают число отсчётов в конкретном окне запроса.</remarks>
+    /// <remarks>Счётчики относятся ко всему хранилищу и не оценивают число отсчётов в конкретном окне запроса.
+    /// Считается частями по той же причине, что и RawCount.</remarks>
     internal long ApproxRows() {
       if(!IsOpen) return 0;
       _gate.EnterReadLock();
       try {
-        return (long)_rawA.Count() + _hotA.Count();
+        return CountRows(_rawA) + CountRows(_hotA);
       }
       finally {
         _gate.ExitReadLock();

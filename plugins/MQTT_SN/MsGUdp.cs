@@ -14,8 +14,8 @@ using X13.Repository;
 
 namespace X13.Periphery {
   internal class MsGUdp : IMsGate {
-    private const int HEX_PREVIEW = 32;      // bytes of a refused frame that reach the log
-    private const int REJECT_QUIET_SEC = 10; // at most one refusal line per this many seconds
+    private const int HEX_PREVIEW = 32;      // число байтов отвергнутого кадра в журнале
+    private const int REJECT_QUIET_SEC = 10; // не более одной записи об отказе за этот интервал в секундах
 
     private readonly object _rejectLock = new object();
     private DateTime _rejectQuiet;
@@ -29,17 +29,12 @@ namespace X13.Periphery {
     private Timer _advTick;
     private AddrWithMask[] _whiteList;
     private int _scanBusy;
-    //private System.Collections.Concurrent.ConcurrentQueue<Tuple<byte[], byte[]>> _inBuf;
 
     public MsGUdp(MQTT_SNPl pl) {
       _pl = pl;
       _scanBusy = 0;
-      //_inBuf = new System.Collections.Concurrent.ConcurrentQueue<Tuple<byte[], byte[]>>();
       _udpT = Topic.root.Get("/$YS/MQTT-SN/udp");
 
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-      // from "set to the default", so the topic would never be created.
       if(!_udpT.CheckAttribute(Topic.Attribute.Required) || _udpT.GetState().ValueType!=JSC.JSValueType.Boolean) {
         _udpT.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Config);
         var act = new JSL.Array(1);
@@ -50,7 +45,7 @@ namespace X13.Periphery {
         _udpT.SetField("Action", act);
         _udpT.SetState(true);
       } else if(!(bool)_udpT.GetState()) {
-        return;  // udp disabled
+        return;  // UDP отключён
       }
       _scanBusy = 1;
       ScanNIC(false);
@@ -145,13 +140,8 @@ namespace X13.Periphery {
         byte[] addr = re.Address.GetAddressBytes();
         if(!_myIps.Any(z => addr.SequenceEqual(z))) {
           MsMessageType mt;
-          // TryReadHeader, not `buf[0] > 1 ? buf[1] : buf[3]` behind a `buf.Length > 1` guard:
-          // a two- or three-byte datagram with a leading 0 or 1 passed that guard and then
-          // indexed the fourth byte, so anyone on the network could turn one short datagram into
-          // an Error line with a stack trace and the whole payload - as often as they cared to.
           if(MsMessage.TryReadHeader(buf, 0, buf.Length, out mt, out _, out MsParseError perr)) {
             if((mt != MsMessageType.CONNECT && mt != MsMessageType.SEARCHGW) || _whiteList.Any(z => z.Check(addr))) {
-              //_inBuf.Enqueue(new Tuple<byte[],byte[]>(addr, buf));
               _pl.ProcessInPacket(this, addr, buf, 0, buf.Length);
             } else if(_pl.verbose) {
               var msg = MsMessage.Parse(buf, 0, buf.Length);
@@ -175,14 +165,7 @@ namespace X13.Periphery {
         _udp.BeginReceive(new AsyncCallback(ReceiveCallback), null);
       }
     }
-    /// <summary>One log line per rejected datagram, and no more than one per interval.</summary>
-    /// <remarks>The rejection itself is cheap; the log line was not. It printed the entire payload
-    /// and, on the exception path, the full stack trace - a remote sender decided both how often
-    /// this ran and how much it wrote. Rate limiting alone would not be enough: a single 64 KB
-    /// datagram is one line, so the preview is bounded too.
-    /// <para>Warning, not Error: a frame this gate refuses to read is an event on the wire, not a
-    /// fault in the server, and Error is the level someone puts an alert on. What gets lost to the
-    /// throttle is counted rather than dropped silently, so a flood reads as a flood.</para></remarks>
+    /// <summary>Одна запись на отвергнутую датаграмму, но не чаще одного раза за интервал.</summary>
     private void RejectFrame(IPEndPoint from, byte[] buf, string reason) {
       Interlocked.Increment(ref _rejected);
       DateTime now = DateTime.Now;
@@ -203,9 +186,7 @@ namespace X13.Periphery {
 
     #region IMsGate Members
     public void SendGw(byte[] arr, MsMessage msg) {
-      if(_udp == null || arr == null || arr.Length != 4 || msg == null) {
-        return;
-      }
+      if(_udp == null || arr == null || arr.Length != 4 || msg == null) return;
       byte[] buf = msg.GetBytes();
       IPAddress addr = new IPAddress(arr);
       _udp.Send(buf, buf.Length, new IPEndPoint(addr, 1883));
@@ -214,9 +195,7 @@ namespace X13.Periphery {
       }
     }
     public void SendGw(MsDevice dev, MsMessage msg) {
-      if(_udp == null || msg == null) {
-        return;
-      }
+      if(_udp == null || msg == null) return;
 
       byte[] buf = msg.GetBytes();
       IPAddress addr;
@@ -254,15 +233,6 @@ namespace X13.Periphery {
       }
     }
     public void Tick() {
-      //Tuple<byte[], byte[]> pck;
-      //while(_inBuf.TryDequeue(out pck)) {
-      //  try {
-      //    _pl.ProcessInPacket(this, pck.Item1, pck.Item2, 0, pck.Item2.Length);
-      //  }
-      //  catch(Exception ex) {
-      //    Log.Error("ReceiveCallback({0}, {1}) - {2}", new IPAddress(pck.Item1), pck.Item2 == null ? "null" : BitConverter.ToString(pck.Item2), ex.ToString());
-      //  }
-      //}
     }
 
     public byte gwIdx { get { return 0; } }
@@ -294,23 +264,18 @@ namespace X13.Periphery {
       public readonly string name;
 
       public static AddrWithMask Parse(string s, string name) {
-        if(string.IsNullOrWhiteSpace(s)) {
-          return null;
-        }
+        if(string.IsNullOrWhiteSpace(s)) return null;
         var sp = s.Split('/');
-        if(sp.Length == 0) {
-          return null;
-        }
+        if(sp.Length == 0) return null;
         byte[] addr;
-        IPAddress tmp;
-        if(IPAddress.TryParse(sp[0], out tmp)) {
+        if (IPAddress.TryParse(sp[0], out IPAddress tmp)) {
           addr = tmp.GetAddressBytes();
         } else {
           return null;
         }
         byte[] mask;
         int mn;
-        if(sp.Length < 2) {  // no mask
+        if(sp.Length < 2) {  // маска не задана
           mask = Enumerable.Repeat((byte)0xFF, addr.Length).ToArray();
         } else if(int.TryParse(sp[1], out mn)) {
           mask = new byte[addr.Length];
@@ -327,9 +292,7 @@ namespace X13.Periphery {
         } else {
           mask = IPAddress.Parse(sp[1]).GetAddressBytes();
         }
-        if(addr.Length != mask.Length) {
-          return null;
-        }
+        if(addr.Length != mask.Length) return null;
         return new AddrWithMask(addr, mask, name);
       }
       public AddrWithMask(byte[] addr, byte[] mask, string name) {
@@ -341,13 +304,9 @@ namespace X13.Periphery {
         this.name = name;
       }
       public bool Check(byte[] addr) {
-        if(addr == null || addr.Length != _addr.Length) {
-          return false;
-        }
+        if(addr == null || addr.Length != _addr.Length) return false;
         for(int i = 0; i < addr.Length; i++) {
-          if(_addr[i] != (addr[i] & _mask[i])) {
-            return false;
-          }
+          if(_addr[i] != (addr[i] & _mask[i])) return false;
         }
         return true;
       }

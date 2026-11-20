@@ -30,9 +30,6 @@ namespace X13.Periphery {
       _pl = pl;
       ThreadPool.RegisterWaitForSingleObject(_startScan, ScanSerialPorts, null, 289012, false);
       _portsTopic = Topic.root.Get("/$YS/MQTT-SN/ports");
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-      // from "set to the default", so the topic would never be created.
       if(!_portsTopic.CheckAttribute(Topic.Attribute.Required) || _portsTopic.GetState().ValueType!=JSC.JSValueType.Boolean) {
         var act = new JSL.Array(1);
         var r_a = JSC.JSObject.CreateObject();
@@ -59,21 +56,20 @@ namespace X13.Periphery {
 
     private static void ScanSerialPorts(object o, bool intervalScan) {
       if(_portsTopic.GetState().AsBool(false)) {
-        Interlocked.CompareExchange(ref _scanBusy, 1, 0);  // turn on scan
+        Interlocked.CompareExchange(ref _scanBusy, 1, 0);  // включить поиск
       } else {
-        Interlocked.CompareExchange(ref _scanBusy, 0, 1);  // turn off scan
+        Interlocked.CompareExchange(ref _scanBusy, 0, 1);  // выключить поиск
       }
       if(Interlocked.CompareExchange(ref _scanBusy, 2, 1) != 1) {
         return;
       }
       SerialPort port = null;
 
-      if(!intervalScan || !_pl._devs.Any() || _pl._devs.Where(z => z.state == State.Lost || z.state == State.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").AsString(null)).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
+      if(!intervalScan || !_pl._devs.Any() || _pl._devs.Where(z => z.State == State.Lost 
+      || z.State == State.Disconnected).Select(z => z.owner.GetField("MQTT-SN.tag").AsString(null)).Any(z => z != null && z.Length > 2 && z[2] == 'S')) {
         var pns = SerialPort.GetPortNames().Where(z => !z.StartsWith("/dev/tty") || z.StartsWith("/dev/ttyS") || z.StartsWith("/dev/ttyUSB") || z.StartsWith("/dev/ttyA")).ToArray();
         for(int i = 0; i < pns.Length; i++) {
-          if(_pl._gates.Exists(z => z.name == pns[i])) {
-            continue;
-          }
+          if(_pl._gates.Exists(z => z.name == pns[i])) continue;
           {
             string pn = pns[i];
             int si = pn.LastIndexOf('/');
@@ -81,9 +77,6 @@ namespace X13.Periphery {
               pn = pn.Substring(si+1);
             }
             var portT = _portsTopic.Get(pn, true, _portsTopic);
-            // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-            // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-            // from "set to the default", so the topic would never be created.
             if(portT.GetState().ValueType != NiL.JS.Core.JSValueType.Boolean) {
               portT.SetAttribute(Topic.Attribute.Config);
               portT.SetState(true, _portsTopic);
@@ -92,10 +85,11 @@ namespace X13.Periphery {
             }
           }
           try {
-            port = new SerialPort(pns[i], 38400, Parity.None, 8, StopBits.One);
-            port.ReadBufferSize = 300;
-            port.WriteBufferSize = 300;
-            port.ReadTimeout = 5;
+            port = new SerialPort(pns[i], 38400, Parity.None, 8, StopBits.One) {
+              ReadBufferSize = 300,
+              WriteBufferSize = 300,
+              ReadTimeout = 5
+            };
             port.Open();
             new MsGSerial(port);
           }
@@ -120,7 +114,7 @@ namespace X13.Periphery {
           t.Remove(_portsTopic);
         }
       }
-      Thread.Sleep(200); // prevent rescan
+      Thread.Sleep(200); // предотвратить повторный поиск
       _scanBusy = 1;
     }
 
@@ -171,7 +165,7 @@ namespace X13.Periphery {
         if(_port != null && _port.IsOpen) {
           if(GetPacket(ref _inLen, _inBuffer, ref _inCnt, ref _inEscChar)) {
             if(_inLen == 5 && _inBuffer[1] == (byte)MsMessageType.SUBSCRIBE) {
-              _advTick = DateTime.Now.AddMilliseconds(100);   // Send Advertise
+              _advTick = DateTime.Now.AddMilliseconds(100);   // отправка ADVERTISE
             }
             if(!_pl.ProcessInPacket(this, _gateAddr, _inBuffer, 0, _inLen)) {
               _port.DiscardInBuffer();
@@ -215,10 +209,7 @@ namespace X13.Periphery {
       return _port != null ? _port.PortName : string.Empty;
     }
     public void Stop() {
-      // Set before the port closes, so a discovery pass already running sees it on its next check
-      // instead of finding the port gone mid-write. It was started from the constructor with no
-      // way to say "stop": every read and write in it raced a Close() from Tick or shutdown, and
-      // the only thing standing between that and a hard failure was its own catch-all.
+      // Устанавливается до закрытия порта: уже запущенный поиск увидит флаг при следующей проверке, а не обнаружит закрытие посреди записи. 
       _closing = true;
       try {
         if(_port != null && _port.IsOpen) {
@@ -317,17 +308,14 @@ namespace X13.Periphery {
             }
           }
         } else {
-          // The same test on both framings now. It used to sit inside `if(!_useSlip)`, so the
-          // range this implementation accepts was enforced on the raw path, skipped on SLIP and
-          // skipped again on UDP - one protocol, three answers to "is this a packet".
+          // Одна проверка для обоих способов выделения кадров.
           if(!MsMessage.IsPlausibleLength(b)) {
             if(_pl.verbose) {
               Log.Warning("r {0}:0x{1:X2} wrong length of the packet", _port.PortName, b);
             }
             cnt = -1;
-            // Only the raw path drops what is buffered: there the length byte is the sole frame
-            // boundary, so a bad one leaves no way to tell where the next packet starts. SLIP has
-            // its own delimiter and resynchronises on the next 0xC0 by itself.
+            // Буфер сбрасывается только без SLIP: байт длины там единственный признак границы, и при неверной длине начало следующего пакета неизвестно. 
+            // У SLIP есть собственный разделитель: синхронизация восстановится на следующем 0xC0.
             if(!_useSlip) {
               _port.DiscardInBuffer();
             }
@@ -339,11 +327,9 @@ namespace X13.Periphery {
       }
       return false;
     }
-    /// <summary>Probes the port for a gateway. Runs on a pool thread, started from the ctor.</summary>
-    /// <remarks>Checks _closing at every point it would otherwise touch the port: the pass takes
-    /// up to three and a half seconds, and Stop() or a failing Tick() can close the port at any
-    /// moment inside that. Nothing used to stand between the two but the catch-all below, so a
-    /// shutdown during discovery was reported as an error rather than as a shutdown.</remarks>
+    /// <summary>Ищет шлюз на порту. Запускается конструктором в потоке пула.</summary>
+    /// <remarks>Проверяет _closing перед каждым обращением к порту: проход занимает до трёх с половиной секунд, 
+    /// а Stop() или ошибочный Tick() могут закрыть порт в любой момент.</remarks>
     private void DiscoveryGate(object o) {
       bool found = false;
 
@@ -351,23 +337,19 @@ namespace X13.Periphery {
         var tryCnt = 3;
         do {
           SerialPort port = _port;
-          if(_closing || port == null || !port.IsOpen) {
-            return;
-          }
+          if(_closing || port == null || !port.IsOpen) return;
           _busyTime = DateTime.Now.AddMilliseconds(1100);
           _inCnt = -1;
           _inLen = -1;
 
           _port.DiscardInBuffer();
-          _port.Write(_disconnectAll, 0, _disconnectAll.Length);   // Send Disconnect
+          _port.Write(_disconnectAll, 0, _disconnectAll.Length);   // отправка DISCONNECT
           if(_pl.verbose) {
             Log.Debug("s {0}: {1}  DISCONNECT", _port.PortName, BitConverter.ToString(_disconnectAll));
           }
 
           while(_busyTime > DateTime.Now) {
-            if(_closing) {
-              return;
-            }
+            if(_closing) return;
             if(_port.BytesToRead > 0) {
               _busyTime = DateTime.Now.AddMilliseconds(100);
               if(_inCnt >= 0) {
@@ -381,13 +363,8 @@ namespace X13.Periphery {
           }
 
           MsMessageType msgTyp;
-          // The fourth copy of the header read, and the one the earlier sweep missed. `_inCnt > 2`
-          // clears three bytes and the extended branch then takes the fourth: no crash, because
-          // _inBuffer is 384 bytes long, but a type read out of a byte that never arrived - a
-          // stale one from the previous discovery round, or a zero.
-          if(_inCnt > 2 && _inCnt >= _inLen
-            && MsMessage.TryReadHeader(_inBuffer, 0, _inCnt, out msgTyp, out _, out _)) {
-            if(msgTyp == MsMessageType.SEARCHGW || msgTyp == MsMessageType.DHCP_REQ) {   // Received Ack
+          if(_inCnt > 2 && _inCnt >= _inLen && MsMessage.TryReadHeader(_inBuffer, 0, _inCnt, out msgTyp, out _, out _)) {
+            if(msgTyp == MsMessageType.SEARCHGW || msgTyp == MsMessageType.DHCP_REQ) {   // получен ответ
               _inEscChar = false;
               if(_inCnt > _inLen && _inBuffer[_inCnt - 1] == 0xC0) {
                 int j, k = -1;
@@ -457,7 +434,7 @@ namespace X13.Periphery {
       _gateAddr = new byte[] { gwIdx, (byte)tmpAddr };
     }
     private void Dispose() {
-      _closing = true;   // the other way in, from a failing Tick rather than from Stop
+      _closing = true;   // другой путь закрытия: ошибка Tick, а не Stop
       var p = Interlocked.Exchange(ref _port, null);
       if(p != null) {
         try {

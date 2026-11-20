@@ -9,9 +9,9 @@ using X13.Repository;
 using JSC = NiL.JS.Core;
 
 namespace X13.LogramPLC {
-  /// <summary>Compares the last Build/Run result with the acknowledged upload without compiling.</summary>
-  /// <remarks>No result after startup means unknown. Edits invalidate the comparison until Build/Run;
-  /// reverting to the built inputs reuses that result. The watcher never replaces LPLC.run.</remarks>
+  /// <summary>Сравнивает результат последнего Build/Run с подтверждённой загрузкой без компиляции.</summary>
+  /// <remarks>Нет результата после запуска — сравнение неизвестно. Правки требуют нового Build/Run;
+  /// возврат к входным данным сборки позволяет использовать её результат. Наблюдатель не заменяет LPLC.run.</remarks>
   internal static class LP_Status {
     internal const string ModifiedField = "LPLC.modified";
     internal const string LoadedField = "LPLC.loaded";
@@ -43,8 +43,8 @@ namespace X13.LogramPLC {
       }
     }
 
-    // Read the compiler's input model, not raw manifests: layout, pin visibility, live values,
-    // generated merker addresses and runtime attachments are not program inputs.
+    // Читается входная модель компилятора, а не сырые манифесты: расположение, видимость пинов,
+    // текущие значения, назначенные адреса меркеров и кэш исполнения не являются входами программы.
     private static string Inputs(Topic program) {
       var diagram = LP_Tree.Read(program);
       var key = new StringBuilder();
@@ -75,14 +75,14 @@ namespace X13.LogramPLC {
       return key.ToString();
     }
 
-    // A whole parent object can replace the field too, e.g. a write to LPLC or MQTT-SN.
+    // Замена родительского объекта тоже может изменить поле, например запись LPLC или MQTT-SN.
     private static bool Affects(string path, string field) {
       return string.IsNullOrEmpty(path) || path == field
         || path.StartsWith(field + ".", StringComparison.Ordinal)
         || field.StartsWith(path + ".", StringComparison.Ordinal);
     }
 
-    /// <summary>Coalesces metadata checks for typed programs, including offline ones; never compiles.</summary>
+    /// <summary>Объединяет проверки метаданных типизированных программ, в том числе без подключения; не компилирует.</summary>
     internal sealed class Watcher : IDisposable {
       private readonly object _sync = new object();
       private readonly Dictionary<Topic, Tracker> _programs = new Dictionary<Topic, Tracker>();
@@ -218,7 +218,7 @@ namespace X13.LogramPLC {
           Refresh(_program);
         }
         catch(Exception ex) {
-          // An unreadable input must not leave a cached "matches" indicator behind.
+          // Нечитаемые входные данные не должны оставлять закэшированный признак совпадения.
           _program.SetField(ModifiedField, JSC.JSValue.Null, _program);
           Log.Warning("LPLC status {0}: {1}", _program.path, ex.Message);
         }

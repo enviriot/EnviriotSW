@@ -67,7 +67,7 @@ namespace X13.LogramPLC {
     /// <remarks>Читается при каждой сборке: описание могли импортировать после подключения узла.</remarks>
     private static EP_Device LoadDevice(Topic program, bool log) {
       string type = program.parent == null ? null : program.parent.GetField("type").AsString(null);
-      var types = Topic.root.Get("$YS/TYPES", false);  // null until PersistentStorage seeds it
+      var types = Topic.root.Get("$YS/TYPES", false);  // null до загрузки PersistentStorage
       Topic tt;
       JSC.JSValue plc;
       if(type == null || types == null || !types.Exist(type, out tt) || !(plc = tt.GetState().Field("PLC")).Defined) {

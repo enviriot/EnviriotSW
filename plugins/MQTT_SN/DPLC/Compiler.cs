@@ -61,15 +61,15 @@ namespace X13.DevicePLC {
       return cl == null ? 0 : cl.Line;
     }
 
-    /// <summary>Source location of a node, formatted like CompilerMessageCallback does.</summary>
-    /// <remarks>CodeNode.Position is a character offset, so it needs the source text to become a
-    /// line and column - which is why Parse now keeps it.</remarks>
+    /// <summary>Место узла в исходнике в формате CompilerMessageCallback.</summary>
+    /// <remarks>CodeNode.Position — смещение в символах; для получения строки и столбца
+    /// нужен исходный текст, поэтому Parse сохраняет его.</remarks>
     internal string Where(NiL.JS.Core.CodeNode node) {
       if(_sourceText == null || node == null) {
         return string.Empty;
       }
-      // Formatted like CompilerMessageCallback below, not via CodeCoordinates.ToString() - that
-      // one prints (line:column*length), and two shapes of location in one log is one too many.
+      // Формат как у CompilerMessageCallback ниже, а не CodeCoordinates.ToString():
+      // тот выводит (line:column*length), и два формата координат в одном журнале излишни.
       var c = CodeCoordinates.FromTextPosition(_sourceText, node.Position, node.Length);
       return string.Format("[{0}, {1}] ", c.Line, c.Column);
     }
@@ -92,7 +92,7 @@ namespace X13.DevicePLC {
     }
 
     public bool Parse(string code) {
-      _sourceText = code;   // kept so a compile error can name the line it happened on, see Where()
+      _sourceText = code;   // сохраняется для указания строки ошибки компиляции, см. Where()
       Error = null;
       CodeLines = new List<CodeLine>();
       bool success = false;
@@ -262,7 +262,7 @@ namespace X13.DevicePLC {
             p.fm.Addr = addr;
           }
           foreach(var c in p.code) {
-            c.Link();  // update size for LDI_*
+            c.Link();  // обновить размер LDI_*
             c.addr = addr;
             if(c._blob && c._param != null) {
               c._param.Addr = c.addr;
@@ -788,10 +788,10 @@ namespace X13.DevicePLC {
       case "Random":
         m = Merker.Api(8, EP_ValType.Int);
         break;
-      case "NowSeconds":    // total seconds since 0:00:00
+      case "NowSeconds":    // число секунд с 0:00:00
         m = Merker.Api(9, EP_ValType.Int);
         break;
-      case "Today":         //  (year[0..99]<<24) | (month[1..12]<<16) | (day[1..31]<<8) | (dayOfWeek[1-Monday..7-Sunday]) 
+      case "Today":         //  (year[0..99]<<24) | (month[1..12]<<16) | (day[1..31]<<8) | (dayOfWeek[1-понедельник..7-воскресенье])
         m = Merker.Api(10, EP_ValType.Int);
         break;
       case "UartInit":  // void UartInit(port, speed); на EspNode порт открывает ConfigPin
@@ -807,11 +807,13 @@ namespace X13.DevicePLC {
       case "UartPutByte":  // bool UartPutByte(port, data)
         m = Merker.Api(23, EP_ValType.Int, EP_ValType.Int, EP_ValType.Int);
         break;
-      case "SendByte":  // int SendByte(stream, value); stream - номер UART или LOG_*
+      case "SendByte":
         m = Merker.Api(23, EP_ValType.Int, EP_ValType.Int, EP_ValType.Int);
+        only = EP_Target.EspNode;
         break;
-      case "PrintF":  // int PrintF(stream, "format", ...); stream - номер UART или LOG_*
+      case "PrintF":
         m = Merker.Api(API_PRINT_F, EP_ValType.Int, EP_ValType.Int, EP_ValType.Int, EP_ValType.Int, EP_ValType.Int);
+        only = EP_Target.EspNode;
         break;
       case "LOG_DEBUG":
       case "LOG_INFO":
@@ -819,6 +821,7 @@ namespace X13.DevicePLC {
       case "LOG_ERROR":
         m = new Merker() { type = EP_Type.CONST, Addr = v.Name == "LOG_DEBUG" ? 0xFFE0u : v.Name == "LOG_INFO" ? 0xFFE1u : v.Name == "LOG_WARN" ? 0xFFE2u : 0xFFE3u,
           vd = v, pName = v.Name, fName = v.Name };
+        only = EP_Target.EspNode;
         break;
       case "ConfigPin":  // void ConfigPin(pin, mode, option)
         m = Merker.Api(API_CONFIG_PIN, null, EP_ValType.Int, EP_ValType.Int, EP_ValType.Int);
@@ -1133,7 +1136,7 @@ namespace X13.DevicePLC {
           AddInst(EP_InstCode.RET);
         }
         if(this == _compiler.dataBlock) return;   // Байты литералов не являются командами RET/JMP/DUP.
-        // remove unreachable code
+        // удалить недостижимый код
         bool fl = false;
         for(i = 0; i < code.Count; ) {
           i0 = code[i];
@@ -1154,7 +1157,7 @@ namespace X13.DevicePLC {
           i = 0;
           while(i < code.Count) {
             i0 = code[i];
-            // enclosed jump  {jmp l0 ... :l0 jmp l1}
+            // цепочка переходов  {jmp l0 ... :l0 jmp l1}
             if(i0._code.Length == 3 && ( i0._code[0] == (byte)EP_InstCode.JMP || i0._code[0] == (byte)EP_InstCode.JZ || i0._code[0] == (byte)EP_InstCode.JNZ )) {
               for(j = 0; j < code.Count; j++) {
                 if(code[j] == i0._ref) {
@@ -1173,7 +1176,7 @@ namespace X13.DevicePLC {
                 }
               }
             }
-            // remove all DROP & NIP before RET
+            // удалить все DROP и NIP перед RET
             if(i0._code.Length == 1 && i0._code[0] == (byte)EP_InstCode.RET) {
               for(j = i - 1; j >= 0; j--) {
                 i1 = code[j];
@@ -1181,7 +1184,7 @@ namespace X13.DevicePLC {
                   code.RemoveAt(j);
                   i--;
                   cnt++;
-                } else if(i1._code.Length != 0) {   // !label
+                } else if(i1._code.Length != 0) {   // не метка
                   break;
                 }
               }
@@ -1543,10 +1546,10 @@ namespace X13.DevicePLC {
             _code = new byte[5];
           }
           _code[0] = (byte)cmd;
-          _code[1] = (byte)( _param.Addr >> 24 );     // Place
-          _code[2] = (byte)( _param.Addr >> 16 );     // Type
-          _code[3] = (byte)_param.Addr;             // Base low
-          _code[4] = (byte)( _param.Addr >> 8 );      // Base high
+          _code[1] = (byte)( _param.Addr >> 24 );     // область
+          _code[2] = (byte)( _param.Addr >> 16 );     // тип
+          _code[3] = (byte)_param.Addr;             // младший байт базы
+          _code[4] = (byte)( _param.Addr >> 8 );      // старший байт базы
           break;
 
         case EP_InstCode.JZ:

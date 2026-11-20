@@ -81,7 +81,7 @@ namespace X13.DevicePLC {
       public Mode Sda, Scl;
     }
 
-    /// <summary>Public bus numbers are zero-based; firmware modes retain their descriptor values.</summary>
+    /// <summary>Публичные номера шин начинаются с нуля; режимы прошивки сохраняют значения из описания.</summary>
     public List<TwiBus> TwiBuses() {
       var buses = new List<TwiBus>();
       int offset = _modes.ContainsKey("TWI0_SDA") || _modes.ContainsKey("TWI0_SCL") ? 0 : -1;

@@ -281,7 +281,7 @@ namespace X13.LogramPLC {
           Add(n.El, 0, "Block src must be a single named class");
           return;
         }
-        // NiL's synthesized constructor has a nonzero length but no position inside this class.
+        // Синтезированный NiL конструктор имеет ненулевую длину, но не позицию внутри этого класса.
         if(cls.Constructor == null || cls.Constructor.Position < header.Length || cls.Constructor.Length == 0) {
           Add(n.El, 0, "Block requires an explicit constructor");
           return;

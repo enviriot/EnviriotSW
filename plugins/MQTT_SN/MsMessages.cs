@@ -50,44 +50,33 @@ namespace X13.Periphery {
     ShortName=2
   }
 
-  /// <summary>Why a buffer did not become a message.</summary>
-  /// <remarks>All four used to be the same null, so a caller could log "bad message" and nothing
-  /// more, and a corpus test could not tell which failure it had reproduced.</remarks>
+  /// <summary>Причина, по которой буфер не удалось разобрать как сообщение.</summary>
   internal enum MsParseError {
     None = 0,
-    TooShort,     // fewer bytes than a header needs, or fewer than the header declares
-    BadLength,    // the length field is not one this implementation accepts
-    UnknownType,  // header read, but no message class answers for that type
-    Malformed,    // a message constructor rejected the body
+    TooShort,     // байтов меньше, чем нужно заголовку или объявлено в нём
+    BadLength,    // значение длины не поддерживается этой реализацией
+    UnknownType,  // заголовок прочитан, но для этого типа нет класса сообщения
+    Malformed,    // конструктор сообщения отверг тело
   }
 
   /// <summary>Кадр MQTT-SN: разбор заголовка и тела, общий для всех входов.</summary>
-  /// <remarks>TryReadHeader - единственное место, где читается короткий и расширенный заголовок, и он же решает, что вообще считать пакетом.
-  /// TryParse называет причину отказа типом, а не общим null, поэтому усечённый кадр отличим от неизвестного типа.</remarks>
   public class MsMessage {
     public const int MSG_MAX_LENGTH=50;
-    /// <summary>Smallest frame the protocol allows: the length byte and the type byte.</summary>
+    /// <summary>Минимальный кадр протокола: байт длины и байт типа.</summary>
     internal const int MIN_LENGTH = 2;
-    /// <summary>A length byte of 0x01 says the real length follows as 16 bits.</summary>
+    /// <summary>Байт длины 0x01 означает, что следом идёт 16-битная длина.</summary>
     private const byte EXT_MARKER = 1;
-    private const int EXT_HEADER = 4;  // marker, length hi, length lo, type
+    private const int EXT_HEADER = 4;  // маркер, старший и младший байты длины, тип
 
-    /// <summary>True for a declared frame length this implementation is willing to handle.</summary>
-    /// <remarks>The one place the limit lives. It was applied on the serial raw path only, so the
-    /// same malformed frame was refused over a wire and accepted over UDP - the transport, not the
-    /// protocol, decided what counted as a packet.</remarks>
+    /// <summary>True, если объявленная длина кадра поддерживается этой реализацией.</summary>
+    /// <remarks>Единственное место ограничения длины. Прежде оно действовало только для потока
+    /// последовательного порта без SLIP: один кадр отвергался там, но принимался по UDP.
+    /// Допустимость пакета определялась транспортом, а не протоколом.</remarks>
     internal static bool IsPlausibleLength(int declared) {
       return declared >= MIN_LENGTH && declared <= MSG_MAX_LENGTH;
     }
 
-    /// <summary>Reads the fixed header without trusting the buffer to be long enough for it.</summary>
-    /// <remarks>Every caller opened with `buf[start] &gt; 1 ? buf[start+1] : buf[start+3]` guarded by
-    /// `start+1 &gt; end` - a test a two-byte buffer passes before the fourth byte of it is indexed.
-    /// In MsGUdp that threw into a catch that logged the whole datagram at Error; here in Parse the
-    /// read sat BEFORE the try, so the exception left Parse altogether and reached
-    /// MQTT_SNPl.ProcessInPacket and the MsForward recursion, neither of which expects one.
-    /// <para>A leading 0x00 is refused rather than treated as the extended marker: it is not a
-    /// length, and reading a length out of the two bytes behind it only invents one.</para></remarks>
+    /// <summary>Читает фиксированный заголовок, предварительно проверяя достаточность буфера.</summary>
     internal static bool TryReadHeader(byte[] buf, int start, int end, out MsMessageType msgTyp, out int length, out MsParseError error) {
       msgTyp = default(MsMessageType);
       length = 0;
@@ -114,40 +103,33 @@ namespace X13.Periphery {
         return false;
       }
       if(length > end - start) {
-        error = MsParseError.TooShort;  // truncated: the frame declares more than arrived
+        error = MsParseError.TooShort;  // усечённый кадр: объявлено больше байтов, чем получено
         return false;
       }
       error = MsParseError.None;
       return true;
     }
 
-    /// <summary>Bounded hex for a log line: a malformed frame must not size the log entry.</summary>
+    /// <summary>Ограниченный шестнадцатеричный дамп: неверный кадр не должен задавать размер записи журнала.</summary>
     internal static string HexPreview(byte[] buf, int start, int count, int max) {
-      if(buf == null || start < 0 || start >= buf.Length || count <= 0) {
-        return "<empty>";
-      }
+      if(buf == null || start < 0 || start >= buf.Length || count <= 0) return "<empty>";
       if(start + count > buf.Length) {
         count = buf.Length - start;
       }
-      if(count <= max) {
-        return BitConverter.ToString(buf, start, count);
-      }
+      if(count <= max) return BitConverter.ToString(buf, start, count);
       return BitConverter.ToString(buf, start, max) + "...(" + count.ToString() + " bytes)";
     }
 
-    /// <summary>Parses a frame, saying why when it cannot.</summary>
+    /// <summary>Разбирает кадр и сообщает причину отказа.</summary>
     public static MsMessage Parse(byte[] buf, int start, int end) {
-      MsMessage msg;
-      TryParse(buf, start, end, out msg, out _);
+      TryParse(buf, start, end, out MsMessage msg, out _);
       return msg;
     }
 
     internal static bool TryParse(byte[] buf, int start, int end, out MsMessage msg, out MsParseError error) {
       msg = null;
       MsMessageType msgTyp;
-      if(!TryReadHeader(buf, start, end, out msgTyp, out _, out error)) {
-        return false;
-      }
+      if(!TryReadHeader(buf, start, end, out msgTyp, out _, out error)) return false;
       try {
         switch(msgTyp) {
         case MsMessageType.ADVERTISE:
@@ -201,8 +183,7 @@ namespace X13.Periphery {
         }
       }
       catch(Exception) {
-        // Narrowed to a reason rather than swallowed: the constructors read the body, and a body
-        // that does not match its own header is the caller's problem to report, not ours to hide.
+        // Исключение преобразуется в причину отказа: конструктор читает тело, а несоответствие заголовку должен диагностировать вызывающий код, а не скрывать этот обработчик.
         msg = null;
         error = MsParseError.Malformed;
         return false;
@@ -215,23 +196,21 @@ namespace X13.Periphery {
     protected ushort _length;
     private byte[] _sendBuf;
     public readonly MsMessageType MsgTyp;
-    public bool IsRequest { get; protected set; }        // response is required 
-    public MsMessageType ReqTyp { get; protected set; }  // message is a response to
+    public bool IsRequest { get; protected set; }        // требуется ответ
+    public MsMessageType ReqTyp { get; protected set; }  // тип запроса, на который отвечает сообщение
     public ushort MessageId { get; set; }
     public int tryCnt;
 
-    /// <summary>Reads the header through the same validator TryParse used, not a second copy.</summary>
-    /// <remarks>These four lines were the third place spelling out the short/extended layout by
-    /// hand, and the only one that also checked the declared length against what arrived. Sharing
-    /// TryReadHeader keeps them from drifting apart - and it means a body constructed directly,
-    /// bypassing TryParse, is validated too.</remarks>
+    /// <summary>Читает заголовок через тот же валидатор, что и TryParse, без второй реализации.</summary>
+    /// <remarks>Эти четыре строки были третьей ручной реализацией короткого/расширенного заголовка
+    /// и единственной, сверявшей объявленную длину с полученной. Общий TryReadHeader
+    /// предотвращает расхождения; сообщение, созданное напрямую,
+    /// без TryParse, тоже проходит проверку.</remarks>
     protected MsMessage(byte[] buf, int start, int end) {
       MsMessageType typ;
       int len;
       MsParseError err;
-      if(!TryReadHeader(buf, start, end, out typ, out len, out err)) {
-        throw new ArgumentException("bad MQTT-SN header: " + err.ToString());
-      }
+      if(!TryReadHeader(buf, start, end, out typ, out len, out err)) throw new ArgumentException("bad MQTT-SN header: " + err.ToString());
       _length=(ushort)len;
       MsgTyp=typ;
       _sendBuf=null;
@@ -250,22 +229,10 @@ namespace X13.Periphery {
     }
     public virtual byte[] GetBytes() {
       if(_sendBuf==null) {
-        if(_length>MSG_MAX_LENGTH) {
-          throw new ArgumentOutOfRangeException(string.Format("Msg is too long {0}", this.ToString()));
-        }
-
-        //if(_length>255) {
-        //  _length+=2;
-        //}
+        if(_length>MSG_MAX_LENGTH) throw new ArgumentOutOfRangeException(string.Format("Msg is too long {0}", this.ToString()));
         _sendBuf=new byte[_length];
         int ptr=0;
-        //if(_length>255) {
-        //  _sendBuf[ptr++]=1;
-        //  _sendBuf[ptr++]=(byte)(_length>>8);
-        //  _sendBuf[ptr++]=(byte)(_length);
-        //} else {
-          _sendBuf[ptr++]=(byte)(_length);
-        //}
+        _sendBuf[ptr++]=(byte)(_length);
         _sendBuf[ptr]=(byte)MsgTyp;
 
       }

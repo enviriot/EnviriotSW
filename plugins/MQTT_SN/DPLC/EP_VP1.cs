@@ -488,7 +488,7 @@ namespace X13.DevicePLC {
             continue;
           }
           if(v.Descriptor.IsLexicalScoped) {
-            m = _compiler.DefineMerker(v.Descriptor);  // Local
+            m = _compiler.DefineMerker(v.Descriptor);  // локальная переменная
             _compiler.DeferType(m, a1.Children[1] as Expression);
             a1.Children[1].Visit(this);
             continue;

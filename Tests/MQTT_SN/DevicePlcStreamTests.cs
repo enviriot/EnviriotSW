@@ -12,36 +12,17 @@ namespace X13.Tests {
     [TestCase("PrintF", 26, "LOG_ERROR, '%.2f', 21")]
     public void StreamsUseExpectedApiAndDiscardUnusedResults(string name, int api, string args) {
       string source = name + "(" + args + "); " + name + "(" + args + ");";
-      foreach(var target in new[] { EP_Target.EspNode, EP_Target.X13 }) {
-        var c = new EP_Compiler(target);
-        Assert.That(c.Parse(source), Is.True, target + ": " + c.Error);
-        var code = DevicePlcFloatTests.Disassemble(c.Hex).ToArray();
-        Assert.That(code.Where(i => i.Code == EP_InstCode.API).Select(i => (int)i.Arg[0]), Is.EqualTo(new[] { api, api }), target.ToString());
-        Assert.That(code.Any(i => i.Code == EP_InstCode.DROP), Is.True, target.ToString());
-        if(api == 26) {
-          var variable = new EP_Compiler(target);
-          Assert.That(variable.Parse("var v = new Int32(); PrintF(LOG_INFO, '%.2f', v);"), Is.True, target + ": " + variable.Error);
-          Assert.That(DevicePlcFloatTests.Disassemble(variable.Hex).Any(i => i.Code == EP_InstCode.S32TOF), Is.True, target.ToString());
-        }
+      var c = new EP_Compiler(EP_Target.EspNode);
+      Assert.That(c.Parse(source), Is.True);
+      var code = DevicePlcFloatTests.Disassemble(c.Hex).ToArray();
+      Assert.That(code.Where(i => i.Code == EP_InstCode.API).Select(i => (int)i.Arg[0]), Is.EqualTo(new[] { api, api }));
+      Assert.That(code.Any(i => i.Code == EP_InstCode.DROP), Is.True);
+      if(api == 26) {
+        var variable = new EP_Compiler(EP_Target.EspNode);
+        Assert.That(variable.Parse("var v = new Int32(); PrintF(LOG_INFO, '%.2f', v);"), Is.True);
+        Assert.That(DevicePlcFloatTests.Disassemble(variable.Hex).Any(i => i.Code == EP_InstCode.S32TOF), Is.True);
       }
-    }
-
-    /// <summary>На X13 у PrintF тот же ABI и формат в ROM, что у EspNode; поток - номер UART.</summary>
-    [Test]
-    public void PrintFOnX13WritesToUartWithTheSameAbi() {
-      var c = new EP_Compiler(EP_Target.X13);
-      Assert.That(c.Parse("var value = new Int32(215); var result = new Int32(); result = PrintF(1, 'T=%.1f/%04X\\x00', Float(value)/10, value);"), Is.True, c.Error);
-      PrintFTestCall request = null;
-      var vm = new DevicePlcTestVm(c.Hex) { Api = (machine, api) => {
-        Assert.That(api, Is.EqualTo(26));
-        request = PrintFTestCall.Read(machine);
-        machine.Push(1);
-      } };
-      vm.Cycle(true); vm.Cycle();
-      Assert.That(request, Is.Not.Null);
-      Assert.That(request.Stream, Is.EqualTo(1));
-      Assert.That(request.Render(), Is.EqualTo(System.Text.Encoding.ASCII.GetBytes("T=21.5/00D7").Concat(new byte[] { 0 })));
-      Assert.That(vm.Value(c.varList["result"]), Is.EqualTo(1));
+      Assert.That(new EP_Compiler(EP_Target.X13).Parse(source), Is.False);
     }
     [Test]
     public void NewNamesRequireExactArityAndLegacyApiStillWorks() {

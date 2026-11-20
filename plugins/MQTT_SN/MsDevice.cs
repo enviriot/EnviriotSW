@@ -11,12 +11,10 @@ using System.Threading.Tasks;
 using X13.Repository;
 
 namespace X13.Periphery {
-  /// <summary>Одно устройство MQTT-SN: подключение и last will, регистрация идентификаторов топиков,
-  /// обмен значениями, keep-alive со спящими узлами.</summary>
-  /// <remarks>Топики устройства - обычное поддерево, поэтому запись в дерево доходит до устройства той же подпиской,
-  /// какой доходит до любого другого подписчика.
-  /// <para>Само реализует IMsGate: устройство, до которого сервер дотягивается напрямую, пересылает кадры
-  /// соседей через EncapsulatedMessage, то есть выступает шлюзом для тех, кто до сервера не достаёт.</para></remarks>
+  /// <summary>Одно устройство MQTT-SN: подключение и last will, регистрация идентификаторов топиков, обмен значениями, keep-alive со спящими узлами.</summary>
+  /// <remarks>Топики устройства - обычное поддерево, поэтому запись в дерево доходит до устройства той же подпиской, какой доходит до любого другого подписчика.
+  /// <para>Само реализует IMsGate: устройство, до которого сервер дотягивается напрямую, пересылает кадры соседей через EncapsulatedMessage, 
+  /// то есть выступает шлюзом для тех, кто до сервера не достаёт.</para></remarks>
   internal class MsDevice : IMsGate {
     private const int ACK_TIMEOUT = 600;
     private const ushort RTC_EXCH = 0xFF07;
@@ -73,7 +71,7 @@ namespace X13.Periphery {
           }
         }
       case DType.ByteArray: {
-          // Same dual representation as CheckAddr - named once, in ByteArray.IsByteArray.
+          // Те же два представления, что в CheckAddr; общая проверка — ByteArray.IsByteArray.
           if(ByteArray.IsByteArray(val, out ByteArray ba)) {
             return ba.GetBytes();
           }
@@ -130,7 +128,7 @@ namespace X13.Periphery {
       _srOwner = this.owner.Subscribe(SubRec.SubMask.Once | SubRec.SubMask.Field, "MQTT-SN", OwnerChanged);
 
       _self = JSC.JSObject.CreateObject();
-      _self["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));      _self["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));
+      _self["GetState"] = X13.JsExtLib.Context.ProxyValue(new Func<string, JSC.JSValue>(GetState));
       _self["GetField"] = X13.JsExtLib.Context.ProxyValue(new Func<string, string, JSC.JSValue>(GetField));
     }
 
@@ -156,7 +154,7 @@ namespace X13.Periphery {
         this.Stop();
         return;
       }
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || p.Author == owner) {
+      if(!(State == State.Connected || State == State.ASleep || State == State.AWake) || p.Author == owner) {
         return;
       }
       if(p.Kind == EventKind.FieldChanged) {
@@ -208,14 +206,11 @@ namespace X13.Periphery {
       //  Stat(true, MsMessageType.DISCONNECT, false);
       //}
       //state = State.Disconnected;
-      var sr = Interlocked.Exchange(ref _srOwner, null);
-      if(sr != null) {
-        sr.Dispose();
-      }
+      Interlocked.Exchange(ref _srOwner, null)?.Dispose();
     }
     #endregion IMsGate Members
 
-    public State state {
+    public State State {
       get {
         return _state;
       }
@@ -240,28 +235,17 @@ namespace X13.Periphery {
       }
     }
 
-    /// <summary>Check Address for DHCP</summary>
-    /// <param name="addr">checked address</param>
-    /// <returns>busy</returns>
+    /// <summary>Проверка адреса для DHCP</summary>
+    /// <param name="addr">проверяемый адрес</param>
+    /// <returns>занят ли адрес</returns>
     public bool CheckAddr(byte[] addr) {
-      if(addr == null) {
-        return false;
-      }
-      if(this.addr != null && this.addr.Length - 1 == addr.Length && this.addr.Skip(1).SequenceEqual(addr)) {
-        return true;
-      }
+      if(addr == null) return false;
+      if(this.addr != null && this.addr.Length - 1 == addr.Length && this.addr.Skip(1).SequenceEqual(addr)) return true;
       ByteArray ba;
       for(int i = 2; i < 5; i++) {
         var a = owner.GetField(string.Format("MQTT-SN.phy{0}_addr", i));
-        // The two representations are what ByteArray.IsByteArray exists for: a ByteArray is a
-        // JSValue subclass, so it may BE the value or sit inside its Value. Hand-written, that
-        // read was `(a as ByteArray) != null || (a.Value as ByteArray) != null && length && seq`,
-        // and && binds tighter than || - so the direct representation returned "address taken"
-        // without comparing the address at all. Every device carrying a phyN_addr looked like a
-        // collision, which is exactly what this method must not do: it decides DHCP allocation.
-        if(ByteArray.IsByteArray(a, out ba) && ba.GetBytes().Length == addr.Length && ba.GetBytes().SequenceEqual(addr)) {
-          return true;
-        }
+        // ByteArray.IsByteArray различает два представления: ByteArray наследует JSValue, поэтому может быть самим значением либо содержаться в его Value.
+        if(ByteArray.IsByteArray(a, out ba) && ba.GetBytes().Length == addr.Length && ba.GetBytes().SequenceEqual(addr)) return true;
       }
       return false;
     }
@@ -280,9 +264,6 @@ namespace X13.Periphery {
           _sendQueue.Clear();
         }
         _waitAck = false;
-        //  if(_statistic.value) {
-        //    StatConnectTime();
-        //  }
       } else if(_state == State.Lost || _state == State.Disconnected) {
         Send(new MsDisconnect());
         return;
@@ -293,20 +274,19 @@ namespace X13.Periphery {
         _willPath = string.Empty;
         _wilMsg = null;
         if(msg.CleanSession) {
-          Log.Info("{0}.state {1} => WILLTOPICREQ", owner.path, state);
+          Log.Info("{0}.state {1} => WILLTOPICREQ", owner.path, State);
         }
-        state = State.WillTopic;
+        State = State.WillTopic;
         Send(new MsMessage(MsMessageType.WILLTOPICREQ));
       } else {
         if(msg.CleanSession) {
-          Log.Info("{0} {1} => PreConnect", owner.path, state);
-          state = State.PreConnect;
+          Log.Info("{0} {1} => PreConnect", owner.path, State);
+          State = State.PreConnect;
         } else {
-          state = State.Connected;
+          State = State.Connected;
         }
         Send(new MsConnack(MsReturnCode.Accepted));
       }
-      //via = _gate.name;
 
       if(_pl.Statistic) {
         Stat(false, MsMessageType.CONNECT, msg.CleanSession);
@@ -319,20 +299,20 @@ namespace X13.Periphery {
       switch(msg.MsgTyp) {
       case MsMessageType.WILLTOPIC: {
           var tmp = msg as MsWillTopic;
-          if(state == State.WillTopic) {
+          if(State == State.WillTopic) {
             _willPath = tmp.Path;
             _willRetain = tmp.Retain;
-            state = State.WillMsg;
+            State = State.WillMsg;
             ProccessAcknoledge(msg);
           }
         }
         break;
       case MsMessageType.WILLMSG: {
           var tmp = msg as MsWillMsg;
-          if(state == State.WillMsg) {
+          if(State == State.WillMsg) {
             _wilMsg = tmp.Payload;
-            Log.Info("{0}.state {1} => WILLTOPICREQ", owner.path, state);
-            state = State.PreConnect;
+            Log.Info("{0}.state {1} => WILLTOPICREQ", owner.path, State);
+            State = State.PreConnect;
             ProccessAcknoledge(msg);
             Send(new MsConnack(MsReturnCode.Accepted));
           }
@@ -380,8 +360,8 @@ namespace X13.Periphery {
             }
           }
           Send(new MsSuback(tmp.qualityOfService, topicId, msg.MessageId, retCode));
-          if(state == State.PreConnect) {
-            state = State.Connected;
+          if(State == State.PreConnect) {
+            State = State.Connected;
             _suppressedInputs = null;
             UpdateSuppressedInputs();
           }
@@ -420,7 +400,7 @@ namespace X13.Periphery {
           ProccessAcknoledge(tmp);
           TopicInfo ti = _topics.FirstOrDefault(z => z.TopicId == tmp.TopicId);
           if(ti == null) {
-            if(tmp.TopicId != 0xFFFF) { // 0xFFFF - remove variable
+            if(tmp.TopicId != 0xFFFF) { // 0xFFFF — удаление переменной
               Log.Warning("{0} RegAck({1:X4}) for unknown variable", owner.path, tmp.TopicId);
             }
             return;
@@ -429,9 +409,6 @@ namespace X13.Periphery {
             ti.registred = true;
             if(ti.it != TopicIdType.PreDefined) {
               Send(new MsPublish(ti));
-              // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-              // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-              // from "set to the default", so the topic would never be created.
               if(ti.topic.GetField("MQTT-SN.tag").ValueType != NiL.JS.Core.JSValueType.String) {
                 ti.topic.SetField("MQTT-SN.tag", ti.tag, owner);
               }
@@ -463,14 +440,12 @@ namespace X13.Periphery {
             Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null && validPayload ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
           } else if(tmp.qualityOfService == QoS.ExactlyOnce) {
             SyncMsgId(tmp.MessageId, msg);
-            // QoS2 not supported, use QoS1
+            // QoS2 не поддерживается, используется QoS1
             Send(new MsPubAck(tmp.TopicId, tmp.MessageId, ti != null && validPayload ? MsReturnCode.Accepted : MsReturnCode.InvalidTopicId));
           } else {
             throw new NotSupportedException("QoS -1 not supported " + owner.path);
           }
-          if(ti != null && validPayload
-            && (!tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId)) {  // else arready recieved
-
+          if(ti != null && validPayload && (!tmp.Dup || _lastInPub == null || tmp.MessageId != _lastInPub.MessageId)) {  // иначе уже получено
             _lastInPub = tmp;
             switch(ti.dType & DType.ExtensionType) {
             case DType.None:
@@ -491,8 +466,23 @@ namespace X13.Periphery {
                 _has_RTC = true;
               }
               break;
-            case DType.LOG:
-              LogRecord(owner.name, tmp);
+            case DType.LOG: {
+                string str = string.Format("{0} msgId={2:X4}  msg={1}", owner.name, tmp.Data == null ? "null" : (BitConverter.ToString(tmp.Data) + "[" + Encoding.ASCII.GetString(tmp.Data.Select(z => (z < 0x20 || z > 0x7E) ? (byte)'.' : z).ToArray()) + "]"), tmp.MessageId);
+                switch(tmp.TopicId) {
+                case LOG_D_ID:
+                  Log.Debug("{0}", str);
+                  break;
+                case LOG_I_ID:
+                  Log.Info("{0}", str);
+                  break;
+                case LOG_W_ID:
+                  Log.Warning("{0}", str);
+                  break;
+                case LOG_E_ID:
+                  Log.Error("{0}", str);
+                  break;
+                }
+              }
               break;
             case DType.TWI:
             case DType.PLC: {
@@ -511,13 +501,13 @@ namespace X13.Periphery {
         break;
       case MsMessageType.PINGREQ: {
           var tmp = msg as MsPingReq;
-          if(state == State.ASleep) {
+          if(State == State.ASleep) {
             if(string.IsNullOrEmpty(tmp.ClientId) || tmp.ClientId == owner.name) {
-              state = State.AWake;
-              ProccessAcknoledge(msg);    // resume send proccess
+              State = State.AWake;
+              ProccessAcknoledge(msg);    // возобновить отправку
             } else {
               SendGw(this, new MsDisconnect());
-              state = State.Lost;
+              State = State.Lost;
               Log.Warning("{0} PingReq from unknown device: {1}", owner.path, tmp.ClientId);
             }
           } else {
@@ -608,18 +598,32 @@ namespace X13.Periphery {
               foreach(var dub in _pl._devs.Where(z => z != dev && z.CheckAddr(addr) && z._gate == this).ToArray()) {
                 dub.addr = null;
                 dub._gate = null;
-                dub.state = State.Disconnected;
+                dub.State = State.Disconnected;
               }
             } else {
               MsDevice dev = _pl._devs.FirstOrDefault(z => z.addr != null && z.addr.SequenceEqual(fm.addr) && z._gate == this);
               if(dev != null
-                && ((dev.state != State.Disconnected && dev.state != State.Lost)
+                && ((dev.State != State.Disconnected && dev.State != State.Lost)
                   || (fm.msg.MsgTyp == MsMessageType.PUBLISH && (fm.msg as MsPublish).qualityOfService == QoS.MinusOne))) {
                 dev.ProcessInPacket(fm.msg);
               } else if(fm.msg.MsgTyp == MsMessageType.PUBLISH && (fm.msg as MsPublish).qualityOfService == QoS.MinusOne) {
                 var tmp = fm.msg as MsPublish;
                 if(tmp.topicIdType == TopicIdType.PreDefined && tmp.TopicId >= LOG_D_ID && tmp.TopicId <= LOG_E_ID) {
-                  LogRecord(BitConverter.ToString(this.addr), tmp);
+                  string str = string.Format("{0}: msgId={2:X4} msg={1}", BitConverter.ToString(this.addr), tmp.Data == null ? "null" : (BitConverter.ToString(tmp.Data) + "[" + Encoding.ASCII.GetString(tmp.Data.Select(z => (z < 0x20 || z > 0x7E) ? (byte)'.' : z).ToArray()) + "]"), tmp.MessageId);
+                  switch(tmp.TopicId) {
+                  case LOG_D_ID:
+                    Log.Debug(str);
+                    break;
+                  case LOG_I_ID:
+                    Log.Info(str);
+                    break;
+                  case LOG_W_ID:
+                    Log.Warning(str);
+                    break;
+                  case LOG_E_ID:
+                    Log.Error(str);
+                    break;
+                  }
                 }
               } else {
                 if(_pl.verbose) {
@@ -658,14 +662,14 @@ namespace X13.Periphery {
             }
 #endif
           }
-        } else { // ping timeout
+        } else { // истёк срок ожидания ping
 #if DEBUG
           if(_pl.verbose) {
             Log.Warning("timeout Msg={0}", _to_Msg!=null?_to_Msg.ToString():"null");
           }
 #endif
         }
-        state = State.Lost;
+        State = State.Lost;
         if(owner != null) {
           Disconnect();
           if(_pl.Statistic) {
@@ -699,8 +703,13 @@ namespace X13.Periphery {
           var now = DateTime.Now;
           if((now - _last_RTC).TotalHours > 1) {
             _last_RTC = now;
-            var pl = new byte[6] {int2BCD(_last_RTC.Second), int2BCD(_last_RTC.Minute), int2BCD(_last_RTC.Hour)
-          , int2BCD(_last_RTC.Day), (byte)((( ( (_last_RTC.DayOfWeek==DayOfWeek.Sunday)?7:(int)_last_RTC.DayOfWeek))  <<5) |  int2BCD(_last_RTC.Month)),int2BCD(_last_RTC.Year%100)};
+            var pl = new byte[6] {
+              int2BCD(_last_RTC.Second), 
+              int2BCD(_last_RTC.Minute), 
+              int2BCD(_last_RTC.Hour), 
+              int2BCD(_last_RTC.Day), 
+              (byte)(((((_last_RTC.DayOfWeek==DayOfWeek.Sunday)?7:(int)_last_RTC.DayOfWeek))<<5) |  int2BCD(_last_RTC.Month)),
+              int2BCD(_last_RTC.Year%100)};
             Send(new MsPublish(RTC_EXCH, pl));
           }
         }
@@ -716,14 +725,12 @@ namespace X13.Periphery {
       }
       return id;
     }
-    /// <summary>Find or create TopicInfo by Topic</summary>
-    /// <param name="tp">Topic as key</param>
-    /// <param name="sendRegister">Send MsRegister for new TopicInfo</param>
-    /// <returns>found TopicInfo or null</returns>
+    /// <summary>Найти или создать TopicInfo по Topic</summary>
+    /// <param name="tp">топик для поиска</param>
+    /// <param name="sendRegister">отправить MsRegister для нового TopicInfo</param>
+    /// <returns>найденный TopicInfo или null</returns>
     private TopicInfo GetTopicInfo(Topic tp, bool sendRegister = true, string tag = null) {
-      if(tp == null) {
-        return null;
-      }
+      if(tp == null) return null;
       TopicInfo rez = null;
       bool field = !string.IsNullOrEmpty(tag) && tag[0] == '.';
       for(int i = _topics.Count - 1; i >= 0; i--) {
@@ -745,10 +752,11 @@ namespace X13.Periphery {
             return null;
           }
         }
-        rez = new TopicInfo();
-        rez.owner = this;
-        rez.topic = tp;
-        rez.tag = tag;
+        rez = new TopicInfo {
+          owner = this,
+          topic = tp,
+          tag = tag
+        };
         var pt = PredefinedTopics.FirstOrDefault(z => z.Item2 == tag);
         UpdateConverters(rez);
         if(pt != null) {
@@ -790,8 +798,8 @@ namespace X13.Periphery {
 
     private static void UpdateConverters(TopicInfo ti) {
       string sTmp;
-      // AsString already implies the type test: it returns the default for anything that is not
-      // a string, so IsNullOrEmpty covers both "wrong type" and "empty".
+      // AsString уже проверяет тип: для нестрокового значения возвращает подстановку,
+      // поэтому IsNullOrEmpty охватывает и неверный тип, и пустую строку.
       if(!string.IsNullOrEmpty(sTmp = ti.topic.GetField("MQTT-SN.convIn").AsString(null))) {
         try {
           ti.convIn = CreateConv(sTmp);
@@ -816,9 +824,7 @@ namespace X13.Periphery {
       }
     }
     private TopicInfo GetTopicInfo(string tag, bool sendRegister = true) {
-      if(string.IsNullOrEmpty(tag)) {
-        return null;
-      }
+      if(string.IsNullOrEmpty(tag)) return null;
       TopicInfo ti;
       Topic cur = null;
       int idx = tag.LastIndexOf('/');
@@ -833,9 +839,7 @@ namespace X13.Periphery {
         if(cur == null) {
           if(tag[0] == '/' && !tag.StartsWith(owner.path)) {
             cur = owner.Get(tag, false, owner);
-            if(cur == null) {
-              return null;
-            }
+            if(cur == null) return null;
           } else {
             cur = owner.Get(tag, true, owner);
           }
@@ -845,9 +849,6 @@ namespace X13.Periphery {
             cur.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly);
           }
         }
-        // Не только новому топику: pa1, зарегистрированный узлом до поддержки EspNode, остался простым
-        // массивом байт - без типа у него нет ни редактора PLC, ни src. Так же и pa1 с прежним типом
-        // Ext/DevicePLC получает свой: по нему его узнают MQTT_SN и WebUI, у него и меню Add блоков LPLC.
         var plc = DevicePLC.TargetOf(tag);
         string plcType = plc == X13.DevicePLC.EP_Target.EspNode ? X13.LogramPLC.LP_Schema.PLC_TYPE : "Ext/DevicePLC";
         if(plc != null && cur.GetField("type").AsString(null) != plcType) {
@@ -864,7 +865,6 @@ namespace X13.Periphery {
             }
           }
         }
-        // Меню Add у pa1 теперь даёт тип; собственное, записанное прежней версией, его бы перекрыло.
         if(plc == X13.DevicePLC.EP_Target.EspNode && cur.GetField("Children").Defined) {
           cur.SetField("Children", JSC.JSValue.Null, owner);
         }
@@ -892,19 +892,19 @@ namespace X13.Periphery {
 
     internal void ReReg(List<Tuple<Topic, string>> rereg) {
       TopicInfo ti;
-      foreach(var tt in rereg) {   // First delete
+      foreach(var tt in rereg) {   // сначала снять регистрацию
         ti = _topics.FirstOrDefault(z => z.topic == tt.Item1);
         if(ti!=null) {
-          Send(new MsRegister(0xFFFF, ti.tag));  // unregister
+          Send(new MsRegister(0xFFFF, ti.tag));  // снять регистрацию
           ti.registred = false;
         }
       }
-      foreach(var tt in rereg) {   // Register after
+      foreach(var tt in rereg) {   // затем зарегистрировать
         if(string.IsNullOrEmpty(tt.Item2) || (ti = _topics.FirstOrDefault(z => z.topic == tt.Item1))==null) {
           tt.Item1.Remove(owner);
         } else {
           ti.tag = tt.Item2;
-          Send(new MsRegister(ti.TopicId, ti.tag));  // register
+          Send(new MsRegister(ti.TopicId, ti.tag));  // зарегистрировать
           ti.registred = true;
           ti.topic.SetField("MQTT-SN.tag", ti.tag);
         }
@@ -912,7 +912,7 @@ namespace X13.Periphery {
     }
 
     private void PublishTopic(TopicEvent p, SubRec sb) {
-      if(!(state == State.Connected || state == State.ASleep || state == State.AWake) || (p.Author == owner && p.Kind != EventKind.Snapshot) || p.Source == owner) {
+      if(!(State == State.Connected || State == State.ASleep || State == State.AWake) || (p.Author == owner && p.Kind != EventKind.Snapshot) || p.Source == owner) {
         return;
       }
       if(p.Kind == EventKind.Created) {
@@ -928,14 +928,10 @@ namespace X13.Periphery {
       }
       if(p.Kind == EventKind.FieldChanged && ti != null) {
         string sTag = p.Source.GetField("MQTT-SN.tag").AsString(null);
-        // The emptiness test is the fix, not AsString: the field is user-editable, so anything that
-        // is not a string - including a removed field - read as null and went straight into
-        // ti.tag, which then unregistered the topic and re-registered it under a null tag. A tag
-        // that is not a usable string is no reason to touch the registration at all.
         if(!string.IsNullOrEmpty(sTag) && ti.tag != sTag) {
-          Send(new MsRegister(0xFFFF, ti.tag));  // unregister
+          Send(new MsRegister(0xFFFF, ti.tag));  // снять регистрацию
           ti.tag = sTag;
-          Send(new MsRegister(ti.TopicId, ti.tag));  // register
+          Send(new MsRegister(ti.TopicId, ti.tag));  // зарегистрировать
         }
         UpdateConverters(ti);
         UpdateSuppressedInputs();
@@ -951,7 +947,7 @@ namespace X13.Periphery {
         if((ti.dType & DType.ExtensionType) == DType.None) {
           Send(new MsPublish(ti));
         }
-      } else if(p.Kind == EventKind.Removed) {          // Remove by device
+      } else if(p.Kind == EventKind.Removed) {          // удаление на устройстве
         if(ti.it == TopicIdType.Normal && ti.registred) {
           Send(new MsRegister(0xFFFF, ti.tag));
         }
@@ -959,7 +955,7 @@ namespace X13.Periphery {
       }
     }
     internal void PublishWithPayload(Topic t, byte[] payload) {
-      if(state == State.Disconnected || state == State.Lost || _topics == null) {
+      if(State == State.Disconnected || State == State.Lost || _topics == null) {
         return;
       }
       TopicInfo ti = null;
@@ -980,7 +976,7 @@ namespace X13.Periphery {
     private void SetValue(TopicInfo ti, byte[] msgData, bool retained) {
       if(ti != null) {
         if(!ti.topic.path.StartsWith(owner.path)) {
-          return;     // not allowed publish
+          return;     // публикация запрещена
         }
         if(ti.it == TopicIdType.PreDefined && (ti.TopicId == AVAILABLE_PINS || ti.TopicId == AVAILABLE_UARTS)) {
           if(msgData == null || msgData.Length != (ti.TopicId == AVAILABLE_PINS ? 5 : 1)) return;
@@ -1029,9 +1025,8 @@ namespace X13.Periphery {
           if(ti.tag == "." + MQTT_SNPl.FLD_MODEL && val.Is<string>()) {
             string v = val.AsString(string.Empty);
             int dot = v.IndexOf('.');
-            // IndexOf returns -1 when the device sends a name with no dot, and Substring(0, -1)
-            // throws - a malformed payload off the air took down the whole message handler. The
-            // value is expected to be <family>.<model>, so a leading dot is just as unusable.
+            // Для имени без точки IndexOf возвращает -1, а Substring(0, -1) бросает исключение: неверные данные устройства прерывали весь обработчик сообщения. 
+            // Ожидается значение <family>.<model>, поэтому точка в начале тоже недопустима.
             if(dot > 0) {
               ti.topic.SetField("type", "MQTT-SN/" + v.Substring(0, dot), owner);
             } else {
@@ -1079,7 +1074,7 @@ namespace X13.Periphery {
         nid++;
       }
       if(nid > (int)_messageIdGen || (nid < 0x0100 && _messageIdGen > 0xFF00)) {
-        _messageIdGen = (ushort)nid;      // synchronize messageId
+        _messageIdGen = (ushort)nid;      // синхронизировать messageId
       }
     }
 
@@ -1118,15 +1113,12 @@ namespace X13.Periphery {
         return;
       }
       Topic ts = GetServiceTopic(owner, "stat"), pa = GetServiceTopic(ts, n2);
-      // Deliberately a raw ValueType test, NOT AsBool/AsString: this decides whether the config
-      // topic has to be CREATED and seeded. A reader with a default cannot tell "not set yet"
-      // from "set to the default", so the topic would never be created.
       if(ts.GetState() == null || ts.GetState().ValueType!=JSC.JSValueType.Date) {
         ts.SetState(X13.JsExtLib.Context.ProxyValue(DateTime.Now), owner);
       }
       pa.SetState(pa.GetState().AsInt(0)+1, owner);
 
-      if(t==MsMessageType.CONNECT && dub) {  // Connect with clean session
+      if(t==MsMessageType.CONNECT && dub) {  // подключение с чистой сессией
         pa = GetServiceTopic(ts, "0_ConnectTime");
         pa.SetState(X13.JsExtLib.Context.ProxyValue(DateTime.Now), owner);
       }
@@ -1165,32 +1157,6 @@ namespace X13.Periphery {
       }
     }
 
-    /// <summary>Запись журнала узла (.Log.Debug..Log.Error) - в журнал сервера с тем же уровнем.</summary>
-    /// <remarks>Текст - аргумент, а не формат Log: фигурная скобка из PrintF иначе превратила бы запись
-    /// в "Bad format".</remarks>
-    private static void LogRecord(string source, MsPublish msg) {
-      string text = LogText(msg.Data);
-      switch(msg.TopicId) {
-      case LOG_D_ID:
-        Log.Debug("{0} msgId={1:X4} msg={2}", source, msg.MessageId, text);
-        break;
-      case LOG_I_ID:
-        Log.Info("{0} msgId={1:X4} msg={2}", source, msg.MessageId, text);
-        break;
-      case LOG_W_ID:
-        Log.Warning("{0} msgId={1:X4} msg={2}", source, msg.MessageId, text);
-        break;
-      case LOG_E_ID:
-        Log.Error("{0} msgId={1:X4} msg={2}", source, msg.MessageId, text);
-        break;
-      }
-    }
-    /// <summary>Текст записи журнала узла; непечатаемые байты заменяются точкой.</summary>
-    /// <remarks>Без HEX-дампа: записи - ASCII-текст PrintF/SendByte, и дамп только удваивал строку.</remarks>
-    internal static string LogText(byte[] data) {
-      return data == null ? "null" : Encoding.ASCII.GetString(data.Select(z => (z < 0x20 || z > 0x7E) ? (byte)'.' : z).ToArray());
-    }
-
     private int BCD2int(int c) {
       return (c >> 4) * 10 + (c & 0x0F);
     }
@@ -1216,25 +1182,25 @@ namespace X13.Periphery {
       if(reqMsg!=null && reqMsg.MsgTyp==MsMessageType.PUBLISH && (sa = (reqMsg as MsPublish).SendAck)!=null) {
         sa((reqMsg as MsPublish).Data);
       }
-      if(msg == null && !_waitAck && state == State.AWake) {
+      if(msg == null && !_waitAck && State == State.AWake) {
         Tick();
         if(_waitAck) {
-          return; // is busy
+          return; // занят ожиданием подтверждения
         }
       }
-      if(msg != null || state == State.AWake) {
+      if(msg != null || State == State.AWake) {
         SendIntern(msg);
       } else if(!_waitAck) {
         ResetTimer(0, rMsg);
       }
     }
     internal void Send(MsMessage msg) {
-      if(state != State.Disconnected && state != State.Lost) {
+      if(State != State.Disconnected && State != State.Lost) {
         bool send = true;
         if(msg.MessageId == 0 && msg.IsRequest) {
           msg.MessageId = NextMsgId();
           lock(_sendQueue) {
-            if(_sendQueue.Count > 0 || state == State.ASleep) {
+            if(_sendQueue.Count > 0 || State == State.ASleep) {
               send = false;
             }
             _sendQueue.Enqueue(msg);
@@ -1246,7 +1212,7 @@ namespace X13.Periphery {
       }
     }
     private void SendIntern(MsMessage msg) {
-      while(state == State.AWake || (msg != null && (state != State.ASleep || msg.MsgTyp == MsMessageType.DISCONNECT))) {
+      while(State == State.AWake || (msg != null && (State != State.ASleep || msg.MsgTyp == MsMessageType.DISCONNECT))) {
         if(msg != null) {
           if(_gate != null) {
             if(_pl.Statistic) {
@@ -1282,7 +1248,7 @@ namespace X13.Periphery {
         }
         msg = null;
         lock(_sendQueue) {
-          if(_sendQueue.Count == 0 && state == State.AWake) {
+          if(_sendQueue.Count == 0 && State == State.AWake) {
             var msg_sl = new MsMessage(MsMessageType.PINGRESP);
             if(_gate != null) {
               _gate.SendGw(this, msg_sl);
@@ -1292,7 +1258,7 @@ namespace X13.Periphery {
             }
             var st = owner.GetField("MQTT-SN.SleepTime");
             ResetTimer(st.IsNumber && (int)st > 0 ? (3100 + (int)st * 1550) : _duration, msg_sl);  // t_wakeup
-            state = State.ASleep;
+            State = State.ASleep;
             break;
           }
           if(_sendQueue.Count > 0 && !(msg = _sendQueue.Peek()).IsRequest) {
@@ -1334,17 +1300,17 @@ namespace X13.Periphery {
         }
       }
       if(duration > 0) {
-        if(state == State.ASleep) {
-          state = State.AWake;
+        if(State == State.ASleep) {
+          State = State.AWake;
         }
         ResetTimer(3100 + duration * 1550, new MsMessage(MsMessageType.PINGRESP));  // t_wakeup
         this.Send(new MsDisconnect());
-        state = State.ASleep;
+        State = State.ASleep;
         owner.SetField("MQTT-SN.SleepTime", new JSL.Number(duration), owner);
       } else {
         this._gate = null;
-        if(state != State.Lost) {
-          state = State.Disconnected;
+        if(State != State.Lost) {
+          State = State.Disconnected;
           if(owner != null) {
             Log.Info("{0} Disconnected", owner.path);
           }
@@ -1360,8 +1326,8 @@ namespace X13.Periphery {
         lock(_sendQueue) {
           _sendQueue.Clear();
         }
-        // Disconnect all devices connected via this
-        foreach(var d in _pl._devs.Where(z => z._gate == this && z.state != State.Disconnected && z.state != State.Lost).ToArray()) {
+        // Отключить все устройства, подключённые через это устройство
+        foreach(var d in _pl._devs.Where(z => z._gate == this && z.State != State.Disconnected && z.State != State.Lost).ToArray()) {
           d.Disconnect(0);
         }
       }
@@ -1380,7 +1346,7 @@ namespace X13.Periphery {
       public JSL.Function convOut;
       public IMsExt extension;
       public void PublishWithPayload(byte[] payload) {
-        if(owner.state == State.Disconnected || owner.state == State.Lost) {
+        if(owner.State == State.Disconnected || owner.State == State.Lost) {
           return;
         }
         owner.Send(new MsPublish(this) { Data = payload });
@@ -1407,28 +1373,28 @@ namespace X13.Periphery {
       LOG = 0x200,
       TWI = 0x300,
       PLC = 0x400,
-      ExtensionType = 0xFF00, // don't send publish on change
+      ExtensionType = 0xFF00, // не отправлять публикацию при изменении
       Input = 0x10000,
-      Output = 0x20000,  // DevicePLC can write in variable
+      Output = 0x20000,  // DevicePLC может записывать переменную
     }
     internal static Tuple<string, DType>[] NTTable = new Tuple<string, DType>[]{ 
       new Tuple<string, DType>("In", DType.Boolean | DType.Input),
       new Tuple<string, DType>("Ip", DType.Boolean | DType.Input),
       new Tuple<string, DType>("Op", DType.Boolean | DType.Output),
       new Tuple<string, DType>("On", DType.Boolean | DType.Output),
-      new Tuple<string, DType>("OA", DType.Boolean),   // output high if active
-      new Tuple<string, DType>("Oa", DType.Boolean),   // output low if active
-      new Tuple<string, DType>("Mz", DType.Boolean),   // Merkers
+      new Tuple<string, DType>("OA", DType.Boolean),   // активный выход высокого уровня
+      new Tuple<string, DType>("Oa", DType.Boolean),   // активный выход низкого уровня
+      new Tuple<string, DType>("Mz", DType.Boolean),   // меркеры
 
-      new Tuple<string, DType>("Ai", DType.Integer | DType.Input),   //uint16 Analog ref
-      new Tuple<string, DType>("AI", DType.Integer | DType.Input),   //uint16 Analog ref2
+      new Tuple<string, DType>("Ai", DType.Integer | DType.Input),   //uint16 аналоговый вход, опорное напряжение ref
+      new Tuple<string, DType>("AI", DType.Integer | DType.Input),   //uint16 аналоговый вход, опорное напряжение ref2
       new Tuple<string, DType>("Av", DType.Integer | DType.Input),   //uint16
       new Tuple<string, DType>("Ae", DType.Integer | DType.Input),   //uint16
-      new Tuple<string, DType>("Cp", DType.Integer | DType.Input | DType.Output),   //uint16 Counter rising
-      new Tuple<string, DType>("Cn", DType.Integer | DType.Input | DType.Output),   //uint16 Counter falling
-      new Tuple<string, DType>("Pp", DType.Integer | DType.Output),   //uint16 PWM positive
-      new Tuple<string, DType>("Pn", DType.Integer | DType.Output),   //uint16 PWM negative
-      new Tuple<string, DType>("Pg", DType.Integer | DType.Output),   //uint32 Square wave generator
+      new Tuple<string, DType>("Cp", DType.Integer | DType.Input | DType.Output),   //uint16 счётчик нарастающих фронтов
+      new Tuple<string, DType>("Cn", DType.Integer | DType.Input | DType.Output),   //uint16 счётчик спадающих фронтов
+      new Tuple<string, DType>("Pp", DType.Integer | DType.Output),   //uint16 ШИМ положительной полярности
+      new Tuple<string, DType>("Pn", DType.Integer | DType.Output),   //uint16 ШИМ отрицательной полярности
+      new Tuple<string, DType>("Pg", DType.Integer | DType.Output),   //uint32 генератор прямоугольного сигнала
       new Tuple<string, DType>("Mb", DType.Integer),   //int8
       new Tuple<string, DType>("MB", DType.Integer),   //uint8
       new Tuple<string, DType>("Mw", DType.Integer),   //int16
@@ -1440,10 +1406,10 @@ namespace X13.Periphery {
 
       new Tuple<string, DType>("Ms", DType.String),
 
-      new Tuple<string, DType>("St", DType.String | DType.Output),  // Serial port transmit
-      new Tuple<string, DType>("Sr", DType.String | DType.Input),   // Serial port recieve
-      new Tuple<string, DType>("Sm", DType.Boolean | DType.Output), // Serial port DE
-      new Tuple<string, DType>("Ma", DType.ByteArray),  // Merkers
+      new Tuple<string, DType>("St", DType.String | DType.Output),  // передача последовательного порта
+      new Tuple<string, DType>("Sr", DType.String | DType.Input),   // приём последовательного порта
+      new Tuple<string, DType>("Sm", DType.Boolean | DType.Output), // DE последовательного порта
+      new Tuple<string, DType>("Ma", DType.ByteArray),  // меркеры
 
       // Реализованы в firmware, а не размещены компилятором, как меркеры M; вторая буква та же.
       new Tuple<string, DType>("Xz", DType.Boolean),
@@ -1458,7 +1424,7 @@ namespace X13.Periphery {
       new Tuple<string, DType>("Xs", DType.String),
       new Tuple<string, DType>("Xa", DType.ByteArray),
 
-      new Tuple<string, DType>("pa", DType.ByteArray | DType.PLC),    // Program
+      new Tuple<string, DType>("pa", DType.ByteArray | DType.PLC),    // программа
       new Tuple<string, DType>("Ta", DType.ByteArray | DType.TWI),
 
     };

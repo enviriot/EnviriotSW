@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using System.Runtime;
 using System.Threading;
 using X13.Repository;
 using NiL.JS.Extensions;
@@ -37,6 +38,8 @@ namespace X13.Archivist {
     private int _rrIdx;
     private DateTime _nextHotRebuild;
     private DateTime _nextRawRebuild;
+    /// <summary>Raw-файл признан стоящим перестроения, но исключительная блокировка была занята.</summary>
+    private bool _rawRebuildPending;
     /// <summary>Флаг диагностики запросов из /$YS/Archivist/verbose.</summary>
     internal bool verbose;
     private SubRec _verboseSR;
@@ -230,7 +233,8 @@ namespace X13.Archivist {
 
     /// <summary>Проверяет по расписанию необходимость перестроения файлов отсчётов.</summary>
     /// <remarks>Для hot проверка назначается через час, для raw — на ближайшие 03:45.
-    /// Если исключительная блокировка занята, попытка откладывается до следующего прохода.</remarks>
+    /// Если исключительная блокировка занята, попытка откладывается до следующего прохода. Для raw при этом
+    /// повторяется только перестроение: подсчёт строк обходит весь файл, и повторять его на каждом проходе незачем.</remarks>
     private void Reclaim(ArchStore st) {
       DateTime now = DateTime.UtcNow;
       // Расписание задаёт время проверки, оценка — необходимость перестроения. Размер файла и число записей запрашиваем по расписанию, не в каждом свободном проходе.
@@ -239,10 +243,26 @@ namespace X13.Archivist {
           _nextHotRebuild = now.AddHours(1);
         }
       } else if(now >= _nextRawRebuild) {
-        if(!WorthRebuilding(st.FileBytes(false), st.RawCount(false)) || st.TryRebuild(false)) {
+        if(!_rawRebuildPending && !WorthRebuilding(st.FileBytes(false), st.RawCount(false))) {
           _nextRawRebuild = NextNightly(now);
+        } else {
+          _rawRebuildPending = true;
+          if(st.TryRebuild(false)) {
+            _rawRebuildPending = false;
+            _nextRawRebuild = NextNightly(now);
+            CompactLargeObjectHeap();
+          }
         }
       }
+    }
+
+    /// <summary>Возвращает системе память, через которую прошло перестроение raw-файла.</summary>
+    /// <remarks>Rebuild переписывает базу одной транзакцией временного движка LiteDB: все страницы файла проходят через
+    /// память сегментами по 8 МБ в куче больших объектов (LOH), после чего становятся мусором. LOH сама не уплотняется,
+    /// и процесс сохранял бы выделенные дыры размером с базу. Hot-файл мал, поэтому после его перестроения сборка не нужна.</remarks>
+    private static void CompactLargeObjectHeap() {
+      GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+      GC.Collect();
     }
     #region AQuery
 

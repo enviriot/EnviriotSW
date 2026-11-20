@@ -12,7 +12,7 @@ using System.Threading;
 using System.IO.Ports;
 
 namespace X13.Periphery {
-  /// <summary>Плагин MQTT-SN: шлюзы на UART и UDP, устройства и компилятор DPLC.</summary>
+  /// <summary>Плагин подключения устройств по MQTT-SN протоколу: шлюзы на UART и UDP, устройства и компилятор DPLC.</summary>
   /// <remarks>Устройство забирается подпиской на поле манифеста, а не реестром в ядре. 
   /// Идентификатор поля в эфире и его локальный путь - разные вещи, поэтому переименование поля в дереве устройства не касается.</remarks>
   [Export(typeof(IPlugModul))]
@@ -20,7 +20,7 @@ namespace X13.Periphery {
   [ExportMetadata("name", "MQTT_SN")]
   public class MQTT_SNPl : IPlugModul {
     private const string OWNER_PATH = "/$YS/MQTT-SN";
-    private const int HEX_PREVIEW = 32;  // bytes of a frame that reach a log line
+    private const int HEX_PREVIEW = 32;  // число байтов кадра, попадающих в запись журнала
     private const Topic.Attribute CfgAttr = Topic.Attribute.Required | Topic.Attribute.Config;
 #if DEBUG
     private const bool VerboseDefault = true;
@@ -33,29 +33,16 @@ namespace X13.Periphery {
     private Random _rand;
     private bool _statistic;
 
-    /// <summary>Flags belonging to DevicePLC, TWI and the gates, seeded here for all of them.</summary>
-    /// <remarks>Static because the topics are: /$YS/MQTT-SN/DPLC_verbose is one setting for every PLC
-    /// device, not one per device, yet DevicePLC and TWI are constructed per device and were each
-    /// seeding it in their own constructor - so the same topic was written as many times as there
-    /// were devices, and with EnsureCfg that would have been one subscription per device with
-    /// nothing to dispose them. MEF gives exactly one MQTT_SNPl (CreationPolicy.Shared), which is
-    /// what makes a static the same thing as an instance field here, minus threading a plugin
-    /// reference through two constructors for a diagnostic flag.
-    /// <para>gwRadius is the same story: MsGSerial and MsGUdp read /$YS/MQTT-SN/radius with
-    /// byte-for-byte identical code, and neither seeded it - the topic existed only if someone
-    /// created it by hand.</para></remarks>
+    /// <summary>Флаги DevicePLC, TWI и шлюзов: здесь задаются начальные значения для всех экземпляров.</summary>
+    /// <remarks>Статические, поскольку общие и топики: /$YS/MQTT-SN/DPLC_verbose задаёт одну настройку для всех PLC, 
+    /// чтобы не требовалось передавать ссылку на плагин через два конструктора ради диагностического флага.</remarks>
     internal static bool verbosePlc, verboseTwi;
     internal static byte gwRadius;
 
     internal List<IMsGate> _gates;
     internal List<MsDevice> _devs;
 
-    /// <summary>The manifest field naming a topic as an MQTT-SN device, and its model.</summary>
-    /// <remarks>Was "cctor.MqsDev" while a registry called CCtor read that field on the core's
-    /// behalf. The registry is gone, so the prefix named nothing - and this was the only entry in
-    /// PredefinedTopics that sat outside this plugin's own namespace. The WIRE is unchanged: that
-    /// table pairs a ushort with a local field path, and only the string moved. Old trees are not
-    /// read.</remarks>
+    /// <summary>Поле манифеста, обозначающее устройство MQTT-SN и его модель.</summary>
     internal const string FLD_MODEL = "MQTT-SN.model";
     private SubRec _devSub;
     /// <summary>Схема диаграмм pa1 для редактора: выходы Func и меню переменных, см. LP_Schema.</summary>
@@ -77,31 +64,22 @@ namespace X13.Periphery {
       RPC.Register("MQTT_SN.PLC.Run", PlcRunRpc);
       RPC.Register("MQTT_SN.PLC.Start", PlcStartRpc);
       RPC.Register("MQTT_SN.PLC.Stop", PlcStopRpc);
-      // Subscribed here rather than in Start, where this plugin's gates are opened: it replaces a
-      // CCtor.Register that stood on this line, and registration happened at Init too - so the
-      // first delivery still lands on the first tick, as it always did. SubMask.All also brings a
-      // Snapshot of what is already in the tree, which is what PersistentStorage (priority 2) has
-      // put there by the time this plugin (priority 7) is reached.
+      // Подписка здесь, а не в Start, к запуску этого плагина (приоритет 7) его уже восстановил PersistentStorage (приоритет 2).
       _devSub = Topic.root.Subscribe(SubRec.SubMask.Field | SubRec.SubMask.All, FLD_MODEL, MqsDevSub);
-      // Not inside DevicePLC: it only exists once the node has registered pa1, while the diagram is
-      // edited offline too.
+      // Не внутри DevicePLC: он существует только после регистрации pa1 устройством, а диаграмму редактируют и без подключения.
       _lplcSchema = new X13.LogramPLC.LP_Schema.Watcher(Topic.root);
       _lplcStatus = new X13.LogramPLC.LP_Status.Watcher(Topic.root);
       RPC.Register("MQTT_SN.RefreshPorts", RefreshPortsRpc);
       RPC.Register("MQTT_SN.RefreshNIC", RefreshNICRpc);
     }
 
-    /// <summary>Every setting this plugin owns, declared before the first gate exists.</summary>
-    /// <remarks>The order is load-bearing: both gates read <see cref="gwRadius"/> in their
-    /// constructors, so it has to hold its configured value by the time they are built. EnsureCfg
-    /// applies before it returns for exactly this reason - the subscription alone would not have
-    /// run yet, since Subscribe only queues a TopicEvent for the next Repo tick.
-    /// <para>radius is clamped in the apply rather than at the read sites: 1..3 is the range the
-    /// protocol defines, and anything else means "no radius", which is what both gates already
-    /// did with the raw value.</para></remarks>
+    /// <summary>Все настройки плагина объявляются до создания первого шлюза.</summary>
+    /// <remarks>Порядок существенен: оба шлюза читают <see cref="gwRadius"/> в конструкторах, поэтому к этому моменту значение должно быть настроено. 
+    /// Именно поэтому EnsureCfg применяет значение до возврата: одной подписки недостаточно, поскольку Subscribe лишь ставит TopicEvent в очередь следующего тика Repo.
+    /// <para>radius ограничивается при применении, а не в местах чтения: протокол задаёт диапазон 1..3; всё остальное означает отсутствие радиуса. 
+    /// Так оба шлюза уже обрабатывали исходное значение.</para></remarks>
     public void Start() {
       Configure();
-      // До шлюзов: устройство, подключившееся первым, уже должно найти типы своих блоков.
       X13.LogramPLC.LP_Tree.ImportTypes();
       _gates.Add(new MsGUdp(this));
       MsGSerial.Init(this);
@@ -143,7 +121,7 @@ namespace X13.Periphery {
     }
 
     public void Stop() {
-      // Acquired in Init, so released here: Stop undoes whatever was reached, and Init counts.
+      // Получено в Init, освобождается здесь: Stop отменяет и частично выполненную инициализацию.
       if(_devSub != null) {
         _devSub.Dispose();
         _devSub = null;
@@ -156,8 +134,7 @@ namespace X13.Periphery {
         _lplcStatus.Dispose();
         _lplcStatus = null;
       }
-      // Released here because EnsureCfg hands ownership to the caller. The hand-rolled
-      // subscription this replaced was never released at all.
+      // EnsureCfg передаёт владение подпиской вызывающему коду, поэтому освобождаем здесь.
       if(_cfg != null) {
         foreach(var s in _cfg) s.Dispose();
         _cfg = null;
@@ -175,9 +152,6 @@ namespace X13.Periphery {
 
     public bool enabled {
       get {
-        // Is<bool>, NOT AsBool/AsString: this decides whether the config topic has to be CREATED
-        // and seeded. A reader with a default cannot tell "not set yet" from "set to the
-        // default", so the topic would never be created.
         if(!Owner.GetState().Is<bool>()) {
           Owner.SetAttribute(Topic.Attribute.Required | Topic.Attribute.Readonly | Topic.Attribute.Config);
           Owner.SetState(true);
@@ -230,9 +204,8 @@ namespace X13.Periphery {
       }
     }
 
-    /// <summary>Gives a topic that carries MQTT-SN.model its device object.</summary>
-    /// <remarks>Matched by name and not by topic, which is how the CCtor handler this replaces did
-    /// it: a device that was renamed keeps the object it already had.</remarks>
+    /// <summary>Создаёт объект устройства для топика с полем MQTT-SN.model.</summary>
+    /// <remarks>Сопоставление по имени, а не по топику. Переименованное устройство сохраняет прежний объект.</remarks>
     private void MqsDevSub(TopicEvent p, SubRec sr) {
       if(p.Kind != EventKind.Created && p.Kind != EventKind.FieldChanged && p.Kind != EventKind.Snapshot) {
         return;
@@ -264,8 +237,7 @@ namespace X13.Periphery {
       MsMessage msg;
       MsParseError perr;
       if(!MsMessage.TryParse(buf, start, end, out msg, out perr)) {
-        // The reason, not just "bad message": an unknown type, a truncated frame and a body that
-        // contradicts its own header used to arrive here as the same null.
+        // Причина, а не просто неверное сообщение: неизвестный тип, усечённый кадр и тело, противоречащее заголовку, прежде возвращали один и тот же null.
         if(verbose) {
           Log.Warning("r {0}: {1}  {2}", gate.Addr2If(addr), MsMessage.HexPreview(buf, start, end - start, HEX_PREVIEW), perr.ToString());
         }
@@ -343,11 +315,11 @@ namespace X13.Periphery {
         foreach(var dub in _devs.Where(z => z != dev && z.CheckAddr(addr) && z._gate == gate).ToArray()) {
           dub.addr = null;
           dub._gate = null;
-          dub.state = State.Disconnected;
+          dub.State = State.Disconnected;
         }
       } else {
         MsDevice dev = _devs.FirstOrDefault(z => z.addr != null && z.addr.SequenceEqual(addr) && z._gate == gate);
-        if(dev != null && (dev.state != State.Disconnected && dev.state != State.Lost)) {
+        if(dev != null && (dev.State != State.Disconnected && dev.State != State.Lost)) {
           dev.ProcessInPacket(msg);
         } else {
           if(verbose) {
@@ -364,7 +336,7 @@ namespace X13.Periphery {
     }
 
   }
-  /// <summary>Quality of service levels</summary>
+  /// <summary>Уровни качества обслуживания</summary>
   internal enum QoS : byte {
     AtMostOnce = 0,
     AtLeastOnce = 1,

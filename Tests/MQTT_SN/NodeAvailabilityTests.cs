@@ -32,7 +32,7 @@ namespace X13.Tests {
     public void ReportsAreAcknowledgedUnsignedReadOnlyAndNeverEchoed() {
       var node = root.Get("/dev/availability", true);
       var gate = new Gate();
-      var device = new MsDevice(new MQTT_SNPl(), node) { _gate = gate, state = State.Connected };
+      var device = new MsDevice(new MQTT_SNPl(), node) { _gate = gate, State = State.Connected };
       Tick(); gate.Sent.Clear();
       try {
         byte[] mask = { 53, 240, 239, 14, 255 };
@@ -72,7 +72,7 @@ namespace X13.Tests {
     [Test]
     public void ScannerRecordsUseExistingInfoReceivePath() {
       var node = root.Get("/dev/log-stream", true);
-      var device = new MsDevice(new MQTT_SNPl(), node) { _gate = new Gate(), state = State.Connected };
+      var device = new MsDevice(new MQTT_SNPl(), node) { _gate = new Gate(), State = State.Connected };
       using(var received = new ManualResetEventSlim()) {
         Action<LogLevel, DateTime, string> handler = (level, time, text) => {
           if(level == LogLevel.Info && text.Contains("TWI0 addr=118")) received.Set();

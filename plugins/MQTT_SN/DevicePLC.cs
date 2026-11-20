@@ -29,7 +29,7 @@ namespace X13.Periphery {
       }
     }
 
-    private int _offset, _st;  // 0 - idle, 1 - check CRC, 2- check CRC resp, 3-PLC stop, 4 - PLC stop resp, 5- write block, 6- write block resp, 7- PLC start resp
+    private int _offset, _st;  // 0 — покой, 1/2 — запрос/ответ CRC, 3/4 — остановка/ответ, 5/6 — запись блока/ответ, 7 — ответ границы стека, 8 — запуск, 9 — ответ запуска
     private Chunk _curChunk;
     private SortedSet<Chunk> _prg;
     private uint _stackBottom;
@@ -62,7 +62,7 @@ namespace X13.Periphery {
       }
     }
 
-    /// <summary>/$YS/MQTT-SN/DPLC_verbose, declared once by the plugin rather than per device.</summary>
+    /// <summary>/$YS/MQTT-SN/DPLC_verbose объявляется плагином один раз, а не для каждого устройства.</summary>
     public bool Verbose {
       get {
         return MQTT_SNPl.verbosePlc;
@@ -96,7 +96,7 @@ namespace X13.Periphery {
         return r == null ? null : new PlcProgram() { Hex = r.Hex, StackBottom = r.StackBottom, Vars = r.Variables, Diagram = r, Fingerprint = fp };
       }
       var st = _owner.Get("src", false, _owner);
-      // One read instead of three, and AsString carries the type test and the default with it.
+      // Одно чтение вместо трёх; AsString одновременно проверяет тип и задаёт подстановку.
       string src = st == null ? string.Empty : st.GetState().AsString(string.Empty);
       var c = new X13.DevicePLC.EP_Compiler(_target);
       c.CMsg += (level, coords, message) => {
@@ -121,7 +121,7 @@ namespace X13.Periphery {
         return;
       }
       if(c.IoList != null) {
-        foreach(var v in c.IoList) {  // register IO variables
+        foreach(var v in c.IoList) {  // зарегистрировать переменные ввода-вывода
           var t = _owner.parent.Get(v, true, _owner);
           t.SetField("MQTT-SN.tag", v);
         }
@@ -271,7 +271,7 @@ namespace X13.Periphery {
           processed = true;
         }
       } else if(_st == 6 && msgData.Length == 2 && msgData[0] == (byte)Cmd.WriteBlockResp) {
-        if(msgData[1] == 0) {  // success
+        if(msgData[1] == 0) {  // успех
           _offset += 32;
           if(_offset >= _curChunk.Data.Length) {
             _curChunk.crcDev = _curChunk.crcCur;
@@ -377,7 +377,7 @@ namespace X13.Periphery {
       PlcStopResp = 4,      // 4, 0
       GetCRCReq = 5,        // 5, addrL, addrH, lenL, lenH
       GetCRCResp = 6,       // 6, 0, crcL, crcH
-      WriteBlockReq = 7,    // 7, addrL, addrH, [data(length = packet lenght-5)], crcL, crcH
+      WriteBlockReq = 7,    // 7, addrL, addrH, [data(длина = длина пакета-5)], crcL, crcH
       WriteBlockResp = 8,   // 8, 0
       EraseBlockReq = 9,    // 9, addrL, addrH, lenL, lenH
       EraseBlockResp = 10,  //10, 0

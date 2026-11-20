@@ -909,7 +909,7 @@ namespace X13.DevicePLC {
             tmp2 = _compiler.cur.memory;
             _compiler.cur.memory = tmp.memory;
             if(mf != null) {
-              CallFunction(ca, mf, v);    // Call in INIT section
+              CallFunction(ca, mf, v);    // вызов в секции INIT
               _compiler.cur.AddInst(EP_InstCode.DROP, 1, 0);
             } else {
               if(ca.Arguments.Length > 0) {
@@ -1093,11 +1093,11 @@ namespace X13.DevicePLC {
       }
       throw new NotSupportedException("Field name in " + node.ToString());
     }
-    /// <summary>Value of an integer constant operand, or a compile error naming where it is.</summary>
-    /// <remarks>These operands are folded into instruction arguments, so a fractional constant
-    /// cannot be represented. It already failed - unboxing JSValue.Value straight to int threw
-    /// InvalidCastException, which Compiler logged without saying where. The refusal is the same,
-    /// only now it names the line and the reason.</remarks>
+    /// <summary>Значение целого константного операнда либо ошибка компиляции с указанием места.</summary>
+    /// <remarks>Операнды встраиваются в аргументы инструкций, поэтому дробную константу
+    /// представить нельзя. Прежде распаковка JSValue.Value сразу в int бросала
+    /// InvalidCastException, которое Compiler записывал без координат. Отказ сохраняется,
+    /// но теперь указывает строку и причину.</remarks>
     private int ConstInt(Constant c, CodeNode node) {
       if(!c.Value.Is<int>()) {
         throw new NotSupportedException(_compiler.Where(node) + "operand must be an integer constant, got " + c.Value.ToString());
@@ -1145,7 +1145,7 @@ namespace X13.DevicePLC {
           var pt = al[i].isFloat ? EP_ValType.Float : EP_ValType.Int;
           if(i < node.Arguments.Length) {
             EmitAs(node.Arguments[i], pt);
-          } else if(al[i].init != null) {  //TODO: check function(a, b=7)
+          } else if(al[i].init != null) {  //TODO: проверить function(a, b=7)
             EmitAs(al[i].init, pt);
           } else {
             _compiler.cur.AddInst(EP_InstCode.LDI_0, 0, 1);

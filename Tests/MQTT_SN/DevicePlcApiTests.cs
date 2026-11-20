@@ -57,9 +57,6 @@ namespace X13.Tests {
     [TestCase("TwiBusGetByte(1);", false, true)]
     [TestCase("var t = new Int32(0);\nt = NowSeconds() + Today();", true, true)]
     [TestCase("TwiControl(0x76);\nUartPutByte(1, 0x55);", true, true)]
-    [TestCase("PrintF(1, '%d', 42);", true, true)]
-    [TestCase("SendByte(1, 0x55);", true, true)]
-    [TestCase("SendByte(LOG_DEBUG, 0x55);\nPrintF(LOG_INFO, '%d', 42);\nPrintF(LOG_WARN, '');\nPrintF(LOG_ERROR, '');", true, true)]
     public void Function_IsAvailableOnItsNode(string src, bool onX13, bool onEspNode) {
       using (Assert.EnterMultipleScope()) {
         Assert.That(new EP_Compiler(EP_Target.X13).Parse(src), Is.EqualTo(onX13), "X13");

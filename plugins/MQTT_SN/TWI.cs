@@ -31,7 +31,7 @@ namespace X13.Periphery {
       }
     }
 
-    /// <summary>/$YS/MQTT-SN/TWI_verbose, declared once by the plugin rather than per bus.</summary>
+    /// <summary>/$YS/MQTT-SN/TWI_verbose объявляется плагином один раз, а не для каждой шины.</summary>
     public bool Verbose {
       get {
         return MQTT_SNPl.verboseTwi;
@@ -56,23 +56,23 @@ namespace X13.Periphery {
                 Log.Debug("{0}.recv({1})", _owner.path, BitConverter.ToString(buf));
               }
             } else {
-              req.cb.SetException(new JSC.JSException(new JSL.Number(5)));  // wrong response length
+              req.cb.SetException(new JSC.JSException(new JSL.Number(5)));  // неверная длина ответа
               if(Verbose) {
                 Log.Warning("{0}.recv({1}) - wrong response length", _owner.path, BitConverter.ToString(buf));
               }
             }
           } else if((buf[1] & 0x20) != 0) {
-            req.cb.SetException(new JSC.JSException(new JSL.Number(2)));  // Timeout
+            req.cb.SetException(new JSC.JSException(new JSL.Number(2)));  // тайм-аут
             if(Verbose) {
               Log.Warning("{0}.recv({1}) - Timeout", _owner.path, BitConverter.ToString(buf));
             }
           } else if((buf[1] & 0x40) != 0) {
-            req.cb.SetException(new JSC.JSException(new JSL.Number(3)));  // Slave Addr NACK received - Device not present
+            req.cb.SetException(new JSC.JSException(new JSL.Number(3)));  // NACK адреса ведомого — устройство отсутствует
             if(Verbose) {
               Log.Warning("{0}.recv({1}) - Slave Addr NACK", _owner.path, BitConverter.ToString(buf));
             }
           } else {
-            req.cb.SetException(new JSC.JSException(new JSL.Number(4)));  // Internal Error
+            req.cb.SetException(new JSC.JSException(new JSL.Number(4)));  // внутренняя ошибка
             if(Verbose) {
               Log.Warning("{0}.recv({1}) - Internal Error", _owner.path, BitConverter.ToString(buf));
             }
@@ -100,7 +100,7 @@ namespace X13.Periphery {
       if(_reqs.Any()) {
         TwiPack req = _reqs.Peek();
         if(req.to < DateTime.Now) {
-          Recv(new byte[] { req.data[0], 0x20, req.data[2], 0, 0xFF });  // Timeout server-side
+          Recv(new byte[] { req.data[0], 0x20, req.data[2], 0, 0xFF });  // тайм-аут на сервере
         }
       }
     }
@@ -113,7 +113,7 @@ namespace X13.Periphery {
           if(Verbose) {
             Log.Debug("{0}.send({1})", _owner.path, BitConverter.ToString(req.data));
           }
-          if(req.data[3] == 0) {  // to recive 0 bytes => no answer
+          if(req.data[3] == 0) {  // чтение 0 байтов — ответ не ожидается
             Recv(new byte[] { req.data[0], 0x10, req.data[2], 0, 0xFF});
           }
         } else {
@@ -132,12 +132,8 @@ namespace X13.Periphery {
       }
     }
     private Task<JSC.JSValue> TwiReq(int[] arr) {
-      if(arr == null) {
-        throw new ArgumentNullException("arr", "TwiReq");
-      }
-      if(arr.Length < 4) {
-        throw new ArgumentOutOfRangeException("arr", "TwiReq len=" + arr.Length.ToString() + "<4");
-      }
+      if(arr == null) throw new ArgumentNullException("arr", "TwiReq");
+      if(arr.Length < 4) throw new ArgumentOutOfRangeException("arr", "TwiReq len=" + arr.Length.ToString() + "<4");
       arr[2] = arr.Length - 4;
       var ba = arr.Select(z => (byte)z).ToArray();
       var tsc = new TaskCompletionSource<JSC.JSValue>();
@@ -171,9 +167,8 @@ namespace X13.Periphery {
         this._twi = twi;
         JSC.JSValue jSrc;
         var jType = owner.GetField("type");
-        var types = Topic.root.Get("$YS/TYPES", false);  // null until PersistentStorage seeds it, and always null when that plugin is off
-        if(types != null && jType.AsString(null) is string tp && types.Exist(tp, out var tt)
-          && (jSrc = tt.GetState().Field("src")).Is<string>()) {
+        var types = Topic.root.Get("$YS/TYPES", false);  // null до загрузки PersistentStorage; при отключённом плагине остаётся null
+        if(types != null && jType.AsString(null) is string tp && types.Exist(tp, out var tt) && (jSrc = tt.GetState().Field("src")).Is<string>()) {
         } else {
           jSrc = null;
         }
@@ -221,10 +216,7 @@ namespace X13.Periphery {
       }
 
       private JSC.JSValue GetState(string path) {
-        if(owner.Exist(path, out var t)) {
-          return t.GetState();
-        }
-        return JSC.JSValue.NotExists;
+        return owner.Exist(path, out var t)?t.GetState():JSC.JSValue.NotExists;
       }
       private void SetState(string path, JSC.JSValue value) {
         if(!owner.Exist(path, out var t)) {
@@ -235,11 +227,7 @@ namespace X13.Periphery {
         t.SetState(value, owner);
       }
       private JSC.JSValue GetField(string path, string field) {
-        if(owner.Exist(path, out var t)) {
-          return t.GetField(field);
-        }
-        return JSC.JSValue.NotExists;
-
+        return owner.Exist(path, out var t)?t.GetField(field):JSC.JSValue.NotExists;
       }
 
       #region IDisposable Member
